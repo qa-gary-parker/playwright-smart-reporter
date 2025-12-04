@@ -562,6 +562,9 @@ Provide a brief, actionable suggestion to fix this failure.`;
     const slow = this.results.filter((r) =>
       r.performanceTrend?.startsWith('↑')
     ).length;
+    const newTests = this.results.filter((r) =>
+      r.flakinessIndicator?.includes('New')
+    ).length;
     const total = this.results.length;
     const passRate = (passed + failed) > 0 ? Math.round((passed / (passed + failed)) * 100) : 0;
 
@@ -1961,6 +1964,7 @@ Provide a brief, actionable suggestion to fix this failure.`;
       <button class="filter-btn" data-filter="skipped" onclick="filterTests('skipped')">Skipped (${skipped})</button>
       <button class="filter-btn" data-filter="flaky" onclick="filterTests('flaky')">Flaky (${flaky})</button>
       <button class="filter-btn" data-filter="slow" onclick="filterTests('slow')">Slow (${slow})</button>
+      <button class="filter-btn" data-filter="new" onclick="filterTests('new')">New (${newTests})</button>
     </div>
 
     <!-- Test List -->
@@ -2000,13 +2004,15 @@ Provide a brief, actionable suggestion to fix this failure.`;
         const status = card.dataset.status;
         const isFlaky = card.dataset.flaky === 'true';
         const isSlow = card.dataset.slow === 'true';
+        const isNew = card.dataset.new === 'true';
 
         let show = filter === 'all' ||
           (filter === 'passed' && status === 'passed') ||
           (filter === 'failed' && (status === 'failed' || status === 'timedOut')) ||
           (filter === 'skipped' && status === 'skipped') ||
           (filter === 'flaky' && isFlaky) ||
-          (filter === 'slow' && isSlow);
+          (filter === 'slow' && isSlow) ||
+          (filter === 'new' && isNew);
 
         card.style.display = show ? 'block' : 'none';
 
@@ -2062,6 +2068,7 @@ Provide a brief, actionable suggestion to fix this failure.`;
     const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
     const isSlow = test.performanceTrend?.startsWith('↑') || false;
     const isFaster = test.performanceTrend?.startsWith('↓') || false;
+    const isNew = test.flakinessIndicator?.includes('New') || false;
     const hasDetails = test.error || test.aiSuggestion || test.steps.length > 0 || test.status !== 'passed';
     const cardId = this.sanitizeId(test.testId);
 
@@ -2081,7 +2088,8 @@ Provide a brief, actionable suggestion to fix this failure.`;
       <div id="card-${cardId}" class="test-card"
            data-status="${test.status}"
            data-flaky="${isFlaky}"
-           data-slow="${isSlow}">
+           data-slow="${isSlow}"
+           data-new="${isNew}">
         <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}')"` : ''}>
           <div class="test-card-left">
             <div class="status-indicator ${test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed'}"></div>
