@@ -25,7 +25,7 @@ An intelligent Playwright HTML reporter with AI-powered failure analysis, flakin
 ## Installation
 
 ```bash
-npm install playwright-smart-reporter
+npm install -D playwright-smart-reporter
 ```
 
 ## Usage
