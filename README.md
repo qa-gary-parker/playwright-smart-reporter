@@ -16,6 +16,7 @@ An intelligent Playwright HTML reporter with AI-powered failure analysis, flakin
 - **Step Timing Breakdown** - See which steps are slowest with visual bars
 - **Screenshot Embedding** - Failure screenshots displayed inline
 - **Video Links** - Quick access to test recordings
+- **One-Click Trace Viewing** - Downloads trace and opens trace.playwright.dev
 - **Collapsible File Groups** - Tests organized by file
 - **Search & Filter** - Find tests by name, filter by status
 - **JSON Export** - Download results for external processing
@@ -132,6 +133,7 @@ When you expand a test, you'll see:
 ### Additional Features
 - **Screenshot embedding** - Failure screenshots shown inline
 - **Video links** - Quick access to recordings
+- **Trace viewing** - Downloads trace and opens Playwright's trace viewer
 - **Retry badge** - Shows if test passed on retry
 - **Search** - Filter tests by name or file
 - **File groups** - Collapsible groups by file

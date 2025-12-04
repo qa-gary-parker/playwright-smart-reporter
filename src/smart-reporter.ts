@@ -82,6 +82,8 @@ interface TestResultData {
   steps: StepData[];
   screenshot?: string;
   videoPath?: string;
+  tracePath?: string;
+  traceData?: string;
   history: TestHistoryEntry[];
 }
 
@@ -172,6 +174,20 @@ class SmartReporter implements Reporter {
       testData.videoPath = videoAttachment.path;
     }
 
+    // Look for trace attachment
+    const traceAttachment = result.attachments.find(
+      a => a.name === 'trace' && a.contentType === 'application/zip'
+    );
+    if (traceAttachment?.path) {
+      testData.tracePath = traceAttachment.path;
+      // Embed trace as base64 for one-click viewing
+      try {
+        const traceBuffer = fs.readFileSync(traceAttachment.path);
+        testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
+      } catch {
+        // If we can't read the trace, just use the path
+      }
+    }
 
     // Calculate flakiness - use historyEntries already declared above
     // For skipped tests, set a special indicator
@@ -1855,6 +1871,7 @@ Provide a brief, actionable suggestion to fix this failure.`;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.8rem;
       transition: all 0.2s;
+      cursor: pointer;
     }
 
     .attachment-link:hover {
@@ -2052,6 +2069,30 @@ Provide a brief, actionable suggestion to fix this failure.`;
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+
+    function viewTrace(base64Data, filename) {
+      // Convert base64 to blob and trigger download
+      const byteChars = atob(base64Data.split(',')[1]);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const blob = new Blob([new Uint8Array(byteNumbers)], {type: 'application/zip'});
+      const url = URL.createObjectURL(blob);
+      
+      // Auto-download the trace file
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Open trace viewer in new tab
+      window.open('https://trace.playwright.dev', '_blank');
+      
+      URL.revokeObjectURL(url);
+    }
   </script>
 </body>
 </html>`;
@@ -2199,12 +2240,18 @@ Provide a brief, actionable suggestion to fix this failure.`;
       `;
     }
 
-    if (test.videoPath) {
+    if (test.videoPath || test.tracePath || test.traceData) {
+      const traceFilename = `trace-${this.sanitizeId(test.title)}.zip`;
       details += `
         <div class="detail-section">
           <div class="detail-label"><span class="icon">📎</span> Attachments</div>
           <div class="attachments">
-            <a href="file://${test.videoPath}" class="attachment-link" target="_blank">🎬 Video</a>
+            ${test.videoPath ? `<a href="file://${test.videoPath}" class="attachment-link" target="_blank">🎬 Video</a>` : ''}
+            ${test.traceData
+              ? `<button class="attachment-link" onclick="viewTrace('${test.traceData}', '${traceFilename}')">🔍 Download and View Trace</button>`
+              : test.tracePath
+              ? `<a href="file://${test.tracePath}" class="attachment-link" target="_blank">🔍 Download and View Trace</a>`
+              : ''}
           </div>
         </div>
       `;
