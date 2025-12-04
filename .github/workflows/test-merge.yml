@@ -1,0 +1,182 @@
+name: Test - Merge Reports
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test-machine-1:
+    name: Machine 1 - Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build reporter
+        run: npm run build
+
+      - name: Run tests (Machine 1)
+        run: PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/machine1 npx playwright test example/parallel/test1.spec.ts --config=example/playwright-blob.config.ts
+        continue-on-error: true
+
+      - name: Verify outputs (Machine 1)
+        run: |
+          echo "=== Machine 1 outputs ==="
+          ls -la blob-reports/machine1/
+          test -f blob-reports/machine1/test-history.json && echo "✅ test-history.json exists" || echo "❌ test-history.json missing"
+
+      - name: Upload artifacts (blob + history)
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-machine-1
+          path: blob-reports/machine1/
+          retention-days: 1
+
+  # Simulates Machine 2
+  test-machine-2:
+    name: Machine 2 - Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build reporter
+        run: npm run build
+
+      - name: Run tests (Machine 2)
+        run: PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/machine2 npx playwright test example/parallel/test2.spec.ts --config=example/playwright-blob.config.ts
+        continue-on-error: true
+
+      - name: Verify outputs (Machine 2)
+        run: |
+          echo "=== Machine 2 outputs ==="
+          ls -la blob-reports/machine2/
+          test -f blob-reports/machine2/test-history.json && echo "✅ test-history.json exists" || echo "❌ test-history.json missing"
+
+      - name: Upload artifacts (blob + history)
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-machine-2
+          path: blob-reports/machine2/
+          retention-days: 1
+
+  # Merge reports from both machines
+  merge-reports:
+    name: Merge Reports
+    runs-on: ubuntu-latest
+    needs: [test-machine-1, test-machine-2]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build reporter
+        run: npm run build
+
+      - name: Download Machine 1 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: blob-machine-1
+          path: blob-reports/machine1/
+
+      - name: Download Machine 2 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: blob-machine-2
+          path: blob-reports/machine2/
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Machine 1 ==="
+          ls -la blob-reports/machine1/
+          echo "=== Machine 2 ==="
+          ls -la blob-reports/machine2/
+
+      - name: Merge history files
+        run: |
+          mkdir -p blob-reports/merged
+          node ./dist/merge-history.js \
+            blob-reports/machine1/test-history.json \
+            blob-reports/machine2/test-history.json \
+            -o blob-reports/merged/test-history.json
+
+      - name: Merge blob reports
+        run: |
+          cp blob-reports/machine1/*.zip blob-reports/machine2/*.zip blob-reports/merged/
+          npx playwright merge-reports --config=example/playwright-merge.config.ts blob-reports/merged
+
+      - name: Verify merged report
+        run: |
+          echo "=== Merged directory ==="
+          ls -la blob-reports/merged/
+          if [ -f "blob-reports/merged/smart-report.html" ]; then
+            echo "✅ Merged report created successfully"
+          else
+            echo "❌ Merged report not found"
+            exit 1
+          fi
+
+      - name: Verify merged history
+        run: |
+          if [ -f "blob-reports/merged/test-history.json" ]; then
+            echo "✅ Merged history created successfully"
+            echo "=== History content ==="
+            cat blob-reports/merged/test-history.json
+          else
+            echo "❌ Merged history not found"
+            exit 1
+          fi
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: merged-smart-report
+          path: blob-reports/merged/smart-report.html
+          retention-days: 30
+
+      - name: Upload merged history
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: merged-history
+          path: blob-reports/merged/test-history.json
+          retention-days: 30

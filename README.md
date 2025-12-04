@@ -222,6 +222,55 @@ Notifications include:
 - List of first 5 failed test names
 - Only sent when there are failures
 
+### Merging Reports from Multiple Machines
+
+When running tests in parallel across multiple machines (sharding), you can merge both the test results and history files.
+
+#### 1. Configure each machine to output blobs and history
+
+```typescript
+// playwright.config.ts
+const outputDir = process.env.PLAYWRIGHT_BLOB_OUTPUT_DIR || 'blob-report';
+
+export default defineConfig({
+  reporter: [
+    ['blob'],
+    ['playwright-smart-reporter', {
+      outputFile: `${outputDir}/smart-report.html`,
+      historyFile: `${outputDir}/test-history.json`,
+    }],
+  ],
+});
+```
+
+#### 2. Run tests on each machine
+
+```bash
+# Machine 1
+PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/machine1 npx playwright test --shard=1/2
+
+# Machine 2
+PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/machine2 npx playwright test --shard=2/2
+```
+
+#### 3. Merge history files
+
+```bash
+npx playwright-smart-reporter-merge-history \
+  blob-reports/machine1/test-history.json \
+  blob-reports/machine2/test-history.json \
+  -o blob-reports/merged/test-history.json
+```
+
+#### 4. Merge blob reports
+
+```bash
+cp blob-reports/machine1/*.zip blob-reports/machine2/*.zip blob-reports/merged/
+npx playwright merge-reports --reporter=playwright-smart-reporter blob-reports/merged
+```
+
+The merged report will include all tests from all machines with unified history for flakiness detection and trend charts.
+
 ## Development
 
 ```bash

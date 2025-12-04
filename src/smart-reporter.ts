@@ -562,6 +562,9 @@ Provide a brief, actionable suggestion to fix this failure.`;
     const slow = this.results.filter((r) =>
       r.performanceTrend?.startsWith('↑')
     ).length;
+    const newTests = this.results.filter((r) =>
+      r.flakinessIndicator?.includes('New')
+    ).length;
     const total = this.results.length;
     const passRate = (passed + failed) > 0 ? Math.round((passed / (passed + failed)) * 100) : 0;
 
@@ -1959,6 +1962,7 @@ Provide a brief, actionable suggestion to fix this failure.`;
       <button class="filter-btn" data-filter="passed" onclick="filterTests('passed')">Passed (${passed})</button>
       <button class="filter-btn" data-filter="failed" onclick="filterTests('failed')">Failed (${failed})</button>
       <button class="filter-btn" data-filter="skipped" onclick="filterTests('skipped')">Skipped (${skipped})</button>
+      <button class="filter-btn" data-filter="new" onclick="filterTests('new')">New (${newTests})</button>
       <button class="filter-btn" data-filter="flaky" onclick="filterTests('flaky')">Flaky (${flaky})</button>
       <button class="filter-btn" data-filter="slow" onclick="filterTests('slow')">Slow (${slow})</button>
     </div>
@@ -2000,11 +2004,13 @@ Provide a brief, actionable suggestion to fix this failure.`;
         const status = card.dataset.status;
         const isFlaky = card.dataset.flaky === 'true';
         const isSlow = card.dataset.slow === 'true';
+        const isNew = card.dataset.new === 'true';
 
         let show = filter === 'all' ||
           (filter === 'passed' && status === 'passed') ||
           (filter === 'failed' && (status === 'failed' || status === 'timedOut')) ||
           (filter === 'skipped' && status === 'skipped') ||
+          (filter === 'new' && isNew) ||
           (filter === 'flaky' && isFlaky) ||
           (filter === 'slow' && isSlow);
 
@@ -2077,11 +2083,15 @@ Provide a brief, actionable suggestion to fix this failure.`;
     if (isSlow) trendClass = 'slower';
     else if (isFaster) trendClass = 'faster';
 
+    // Check if test is new
+    const isNew = test.flakinessIndicator?.includes('New') || false;
+
     return `
       <div id="card-${cardId}" class="test-card"
            data-status="${test.status}"
            data-flaky="${isFlaky}"
-           data-slow="${isSlow}">
+           data-slow="${isSlow}"
+           data-new="${isNew}">
         <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}')"` : ''}>
           <div class="test-card-left">
             <div class="status-indicator ${test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed'}"></div>
@@ -2450,6 +2460,86 @@ Provide a brief, actionable suggestion to fix this failure.`;
   private sanitizeId(str: string): string {
     return str.replace(/[^a-zA-Z0-9]/g, '_');
   }
+}
+
+// ============================================================================
+// History Merge Utility
+// ============================================================================
+
+export function mergeHistories(
+  historyFiles: string[],
+  outputFile: string,
+  maxHistoryRuns: number = 10
+): void {
+  const mergedHistory: TestHistory = { runs: [], tests: {}, summaries: [] };
+
+  // Load and merge all history files
+  for (const filePath of historyFiles) {
+    if (!fs.existsSync(filePath)) {
+      console.warn(`History file not found: ${filePath}`);
+      continue;
+    }
+
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const history: TestHistory = JSON.parse(content);
+
+      // Merge runs metadata
+      if (history.runs) {
+        mergedHistory.runs.push(...history.runs);
+      }
+
+      // Merge test entries
+      if (history.tests) {
+        for (const [testId, entries] of Object.entries(history.tests)) {
+          if (!mergedHistory.tests[testId]) {
+            mergedHistory.tests[testId] = [];
+          }
+          mergedHistory.tests[testId].push(...entries);
+        }
+      }
+
+      // Merge summaries
+      if (history.summaries) {
+        mergedHistory.summaries!.push(...history.summaries);
+      }
+    } catch (err) {
+      console.error(`Failed to parse history file ${filePath}:`, err);
+    }
+  }
+
+  // Sort and deduplicate runs by runId
+  const seenRunIds = new Set<string>();
+  mergedHistory.runs = mergedHistory.runs
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .filter(run => {
+      if (seenRunIds.has(run.runId)) return false;
+      seenRunIds.add(run.runId);
+      return true;
+    })
+    .slice(-maxHistoryRuns);
+
+  // Sort test entries by timestamp and keep last N
+  for (const testId of Object.keys(mergedHistory.tests)) {
+    mergedHistory.tests[testId] = mergedHistory.tests[testId]
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .slice(-maxHistoryRuns);
+  }
+
+  // Sort and deduplicate summaries by runId
+  const seenSummaryIds = new Set<string>();
+  mergedHistory.summaries = mergedHistory.summaries!
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .filter(summary => {
+      if (seenSummaryIds.has(summary.runId)) return false;
+      seenSummaryIds.add(summary.runId);
+      return true;
+    })
+    .slice(-maxHistoryRuns);
+
+  // Write merged history
+  fs.writeFileSync(outputFile, JSON.stringify(mergedHistory, null, 2));
+  console.log(`✅ Merged ${historyFiles.length} history files into ${outputFile}`);
 }
 
 export default SmartReporter;

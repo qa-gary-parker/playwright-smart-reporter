@@ -4,6 +4,7 @@ src/
 # Example and test files
 example/
 test-results/
+blobs/
 *.spec.ts
 
 # Development files

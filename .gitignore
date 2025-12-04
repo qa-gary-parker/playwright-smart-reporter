@@ -5,7 +5,14 @@ dist/
 .env
 
 # Test artifacts
-example/smart-report.html
-example/test-history.json
 test-results/
 playwright-report/
+blob-report/
+blob-reports/
+blobs/
+
+# Example outputs
+example/smart-report.html
+example/test-history.json
+example/parallel/smart-report.html
+example/parallel/test-history.json

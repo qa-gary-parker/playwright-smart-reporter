@@ -7,10 +7,14 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "playwright-smart-reporter-merge-history": "./dist/merge-history.js"
+  },
   "scripts": {
     "build": "tsc",
     "test": "playwright test",
-    "test:demo": "playwright test --config=example/playwright.config.ts"
+    "test:demo": "playwright test --config=example/playwright.config.ts",
+    "test:merge-local": "rm -rf blob-reports && mkdir -p blob-reports/all && PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/run1 playwright test example/parallel/test1.spec.ts --config=example/playwright-blob.config.ts; PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/run2 playwright test example/parallel/test2.spec.ts --config=example/playwright-blob.config.ts; cp blob-reports/run1/*.zip blob-reports/run2/*.zip blob-reports/all/; node ./dist/merge-history.js blob-reports/run1/test-history.json blob-reports/run2/test-history.json -o blob-reports/all/test-history.json; npx playwright merge-reports --reporter=./dist/smart-reporter.js blob-reports/all"
   },
   "keywords": [
     "playwright",
