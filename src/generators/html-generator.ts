@@ -598,6 +598,73 @@ function generateStyles(passRate: number): string {
       border: 2px solid var(--text-primary);
     }
 
+    /* Chart Bar Hover Effects */
+    .chart-bar {
+      cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .chart-bar:hover {
+      opacity: 1 !important;
+      filter: brightness(1.1);
+    }
+
+    .bar-group {
+      cursor: pointer;
+    }
+
+    .bar-group:hover .chart-bar {
+      transform: translateY(-2px);
+    }
+
+    /* Chart Tooltip */
+    .chart-tooltip {
+      position: absolute;
+      display: none;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      pointer-events: none;
+      z-index: 10000;
+      white-space: nowrap;
+    }
+
+    .line-chart-container {
+      background: var(--bg-primary);
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .chart-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 1rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .secondary-trends-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 1024px) {
+      .secondary-trends-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     /* Secondary Trend Sections (Duration, Flaky, Slow) - Aligned with main trends */
     .secondary-trends {
       display: flex;
@@ -2031,5 +2098,31 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
 ${includeGallery ? `    // Gallery functions\n${generateGalleryScript()}` : ''}
 
 ${includeComparison ? `    // Comparison functions\n${generateComparisonScript()}` : ''}
+
+    // Chart bar tooltips
+    (function initChartTooltips() {
+      const tooltip = document.createElement('div');
+      tooltip.className = 'chart-tooltip';
+      document.body.appendChild(tooltip);
+
+      document.querySelectorAll('.bar-group').forEach(bar => {
+        bar.addEventListener('mouseenter', (e) => {
+          const text = bar.getAttribute('data-tooltip');
+          if (text) {
+            tooltip.textContent = text;
+            tooltip.style.display = 'block';
+          }
+        });
+
+        bar.addEventListener('mousemove', (e) => {
+          tooltip.style.left = e.pageX + 10 + 'px';
+          tooltip.style.top = e.pageY - 30 + 'px';
+        });
+
+        bar.addEventListener('mouseleave', () => {
+          tooltip.style.display = 'none';
+        });
+      });
+    })();
 `;
 }
