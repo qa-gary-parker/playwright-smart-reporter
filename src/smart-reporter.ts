@@ -1062,6 +1062,21 @@ Provide a brief, actionable suggestion to fix this failure.`;
       gap: 0.5rem;
     }
 
+    /* Chart Bar Hover Effects */
+    .chart-bar {
+      cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .chart-bar:hover {
+      opacity: 1 !important;
+      filter: brightness(1.1);
+    }
+
+    .bar-group:hover .chart-bar {
+      transform: translateY(-2px);
+    }
+
     .secondary-trends-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);

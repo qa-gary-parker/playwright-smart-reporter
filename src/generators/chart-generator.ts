@@ -55,110 +55,150 @@ export function generateTrendChart(data: ChartData): string {
   const maxFlaky = Math.max(...allSummaries.map((s: any) => s.flaky || 0), 1);
   const maxSlow = Math.max(...allSummaries.map((s: any) => s.slow || 0), 1);
 
-  // Helper function to generate SVG line chart
-  const generateLineChart = (
+  // Helper function to generate SVG bar chart with trend line
+  const generateBarChart = (
     chartData: any[],
     getValue: (d: any) => number,
     maxValue: number,
     color: string,
-    yAxisLabel: string
+    yAxisLabel: string,
+    formatValue?: (val: number) => string
   ): string => {
-    const stepX = plotWidth / (chartData.length - 1);
+    const barWidth = Math.min(40, plotWidth / chartData.length - 4);
+    const spacing = plotWidth / chartData.length;
 
-    // Generate line points
-    const points = chartData.map((d, i) => {
-      const x = padding.left + i * stepX;
+    // Generate y-axis grid lines and labels
+    const yTicks = 5;
+    const yGridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
+      const value = Math.round((maxValue / yTicks) * i);
+      const y = padding.top + plotHeight - (i / yTicks) * plotHeight;
+      return `
+        <line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" stroke="var(--border-subtle)" stroke-width="1" opacity="0.2"/>
+        <text x="${padding.left - 8}" y="${y + 4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${value}</text>
+      `;
+    }).join('');
+
+    // Generate bars
+    const bars = chartData.map((d, i) => {
       const value = getValue(d);
+      const x = padding.left + i * spacing + (spacing - barWidth) / 2;
+      const barHeight = (value / maxValue) * plotHeight;
+      const y = padding.top + plotHeight - barHeight;
+      const label = i === chartData.length - 1 ? 'Current' : formatShortDate(d.timestamp);
+      const isCurrent = i === chartData.length - 1;
+      const displayValue = formatValue ? formatValue(value) : value.toString();
+
+      return `
+        <g class="bar-group">
+          <rect
+            x="${x}"
+            y="${y}"
+            width="${barWidth}"
+            height="${barHeight}"
+            fill="${color}"
+            opacity="${isCurrent ? '1' : '0.85'}"
+            stroke="${isCurrent ? 'var(--text-primary)' : 'none'}"
+            stroke-width="${isCurrent ? '2' : '0'}"
+            rx="3"
+            class="chart-bar"
+          >
+            <title>${label}: ${displayValue}</title>
+          </rect>
+        </g>
+      `;
+    }).join('');
+
+    // Generate trend line
+    const trendPoints = chartData.map((d, i) => {
+      const value = getValue(d);
+      const x = padding.left + i * spacing + spacing / 2;
       const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
       return `${x},${y}`;
     }).join(' ');
 
-    // Generate data point circles
-    const circles = chartData.map((d, i) => {
-      const x = padding.left + i * stepX;
-      const value = getValue(d);
-      const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
-      const label = i === chartData.length - 1 ? 'Current' : formatShortDate(d.timestamp);
-      const isCurrent = i === chartData.length - 1;
-      return `
-        <circle cx="${x}" cy="${y}" r="${isCurrent ? 5 : 3}" fill="${color}" stroke="var(--bg-primary)" stroke-width="2">
-          <title>${label}: ${value}</title>
-        </circle>
-      `;
-    }).join('');
-
     // Generate x-axis labels
     const xLabels = chartData.map((d, i) => {
-      if (i % Math.ceil(chartData.length / 5) !== 0 && i !== chartData.length - 1) return '';
-      const x = padding.left + i * stepX;
+      if (chartData.length > 10 && i % 2 !== 0 && i !== chartData.length - 1) return '';
+      const x = padding.left + i * spacing + spacing / 2;
       const label = i === chartData.length - 1 ? 'Now' : formatShortDate(d.timestamp);
-      return `<text x="${x}" y="${chartHeight - 5}" fill="var(--text-muted)" font-size="10" text-anchor="middle">${label}</text>`;
-    }).join('');
-
-    // Generate y-axis labels
-    const yTicks = 4;
-    const yLabels = Array.from({ length: yTicks + 1 }, (_, i) => {
-      const value = Math.round((maxValue / yTicks) * i);
-      const y = padding.top + plotHeight - (i / yTicks) * plotHeight;
-      return `
-        <text x="${padding.left - 5}" y="${y + 4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${value}</text>
-        <line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" stroke="var(--border-subtle)" stroke-width="1" opacity="0.3"/>
-      `;
+      return `<text x="${x}" y="${chartHeight - 8}" fill="var(--text-muted)" font-size="9" text-anchor="middle">${label}</text>`;
     }).join('');
 
     return `
       <svg width="${chartWidth}" height="${chartHeight}" style="overflow: visible;">
         <!-- Y-axis label -->
-        <text x="10" y="${chartHeight / 2}" fill="var(--text-secondary)" font-size="11" font-weight="600" text-anchor="middle" transform="rotate(-90, 10, ${chartHeight / 2})">${yAxisLabel}</text>
+        <text x="12" y="${chartHeight / 2}" fill="var(--text-secondary)" font-size="11" font-weight="600" text-anchor="middle" transform="rotate(-90, 12, ${chartHeight / 2})">${yAxisLabel}</text>
 
         <!-- Grid lines and y-axis labels -->
-        ${yLabels}
+        ${yGridLines}
 
-        <!-- Line -->
-        <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+        <!-- Bars -->
+        ${bars}
 
-        <!-- Data points -->
-        ${circles}
+        <!-- Trend line -->
+        <polyline
+          points="${trendPoints}"
+          fill="none"
+          stroke="${color}"
+          stroke-width="2"
+          stroke-dasharray="4,4"
+          opacity="0.6"
+          stroke-linecap="round"
+        />
+
+        <!-- Trend line data points -->
+        ${chartData.map((d, i) => {
+          const value = getValue(d);
+          const x = padding.left + i * spacing + spacing / 2;
+          const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
+          const isCurrent = i === chartData.length - 1;
+          return `<circle cx="${x}" cy="${y}" r="${isCurrent ? 4 : 2.5}" fill="${color}" stroke="white" stroke-width="1.5"/>`;
+        }).join('')}
 
         <!-- X-axis labels -->
         ${xLabels}
+
+        <!-- X-axis line -->
+        <line x1="${padding.left}" y1="${padding.top + plotHeight}" x2="${padding.left + plotWidth}" y2="${padding.top + plotHeight}" stroke="var(--border-subtle)" stroke-width="1"/>
       </svg>
     `;
   };
 
-  // Generate pass rate line chart
-  const passRateChart = generateLineChart(
+  // Generate pass rate bar chart
+  const passRateChart = generateBarChart(
     allSummaries,
     (s: any) => s.passRate || 0,
     100,
-    'var(--accent-green)',
-    'Pass Rate (%)'
+    '#22c55e',
+    'Pass Rate (%)',
+    (val) => `${val}%`
   );
 
-  // Generate duration line chart
-  const durationChart = generateLineChart(
+  // Generate duration bar chart
+  const durationChart = generateBarChart(
     allSummaries,
-    (s: any) => Math.round((s.duration || 0) / 1000), // Convert to seconds
+    (s: any) => Math.round((s.duration || 0) / 1000),
     Math.ceil(maxDuration / 1000),
-    'var(--accent-purple)',
-    'Duration (s)'
+    '#a855f7',
+    'Duration (s)',
+    (val) => `${val}s`
   );
 
-  // Generate flaky tests line chart
-  const flakyChart = generateLineChart(
+  // Generate flaky tests bar chart
+  const flakyChart = generateBarChart(
     allSummaries,
     (s: any) => s.flaky || 0,
     maxFlaky,
-    'var(--accent-yellow)',
+    '#eab308',
     'Flaky Tests'
   );
 
-  // Generate slow tests line chart
-  const slowChart = generateLineChart(
+  // Generate slow tests bar chart
+  const slowChart = generateBarChart(
     allSummaries,
     (s: any) => s.slow || 0,
     maxSlow,
-    'var(--accent-orange)',
+    '#f97316',
     'Slow Tests'
   );
 
