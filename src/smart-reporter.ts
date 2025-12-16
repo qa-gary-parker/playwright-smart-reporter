@@ -58,6 +58,7 @@ import { generateHtml, type HtmlGeneratorData } from './generators/html-generato
 import { buildComparison } from './generators/comparison-generator';
 import { SlackNotifier, TeamsNotifier } from './notifiers';
 import { formatDuration, stripAnsiCodes, sanitizeFilename } from './utils';
+import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 
 // ============================================================================
 // Smart Reporter
@@ -95,6 +96,8 @@ class SmartReporter implements Reporter {
   private results: TestResultData[] = [];
   private outputDir: string = '';
   private startTime: number = 0;
+  private fullConfig: FullConfig | null = null;
+  private runnerErrors: string[] = [];
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -117,6 +120,7 @@ class SmartReporter implements Reporter {
   onBegin(config: FullConfig, _suite: Suite): void {
     this.startTime = Date.now();
     this.outputDir = config.rootDir;
+    this.fullConfig = config;
 
     // Initialize HistoryCollector and load history
     this.historyCollector = new HistoryCollector(this.options, this.outputDir);
@@ -135,6 +139,15 @@ class SmartReporter implements Reporter {
     // Initialize notifiers
     this.slackNotifier = new SlackNotifier(this.options.slackWebhook);
     this.teamsNotifier = new TeamsNotifier(this.options.teamsWebhook);
+  }
+
+  onError(error: unknown): void {
+    const err = error as { message?: string; stack?: string; value?: string };
+    const payload = err.stack || err.message || err.value || String(error);
+    this.runnerErrors.push(payload);
+    if (this.runnerErrors.length > 50) {
+      this.runnerErrors = this.runnerErrors.slice(-50);
+    }
   }
 
   /**
@@ -171,6 +184,20 @@ class SmartReporter implements Reporter {
       if (error) {
         const rawError = error.stack || error.message || 'Unknown error';
         testData.error = stripAnsiCodes(rawError);
+      }
+    }
+
+    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
+    if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
+      try {
+        testData.aiPrompt = buildPlaywrightStyleAiPrompt({
+          config: this.fullConfig,
+          test,
+          result,
+        });
+      } catch (err) {
+        // Prompt building should never fail the reporter
+        console.warn(`Failed to build AI prompt for "${test.title}":`, err);
       }
     }
 

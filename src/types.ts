@@ -95,6 +95,7 @@ export interface TestResultData {
   duration: number;
   error?: string;
   retry: number;
+  aiPrompt?: string;         // NEW: Playwright-style prompt sent to AI (no binaries)
   flakinessScore?: number;
   flakinessIndicator?: string;
   performanceTrend?: string;

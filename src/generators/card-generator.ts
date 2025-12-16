@@ -3,7 +3,7 @@
  */
 
 import type { TestResultData } from '../types';
-import { formatDuration, escapeHtml, sanitizeId } from '../utils';
+import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../utils';
 
 /**
  * Generate a single test card
@@ -178,7 +178,7 @@ export function generateTestDetails(test: TestResultData, cardId: string): strin
     details += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">🤖</span> AI Suggestion</div>
-        <div class="ai-box">${escapeHtml(test.aiSuggestion)}</div>
+        <div class="ai-box ai-markdown">${renderMarkdownLite(test.aiSuggestion)}</div>
       </div>
     `;
   }

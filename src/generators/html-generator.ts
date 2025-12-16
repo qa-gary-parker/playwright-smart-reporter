@@ -1299,6 +1299,72 @@ function generateStyles(passRate: number): string {
       border-radius: 2px;
     }
 
+    /* AI Markdown Rendering */
+    .ai-markdown p { margin: 0.5rem 0; }
+    .ai-markdown p:first-child { margin-top: 0; }
+    .ai-markdown p:last-child { margin-bottom: 0; }
+
+    .ai-markdown .ai-heading {
+      margin: 0.75rem 0 0.35rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .ai-markdown .ai-h1,
+    .ai-markdown .ai-h2 { font-size: 1.05rem; }
+    .ai-markdown .ai-h3 { font-size: 1rem; }
+    .ai-markdown .ai-h4,
+    .ai-markdown .ai-h5,
+    .ai-markdown .ai-h6 { font-size: 0.95rem; }
+
+    .ai-markdown .ai-list {
+      margin: 0.5rem 0;
+      padding-left: 1.25rem;
+    }
+    .ai-markdown .ai-list li { margin: 0.15rem 0; }
+
+    .ai-markdown .ai-inline-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.1rem 0.35rem;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .ai-markdown .ai-code-block {
+      margin: 0.75rem 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    .ai-markdown .ai-code-lang {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .ai-markdown pre {
+      margin: 0;
+      padding: 0.85rem 0.95rem;
+      overflow-x: auto;
+    }
+
+    .ai-markdown pre code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      white-space: pre;
+      display: block;
+    }
+
     .duration-compare {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.8rem;

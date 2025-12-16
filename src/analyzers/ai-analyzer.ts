@@ -31,7 +31,7 @@ export class AIAnalyzer {
 
     for (const test of failedTests) {
       try {
-        const prompt = this.buildFailurePrompt(test);
+        const prompt = test.aiPrompt ?? this.buildFailurePrompt(test);
         test.aiSuggestion = await this.callAI(prompt);
       } catch (err) {
         console.error(`Failed to get AI suggestion for "${test.title}":`, err);
