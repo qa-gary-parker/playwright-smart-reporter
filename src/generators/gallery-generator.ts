@@ -243,8 +243,8 @@ export function generateGalleryScript(): string {
       const title = document.getElementById('lightbox-title');
       const status = document.getElementById('lightbox-status');
 
-      // Build array of visible screenshot items
-      lightboxItems = Array.from(document.querySelectorAll('.gallery-item[data-type="screenshots"]'))
+      // Build array of all visible gallery items (screenshots and traces)
+      lightboxItems = Array.from(document.querySelectorAll('.gallery-item'))
         .filter(item => item.style.display !== 'none');
 
       currentLightboxIndex = lightboxItems.findIndex(item => item.dataset.id === itemId);
