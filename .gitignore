@@ -3,6 +3,8 @@ dist/
 *.log
 .DS_Store
 .env
+*.bak
+*.bak*
 
 # Test artifacts
 test-results/

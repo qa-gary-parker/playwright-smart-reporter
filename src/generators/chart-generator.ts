@@ -63,15 +63,15 @@ export function generateTrendChart(data: ChartData): string {
   }];
 
   // Find max values for scaling
-  const maxTotal = Math.max(...allSummaries.map((s: any) => s.passed + s.failed), 1);
-  const maxDuration = Math.max(...allSummaries.map((s: any) => s.duration || 0), 1);
-  const maxFlaky = Math.max(...allSummaries.map((s: any) => s.flaky || 0), 1);
-  const maxSlow = Math.max(...allSummaries.map((s: any) => s.slow || 0), 1);
+  const maxTotal = Math.max(...allSummaries.map((s) => s.passed + s.failed), 1);
+  const maxDuration = Math.max(...allSummaries.map((s) => s.duration || 0), 1);
+  const maxFlaky = Math.max(...allSummaries.map((s) => s.flaky || 0), 1);
+  const maxSlow = Math.max(...allSummaries.map((s) => s.slow || 0), 1);
 
-  // Helper function to generate SVG bar chart with trend line
+  // Helper function to generate SVG bar chart
   const generateBarChart = (
-    chartData: any[],
-    getValue: (d: any) => number,
+    chartData: RunSummary[],
+    getValue: (d: RunSummary) => number,
     maxValue: number,
     color: string,
     yAxisLabel: string,
@@ -150,7 +150,7 @@ export function generateTrendChart(data: ChartData): string {
   // Generate pass rate bar chart
   const passRateChart = generateBarChart(
     allSummaries,
-    (s: any) => s.passRate || 0,
+    (s) => s.passRate || 0,
     100,
     '#22c55e',
     'Pass Rate (%)',
@@ -160,7 +160,7 @@ export function generateTrendChart(data: ChartData): string {
   // Generate duration bar chart
   const durationChart = generateBarChart(
     allSummaries,
-    (s: any) => Math.round((s.duration || 0) / 1000),
+    (s) => Math.round((s.duration || 0) / 1000),
     Math.ceil(maxDuration / 1000),
     '#a855f7',
     'Duration (s)',
@@ -170,7 +170,7 @@ export function generateTrendChart(data: ChartData): string {
   // Generate flaky tests bar chart
   const flakyChart = generateBarChart(
     allSummaries,
-    (s: any) => s.flaky || 0,
+    (s) => s.flaky || 0,
     maxFlaky,
     '#eab308',
     'Flaky Tests'
@@ -179,7 +179,7 @@ export function generateTrendChart(data: ChartData): string {
   // Generate slow tests bar chart
   const slowChart = generateBarChart(
     allSummaries,
-    (s: any) => s.slow || 0,
+    (s) => s.slow || 0,
     maxSlow,
     '#f97316',
     'Slow Tests'

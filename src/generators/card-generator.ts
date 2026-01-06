@@ -13,6 +13,7 @@ export function generateTestCard(test: TestResultData): string {
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
   const isFaster = test.performanceTrend?.startsWith('↓') || false;
+  const isNew = test.flakinessIndicator?.includes('New') || false;
   const hasDetails = test.error || test.aiSuggestion || test.steps.length > 0 || test.status !== 'passed';
   const cardId = sanitizeId(test.testId);
 
@@ -42,6 +43,7 @@ export function generateTestCard(test: TestResultData): string {
          data-flaky="${isFlaky}"
          data-unstable="${isUnstable}"
          data-slow="${isSlow}"
+         data-new="${isNew}"
          data-grade="${test.stabilityScore?.grade || ''}">
       <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}')"` : ''}>
         <div class="test-card-left">

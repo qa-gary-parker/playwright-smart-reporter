@@ -251,14 +251,16 @@ export function generateGalleryScript(): string {
 
       if (currentLightboxIndex >= 0) {
         const currentItem = lightboxItems[currentLightboxIndex];
-        const imgSrc = currentItem.querySelector('img').src;
-        const testTitle = currentItem.querySelector('.gallery-item-title').textContent;
-        const testStatus = currentItem.querySelector('.gallery-item-status').textContent;
+        const imgElement = currentItem.querySelector('img');
+        const titleElement = currentItem.querySelector('.gallery-item-title');
+        const statusElement = currentItem.querySelector('.gallery-item-status');
 
-        img.src = imgSrc;
-        title.textContent = testTitle;
-        status.textContent = testStatus;
-        status.className = 'lightbox-status ' + currentItem.querySelector('.gallery-item-status').className.split(' ')[1];
+        if (!imgElement || !titleElement || !statusElement) return;
+
+        img.src = imgElement.src;
+        title.textContent = titleElement.textContent;
+        status.textContent = statusElement.textContent;
+        status.className = 'lightbox-status ' + (statusElement.className.split(' ')[1] || '');
 
         lightbox.style.display = 'flex';
       }

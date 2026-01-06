@@ -34,6 +34,9 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const slow = results.filter((r) =>
     r.performanceTrend?.startsWith('↑')
   ).length;
+  const newTests = results.filter((r) =>
+    r.flakinessIndicator?.includes('New')
+  ).length;
   const total = results.length;
   const passRate = (passed + failed) > 0 ? Math.round((passed / (passed + failed)) * 100) : 0;
 
@@ -146,6 +149,7 @@ ${generateStyles(passRate)}
       <button class="filter-btn" data-filter="skipped" onclick="filterTests('skipped')">Skipped (${skipped})</button>
       <button class="filter-btn" data-filter="flaky" onclick="filterTests('flaky')">Flaky (${flaky})</button>
       <button class="filter-btn" data-filter="slow" onclick="filterTests('slow')">Slow (${slow})</button>
+      <button class="filter-btn" data-filter="new" onclick="filterTests('new')">New (${newTests})</button>
     </div>
 
     <!-- Stability Score Filters -->
@@ -2242,6 +2246,7 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
         const status = card.dataset.status;
         const isFlaky = card.dataset.flaky === 'true';
         const isSlow = card.dataset.slow === 'true';
+        const isNew = card.dataset.new === 'true';
         const grade = card.dataset.grade;
 
         let show = filter === 'all' ||
@@ -2250,6 +2255,7 @@ function generateScripts(testsJson: string, includeGallery: boolean, includeComp
           (filter === 'skipped' && status === 'skipped') ||
           (filter === 'flaky' && isFlaky) ||
           (filter === 'slow' && isSlow) ||
+          (filter === 'new' && isNew) ||
           (filter === 'grade-a' && grade === 'A') ||
           (filter === 'grade-b' && grade === 'B') ||
           (filter === 'grade-c' && grade === 'C') ||
