@@ -18,3 +18,5 @@ example/smart-report.html
 example/test-history.json
 example/parallel/smart-report.html
 example/parallel/test-history.json
+example/history-runs/
+example/traces/

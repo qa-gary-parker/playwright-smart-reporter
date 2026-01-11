@@ -161,6 +161,7 @@ export default defineConfig({
       enableComparison: true,
       enableAIRecommendations: true,
       enableTraceViewer: true,
+      enableHistoryDrilldown: false,
       stabilityThreshold: 70,
       retryFailureThreshold: 3,
       baselineRunId: 'main-branch-baseline', // optional
@@ -186,9 +187,11 @@ export default defineConfig({
 | `enableComparison` | `true` | Enable run comparison against baseline |
 | `enableAIRecommendations` | `true` | Generate AI-powered recommendations |
 | `enableTraceViewer` | `true` | Enable "View Trace" actions |
+| `enableHistoryDrilldown` | `false` | Store small per-run snapshots so you can click history dots to view historical runs |
 | `stabilityThreshold` | `70` | Minimum stability score (C grade) to avoid warnings |
 | `retryFailureThreshold` | `3` | Number of retries before flagging as problematic |
 | `baselineRunId` | - | Optional: Run ID to use as baseline for comparisons |
+
 
 ### AI Analysis
 

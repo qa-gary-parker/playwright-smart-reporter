@@ -17,6 +17,7 @@ export default defineConfig({
       historyFile: 'test-history.json',
       maxHistoryRuns: 10,
       performanceThreshold: 0.2,
+      enableHistoryDrilldown: true,
     }],
   ],
 });

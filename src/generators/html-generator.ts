@@ -3,7 +3,7 @@
  * Coordinates all other generators and generates the complete HTML document
  */
 
-import type { TestResultData, TestHistory, RunComparison, SmartReporterOptions } from '../types';
+import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions } from '../types';
 import { formatDuration } from '../utils';
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests } from './card-generator';
@@ -16,13 +16,14 @@ export interface HtmlGeneratorData {
   startTime: number;
   options: SmartReporterOptions;
   comparison?: RunComparison;
+  historyRunSnapshots?: Record<string, RunSnapshotFile>;
 }
 
 /**
  * Generate complete HTML report
  */
 export function generateHtml(data: HtmlGeneratorData): string {
-  const { results, history, startTime, options, comparison } = data;
+  const { results, history, startTime, options, comparison, historyRunSnapshots } = data;
 
   const totalDuration = Date.now() - startTime;
   const passed = results.filter((r) => r.status === 'passed').length;
@@ -60,6 +61,13 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const cspSafe = options.cspSafe === true;
   const enableTraceViewer = options.enableTraceViewer !== false;
   const showTraceSection = options.enableTraceViewer !== false;
+  const enableHistoryDrilldown = options.enableHistoryDrilldown === true;
+  const historyRunSnapshotsJson = enableHistoryDrilldown
+    ? JSON.stringify(historyRunSnapshots || {})
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026')
+    : '{}';
 
   // Google Fonts links (only included when not in CSP-safe mode)
   const fontLinks = cspSafe ? '' : `
@@ -180,7 +188,7 @@ ${generateStyles(passRate, cspSafe)}
   </div>
 
   <script>
-${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer)}
+${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson)}
   </script>
 </body>
 </html>`;
@@ -906,19 +914,26 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       flex: 1;
     }
 
-    .history-label {
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      margin-bottom: 0.5rem;
-    }
+	    .history-label {
+	      font-size: 0.65rem;
+	      text-transform: uppercase;
+	      letter-spacing: 0.1em;
+	      color: var(--text-muted);
+	      margin-bottom: 0.5rem;
+	    }
 
-    .sparkline {
-      display: flex;
-      gap: 3px;
-      align-items: center;
-      height: 24px;
+	    .sparkline-block {
+	      display: inline-flex;
+	      flex-direction: column;
+	      align-items: flex-start;
+	      width: fit-content;
+	    }
+
+	    .sparkline {
+	      display: flex;
+	      gap: 3px;
+	      align-items: center;
+	      height: 24px;
     }
 
     .spark-dot {
@@ -926,10 +941,30 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       height: 8px;
       border-radius: 50%;
       transition: transform 0.2s ease;
+      position: relative;
     }
 
     .spark-dot:hover {
       transform: scale(1.4);
+    }
+
+    .spark-dot[data-ts]:hover::after {
+      content: attr(data-ts);
+      position: absolute;
+      bottom: 160%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.35rem 0.5rem;
+      font-size: 0.75rem;
+      font-family: ${monoFont};
+      white-space: nowrap;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+      z-index: 100000;
     }
 
     .spark-dot.pass {
@@ -946,16 +981,54 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       background: var(--text-muted);
     }
 
-    .spark-dot.current {
-      width: 10px;
-      height: 10px;
-      border: 2px solid var(--text-primary);
-    }
+	    .spark-dot.current {
+	      width: 10px;
+	      height: 10px;
+	      border: 2px solid var(--text-primary);
+	    }
 
-    /* Duration Trend Mini Chart */
-    .duration-chart {
-      display: flex;
-      align-items: flex-end;
+	    .history-dot {
+	      cursor: pointer;
+	    }
+
+	    .history-dot.selected {
+	      outline: 2px solid rgba(255, 255, 255, 0.85);
+	      outline-offset: 2px;
+	    }
+
+	    .duration-bar.selected {
+	      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75);
+	    }
+
+	    .history-stats.passfail {
+	      display: flex;
+	      align-items: center;
+	      justify-content: space-between;
+	      gap: 0.75rem;
+	      width: 100%;
+	    }
+
+	    .history-back-btn {
+	      appearance: none;
+	      border: 1px solid var(--border-subtle);
+	      background: var(--bg-secondary);
+	      color: var(--text-primary);
+	      font-size: 0.75rem;
+	      font-weight: 600;
+	      padding: 0.25rem 0.5rem;
+	      border-radius: 8px;
+	      cursor: pointer;
+	    }
+
+	    .history-back-btn:hover {
+	      border-color: var(--border-glow);
+	      background: var(--bg-card-hover);
+	    }
+
+	    /* Duration Trend Mini Chart */
+	    .duration-chart {
+	      display: flex;
+	      align-items: flex-end;
       gap: 2px;
       height: 32px;
       padding: 4px 0;
@@ -1111,6 +1184,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-radius: 12px;
       overflow: hidden;
       transition: all 0.2s ease;
+    }
+
+    /* Allow history tooltips to escape the card when expanded */
+    .test-card.expanded {
+      overflow: visible;
+      position: relative;
+      z-index: 1;
     }
 
     .test-card:hover {
@@ -2361,10 +2441,15 @@ function generateScripts(
   testsJson: string,
   includeGallery: boolean,
   includeComparison: boolean,
-  enableTraceViewer: boolean
+  enableTraceViewer: boolean,
+  enableHistoryDrilldown: boolean,
+  historyRunSnapshotsJson: string
 ): string {
   return `    const tests = ${testsJson};
     const traceViewerEnabled = ${enableTraceViewer ? 'true' : 'false'};
+    const historyDrilldownEnabled = ${enableHistoryDrilldown ? 'true' : 'false'};
+    const historyRunSnapshots = ${historyRunSnapshotsJson};
+    const detailsBodyCache = new WeakMap();
 
     function searchTests(query) {
       const lowerQuery = query.toLowerCase();
@@ -2520,6 +2605,251 @@ function generateScripts(
       });
     }
 
+    function escapeHtmlUnsafe(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+	    function formatDurationMs(ms) {
+	      const n = Number(ms) || 0;
+	      if (n < 1000) return n + 'ms';
+	      if (n < 60000) return (n / 1000).toFixed(1) + 's';
+	      return (n / 60000).toFixed(1) + 'm';
+	    }
+
+	    function getRunSnapshot(runId) {
+	      if (!historyRunSnapshots || !runId) return null;
+	      return historyRunSnapshots[runId] || null;
+	    }
+
+	    function renderSnapshotBody(snapshot, avgDuration) {
+	      const parts = [];
+
+	      if (snapshot.steps && snapshot.steps.length > 0) {
+	        const max = snapshot.steps.reduce((m, s) => Math.max(m, Number(s.duration) || 0), 0) || 1;
+	        const rows = snapshot.steps.map(step => {
+	          const w = Math.max(0, Math.min(100, ((Number(step.duration) || 0) / max) * 100));
+	          const slowest = step && step.isSlowest ? true : false;
+	          return (
+	            '<div class="step-row' + (slowest ? ' slowest' : '') + '">' +
+	              '<span class="step-title" title="' + escapeHtmlUnsafe(step.title) + '">' + escapeHtmlUnsafe(step.title) + '</span>' +
+	              '<div class="step-bar-container"><div class="step-bar" style="width: ' + w.toFixed(1) + '%"></div></div>' +
+	              '<span class="step-duration">' + escapeHtmlUnsafe(formatDurationMs(step.duration)) + '</span>' +
+	              (slowest ? '<span class="slowest-badge">Slowest</span>' : '') +
+	            '</div>'
+	          );
+	        }).join('');
+        parts.push(
+          '<div class="detail-section">' +
+            '<div class="detail-label"><span class="icon">⏱</span> Step Timings</div>' +
+            '<div class="steps-container">' + rows + '</div>' +
+	          '</div>'
+	        );
+	      }
+
+	      if (snapshot.error) {
+	        parts.push(
+	          '<div class="detail-section">' +
+	            '<div class="detail-label"><span class="icon">⚠</span> Error</div>' +
+	            '<div class="error-box">' + escapeHtmlUnsafe(snapshot.error) + '</div>' +
+	          '</div>'
+	        );
+	      }
+
+	      if (snapshot.attachments && snapshot.attachments.screenshots && snapshot.attachments.screenshots.length > 0) {
+	        const first = snapshot.attachments.screenshots[0];
+	        parts.push(
+	          '<div class="detail-section">' +
+            '<div class="detail-label"><span class="icon">📸</span> Screenshot</div>' +
+            '<div class="screenshot-box">' +
+              '<img src="' + escapeHtmlUnsafe(first) + '" alt="Screenshot" onclick="window.open(this.src, \\'_blank\\')" onerror="this.style.display=\\'none\\'; this.nextElementSibling.style.display=\\'flex\\';"/>' +
+              '<div class="screenshot-fallback" style="display:none;">' +
+                '<span>Image blocked by security policy</span>' +
+                '<a href="' + escapeHtmlUnsafe(first) + '" download class="download-btn">Download Screenshot</a>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+
+      if (snapshot.attachments && snapshot.attachments.videos && snapshot.attachments.videos.length > 0) {
+        parts.push(
+          '<div class="detail-section">' +
+            '<div class="detail-label"><span class="icon">📎</span> Attachments</div>' +
+            '<div class="attachments">' +
+              '<a href="file://' + escapeHtmlUnsafe(snapshot.attachments.videos[0]) + '" class="attachment-link" target="_blank">🎬 Video</a>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+
+	      if (snapshot.aiSuggestion) {
+	        const aiHtml = snapshot.aiSuggestionHtml
+	          ? String(snapshot.aiSuggestionHtml)
+	          : escapeHtmlUnsafe(snapshot.aiSuggestion);
+	        parts.push(
+	          '<div class="detail-section">' +
+	            '<div class="detail-label"><span class="icon">🤖</span> AI Suggestion</div>' +
+	            '<div class="ai-box ai-markdown">' + aiHtml + '</div>' +
+	          '</div>'
+	        );
+	      }
+
+	      if (Number.isFinite(Number(avgDuration)) && Number(avgDuration) > 0) {
+	        parts.push(
+	          '<div class="duration-compare">Average: ' +
+	            escapeHtmlUnsafe(formatDurationMs(avgDuration)) +
+	            ' → Current: ' +
+	            escapeHtmlUnsafe(formatDurationMs(snapshot.duration)) +
+	          '</div>'
+	        );
+	      }
+
+	      if (parts.length === 0) {
+	        parts.push('<div class="duration-compare">No additional data recorded for this run.</div>');
+	      }
+
+	      return parts.join('');
+	    }
+
+	    function showBackButton(card, show) {
+	      const btn = card.querySelector('.history-back-btn');
+	      if (!btn) return;
+	      btn.style.display = show ? 'inline-flex' : 'none';
+	    }
+
+	    function clearSelectedDots(card) {
+	      card.querySelectorAll('.history-dot.selected').forEach(d => d.classList.remove('selected'));
+	    }
+
+	    function clearSelectedDurationBars(card) {
+	      card.querySelectorAll('.duration-bar.selected').forEach(b => b.classList.remove('selected'));
+	    }
+
+	    function getTestModel(testId) {
+	      return tests.find(t => t && t.testId === testId) || null;
+	    }
+
+	    function computeAvgDurationFromHistory(testModel) {
+	      const history = Array.isArray(testModel.history) ? testModel.history : [];
+	      const nonSkipped = history.filter(h => !h.skipped);
+	      if (nonSkipped.length === 0) return 0;
+	      return nonSkipped.reduce((sum, h) => sum + (Number(h.duration) || 0), 0) / nonSkipped.length;
+	    }
+
+	    function updateTrendUI(card, testId, runId, selectedDuration) {
+	      const testModel = getTestModel(testId);
+	      if (!testModel) return;
+
+	      const avg = computeAvgDurationFromHistory(testModel);
+	      const avgEl = card.querySelector('[data-role="avg-duration"]');
+	      const curEl = card.querySelector('[data-role="current-duration"]');
+	      if (avgEl) avgEl.textContent = formatDurationMs(avg);
+	      if (curEl) curEl.textContent = formatDurationMs(selectedDuration);
+
+	      // Highlight the selected history duration bar (if present)
+	      clearSelectedDurationBars(card);
+	      if (runId) {
+	        const selectedBar = card.querySelector('.duration-bar.history-duration[data-runid="' + CSS.escape(runId) + '"]');
+	        if (selectedBar) selectedBar.classList.add('selected');
+	      }
+	    }
+
+	    function restoreTrendUI(card, testId) {
+	      const testModel = getTestModel(testId);
+	      if (!testModel) return;
+
+	      const avg = computeAvgDurationFromHistory(testModel);
+	      const avgEl = card.querySelector('[data-role="avg-duration"]');
+	      const curEl = card.querySelector('[data-role="current-duration"]');
+	      if (avgEl) avgEl.textContent = formatDurationMs(avg);
+	      if (curEl) curEl.textContent = formatDurationMs(testModel.duration);
+
+	      clearSelectedDurationBars(card);
+	    }
+
+	    async function handleHistoryDotClick(dot) {
+	      const runId = dot.getAttribute('data-runid');
+	      const testId = dot.getAttribute('data-testid');
+	      if (!runId || !testId) return;
+	      const card = dot.closest('.test-card');
+      if (!card) return;
+      const details = card.querySelector('.test-details');
+      const body = details ? details.querySelector('[data-details-body]') : null;
+      if (!body) return;
+
+      if (!detailsBodyCache.has(body)) {
+        detailsBodyCache.set(body, body.innerHTML);
+      }
+
+	      const runData = getRunSnapshot(runId);
+	      const snapshot = runData && runData.tests ? runData.tests[testId] : null;
+	      if (!snapshot) {
+	        alert('No stored snapshot for this test/run. (Older runs may have stored snapshots for failures only.)');
+	        return;
+	      }
+
+	      clearSelectedDots(card);
+	      clearSelectedDurationBars(card);
+	      dot.classList.add('selected');
+	      showBackButton(card, true);
+	      const testModel = getTestModel(testId);
+	      const avg = testModel ? computeAvgDurationFromHistory(testModel) : 0;
+	      body.innerHTML = renderSnapshotBody(snapshot, avg);
+
+	      // Sync Duration Trend UI to the selected run.
+	      updateTrendUI(card, testId, runId, snapshot.duration);
+	    }
+
+	    function handleHistoryBackClick(btn) {
+	      const card = btn.closest('.test-card');
+	      if (!card) return;
+	      const details = card.querySelector('.test-details');
+	      const body = details ? details.querySelector('[data-details-body]') : null;
+	      if (!body) return;
+	      const testId = card.querySelector('.history-dot[data-testid]')?.getAttribute('data-testid') || null;
+	      const original = detailsBodyCache.get(body);
+	      if (typeof original === 'string') {
+	        body.innerHTML = original;
+	      }
+	      clearSelectedDots(card);
+	      clearSelectedDurationBars(card);
+	      showBackButton(card, false);
+
+	      if (testId) {
+	        restoreTrendUI(card, testId);
+	      }
+	    }
+
+	    function initHistoryDrilldown() {
+	      if (!historyDrilldownEnabled) return;
+
+	      document.addEventListener('click', async (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+
+        const backBtn = t.closest('[data-action="history-back"]');
+        if (backBtn) {
+          e.preventDefault();
+          handleHistoryBackClick(backBtn);
+          return;
+        }
+
+	        const dot = t.closest('.history-dot[data-runid]');
+	        if (dot) {
+	          e.preventDefault();
+	          handleHistoryDotClick(dot).catch(err => {
+	            console.error(err);
+	            alert('Unable to load historical run data.');
+	          });
+	        }
+	      });
+	    }
+
     // Run on page load
     window.addEventListener('DOMContentLoaded', () => {
       scrollChartsToRight();
@@ -2528,6 +2858,7 @@ function generateScripts(
           el.style.display = 'none';
         });
       }
+      initHistoryDrilldown();
     });
 
     function viewTraceFromEl(el) {

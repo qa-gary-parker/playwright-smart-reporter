@@ -25,6 +25,7 @@ import type {
   StepData,
   TestHistoryEntry,
   RunSummary,
+  RunSnapshotFile,
 } from './types';
 
 // ============================================================================
@@ -380,14 +381,39 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Prepare data for HTML generation (after trace paths are updated)
-    const htmlData: HtmlGeneratorData = {
-      results: this.results,
-      history: this.historyCollector.getHistory(),
-      startTime: this.startTime,
-      options: this.options,
-      comparison,
-    };
+	    // Embed per-run snapshots when drilldown is enabled so it works from file:// without a local server.
+	    let historyRunSnapshots: Record<string, RunSnapshotFile> | undefined;
+	    if (this.options.enableHistoryDrilldown) {
+	      try {
+	        const history = this.historyCollector.getHistory();
+	        const runFiles = history.runFiles || {};
+	        const historyPath = path.resolve(this.outputDir, this.options.historyFile ?? 'test-history.json');
+	        const historyDir = path.dirname(historyPath);
+
+	        historyRunSnapshots = {};
+	        for (const [runId, rel] of Object.entries(runFiles)) {
+	          const abs = path.resolve(historyDir, rel);
+	          if (!fs.existsSync(abs)) continue;
+	          try {
+	            const content = fs.readFileSync(abs, 'utf-8');
+	            historyRunSnapshots[runId] = JSON.parse(content) as RunSnapshotFile;
+	          } catch {
+	            // ignore bad snapshot files
+	          }
+	        }
+	      } catch {
+	        // ignore
+	      }
+	    }
+
+	    const htmlData: HtmlGeneratorData = {
+	      results: this.results,
+	      history: this.historyCollector.getHistory(),
+	      startTime: this.startTime,
+	      options: this.options,
+	      comparison,
+	      historyRunSnapshots,
+	    };
 
     // Generate and save HTML report
     const html = generateHtml(htmlData);

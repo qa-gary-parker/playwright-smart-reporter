@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions } from '../types';
+import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
+import { renderMarkdownLite } from '../utils';
 
 /**
  * Manages test history persistence and retrieval
@@ -27,6 +28,7 @@ export class HistoryCollector {
       enableAIRecommendations: options.enableAIRecommendations ?? true,
       enableTrendsView: options.enableTrendsView ?? true,
       enableTraceViewer: options.enableTraceViewer ?? true,
+      enableHistoryDrilldown: options.enableHistoryDrilldown ?? false,
       stabilityThreshold: options.stabilityThreshold ?? 70,
       retryFailureThreshold: options.retryFailureThreshold ?? 3,
       cspSafe: options.cspSafe ?? false,
@@ -63,6 +65,12 @@ export class HistoryCollector {
         if (!this.history.summaries) {
           this.history.summaries = [];
         }
+        if (!this.history.runs) {
+          this.history.runs = [];
+        }
+        if (!this.history.runFiles) {
+          this.history.runFiles = {};
+        }
       } catch (err) {
         console.warn('Failed to load history:', err);
         this.history = { runs: [], tests: {}, summaries: [] };
@@ -75,6 +83,7 @@ export class HistoryCollector {
    */
   updateHistory(results: TestResultData[]): void {
     const timestamp = new Date().toISOString();
+    const runId = this.currentRun.runId;
 
     for (const result of results) {
       if (!this.history.tests[result.testId]) {
@@ -85,6 +94,7 @@ export class HistoryCollector {
         passed: result.status === 'passed',
         duration: result.duration,
         timestamp,
+        ...(this.options.enableHistoryDrilldown ? { runId } : {}),
         skipped: result.status === 'skipped',
         retry: result.retry, // NEW: Track retry count
       });
@@ -124,6 +134,74 @@ export class HistoryCollector {
     // Keep only last N summaries
     if (this.history.summaries!.length > this.options.maxHistoryRuns) {
       this.history.summaries = this.history.summaries!.slice(-this.options.maxHistoryRuns);
+    }
+
+    if (this.options.enableHistoryDrilldown) {
+      this.history.runs.push({ ...this.currentRun });
+      if (this.history.runs.length > this.options.maxHistoryRuns) {
+        this.history.runs = this.history.runs.slice(-this.options.maxHistoryRuns);
+      }
+
+      const historyPath = path.resolve(this.outputDir, this.options.historyFile);
+      const historyDir = path.dirname(historyPath);
+      const runsDir = path.join(historyDir, 'history-runs');
+      if (!fs.existsSync(runsDir)) {
+        fs.mkdirSync(runsDir, { recursive: true });
+      }
+
+      const snapshots: Record<string, TestResultSnapshot> = {};
+      for (const result of results) {
+        const screenshots = result.attachments?.screenshots?.filter(s => !s.startsWith('data:')) ?? [];
+        const videos = result.attachments?.videos ?? [];
+        const traces = result.attachments?.traces ?? [];
+        const hasAttachments = screenshots.length > 0 || videos.length > 0 || traces.length > 0;
+
+        const attachments = hasAttachments
+          ? { screenshots, videos, traces }
+          : undefined;
+
+        snapshots[result.testId] = {
+          testId: result.testId,
+          title: result.title,
+          file: result.file,
+          status: result.status,
+          duration: result.duration,
+          retry: result.retry,
+          error: result.error,
+          steps: result.steps ?? [],
+          aiSuggestion: result.aiSuggestion,
+          aiSuggestionHtml: result.aiSuggestion ? renderMarkdownLite(result.aiSuggestion) : undefined,
+          attachments,
+        };
+      }
+
+      const runFile: RunSnapshotFile = {
+        runId,
+        timestamp: this.currentRun.timestamp,
+        tests: snapshots,
+      };
+
+      const runFileName = `${runId}.json`;
+      const runFilePath = path.join(runsDir, runFileName);
+      fs.writeFileSync(runFilePath, JSON.stringify(runFile, null, 2));
+
+      if (!this.history.runFiles) this.history.runFiles = {};
+      this.history.runFiles[runId] = `./history-runs/${runFileName}`;
+
+      // Prune old run files
+      const keepRunIds = new Set(this.history.runs.map(r => r.runId));
+      for (const existingRunId of Object.keys(this.history.runFiles)) {
+        if (keepRunIds.has(existingRunId)) continue;
+        const rel = this.history.runFiles[existingRunId];
+        if (rel) {
+          try {
+            fs.unlinkSync(path.resolve(historyDir, rel));
+          } catch {
+            // ignore
+          }
+        }
+        delete this.history.runFiles[existingRunId];
+      }
     }
 
     // Save to disk

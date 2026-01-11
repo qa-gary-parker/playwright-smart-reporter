@@ -70,7 +70,8 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
  * Generate test details section (history, steps, errors, AI suggestions)
  */
 export function generateTestDetails(test: TestResultData, cardId: string, showTraceSection: boolean): string {
-  let details = '';
+  let historyDetails = '';
+  let bodyDetails = '';
 
   // History visualization - show sparkline and duration trend if we have history
   if (test.history && test.history.length > 0) {
@@ -87,32 +88,41 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
     // Determine if current run is slower/faster than average
     const currentTrendClass = test.duration > avgDuration * 1.2 ? 'slower' : test.duration < avgDuration * 0.8 ? 'faster' : '';
 
-    details += `
-      <div class="detail-section">
-        <div class="detail-label"><span class="icon">📊</span> Run History (Last ${test.history.length} runs)</div>
-        <div class="history-section">
-          <div class="history-column">
-            <div class="history-label">Pass/Fail</div>
-            <div class="sparkline">
-              ${test.history.map((h, i) => `<div class="spark-dot ${h.skipped ? 'skip' : h.passed ? 'pass' : 'fail'}" title="Run ${i + 1}: ${h.skipped ? 'Skipped' : h.passed ? 'Passed' : 'Failed'}"></div>`).join('')}
-              <div class="spark-dot ${currentSkipped ? 'skip' : currentPassed ? 'pass' : 'fail'} current" title="Current: ${currentSkipped ? 'Skipped' : currentPassed ? 'Passed' : 'Failed'}"></div>
-            </div>
-            <div class="history-stats">
-              <span class="history-stat">Pass rate: <span>${passRate}%</span></span>
-            </div>
-          </div>
-          <div class="history-column">
-            <div class="history-label">Duration Trend</div>
-            <div class="duration-chart">
-              ${test.history.map((h, i) => {
+	    historyDetails += `
+	      <div class="detail-section">
+	        <div class="detail-label"><span class="icon">📊</span> Run History (Last ${test.history.length} runs)</div>
+	        <div class="history-section">
+	          <div class="history-column">
+	            <div class="history-label">Pass/Fail</div>
+	            <div class="sparkline-block">
+	              <div class="sparkline">
+	                ${test.history.map((h, i) => {
+	                  const timestampLabel = escapeHtml(formatHistoryTimestamp(h.timestamp));
+	                  const statusLabel = h.skipped ? 'Skipped' : h.passed ? 'Passed' : 'Failed';
+	                  const runIdAttr = h.runId ? ` data-runid="${escapeHtml(h.runId)}"` : '';
+	                  return `<div class="spark-dot history-dot ${h.skipped ? 'skip' : h.passed ? 'pass' : 'fail'}"${runIdAttr} data-testid="${escapeHtml(test.testId)}" data-ts="${timestampLabel}" title="Run ${i + 1}: ${statusLabel} • ${timestampLabel}"></div>`;
+	                }).join('')}
+	                <div class="spark-dot ${currentSkipped ? 'skip' : currentPassed ? 'pass' : 'fail'} current" title="Current: ${currentSkipped ? 'Skipped' : currentPassed ? 'Passed' : 'Failed'}"></div>
+	              </div>
+	              <div class="history-stats passfail">
+	                <span class="history-stat">Pass rate: <span>${passRate}%</span></span>
+	                <button type="button" class="history-back-btn" data-action="history-back" style="display:none">Back to current</button>
+	              </div>
+	            </div>
+	          </div>
+	          <div class="history-column">
+	            <div class="history-label">Duration Trend</div>
+	            <div class="duration-chart">
+	              ${test.history.map((h, i) => {
                 const height = maxDuration > 0 ? Math.max(4, (h.duration / maxDuration) * 28) : 4;
-                return `<div class="duration-bar" style="height: ${height}px" title="Run ${i + 1}: ${formatDuration(h.duration)}"></div>`;
+                const runIdAttr = h.runId ? ` data-runid="${escapeHtml(h.runId)}"` : '';
+                return `<div class="duration-bar history-duration"${runIdAttr} style="height: ${height}px" title="Run ${i + 1}: ${formatDuration(h.duration)}"></div>`;
               }).join('')}
               <div class="duration-bar current ${currentTrendClass}" style="height: ${maxDuration > 0 ? Math.max(4, (test.duration / maxDuration) * 28) : 4}px" title="Current: ${formatDuration(test.duration)}"></div>
             </div>
             <div class="history-stats">
-              <span class="history-stat">Avg: <span>${formatDuration(avgDuration)}</span></span>
-              <span class="history-stat">Current: <span>${formatDuration(test.duration)}</span></span>
+              <span class="history-stat">Avg: <span data-role="avg-duration">${formatDuration(avgDuration)}</span></span>
+              <span class="history-stat">Current: <span data-role="current-duration">${formatDuration(test.duration)}</span></span>
             </div>
           </div>
         </div>
@@ -123,7 +133,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   // Step timings - show first as it's most useful for performance analysis
   if (test.steps.length > 0) {
     const maxDuration = Math.max(...test.steps.map((s) => s.duration));
-    details += `
+    bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">⏱</span> Step Timings</div>
         <div class="steps-container">
@@ -147,7 +157,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   }
 
   if (test.error) {
-    details += `
+    bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">⚠</span> Error</div>
         <div class="error-box">${escapeHtml(test.error)}</div>
@@ -160,7 +170,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
     : (test.tracePath ? [test.tracePath] : []);
   const showTraceViewer = showTraceSection && test.status !== 'passed' && tracePaths.length > 0;
   if (showTraceViewer) {
-    details += `
+    bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">📊</span> Trace</div>
         <div class="trace-list">
@@ -193,7 +203,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   }
 
   if (test.screenshot) {
-    details += `
+    bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">📸</span> Screenshot</div>
         <div class="screenshot-box">
@@ -208,7 +218,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   }
 
   if (test.videoPath) {
-    details += `
+    bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">📎</span> Attachments</div>
         <div class="attachments">
@@ -219,7 +229,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   }
 
   if (test.aiSuggestion) {
-    details += `
+    bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">🤖</span> AI Suggestion</div>
         <div class="ai-box ai-markdown">${renderMarkdownLite(test.aiSuggestion)}</div>
@@ -228,14 +238,20 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   }
 
   if (test.averageDuration !== undefined) {
-    details += `
+    bodyDetails += `
       <div class="duration-compare">
         Average: ${formatDuration(test.averageDuration)} → Current: ${formatDuration(test.duration)}
       </div>
     `;
   }
 
-  return `<div class="test-details">${details}</div>`;
+  return `<div class="test-details">${historyDetails}<div class="details-body" data-details-body>${bodyDetails}</div></div>`;
+}
+
+function formatHistoryTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleString();
 }
 
 /**
