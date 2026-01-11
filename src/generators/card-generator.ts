@@ -8,7 +8,7 @@ import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../u
 /**
  * Generate a single test card
  */
-export function generateTestCard(test: TestResultData): string {
+export function generateTestCard(test: TestResultData, showTraceSection: boolean): string {
   const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
@@ -61,7 +61,7 @@ export function generateTestCard(test: TestResultData): string {
           ${hasDetails ? `<span class="expand-icon">▶</span>` : ''}
         </div>
       </div>
-      ${hasDetails ? generateTestDetails(test, cardId) : ''}
+      ${hasDetails ? generateTestDetails(test, cardId, showTraceSection) : ''}
     </div>
   `;
 }
@@ -69,7 +69,7 @@ export function generateTestCard(test: TestResultData): string {
 /**
  * Generate test details section (history, steps, errors, AI suggestions)
  */
-export function generateTestDetails(test: TestResultData, cardId: string): string {
+export function generateTestDetails(test: TestResultData, cardId: string, showTraceSection: boolean): string {
   let details = '';
 
   // History visualization - show sparkline and duration trend if we have history
@@ -158,7 +158,7 @@ export function generateTestDetails(test: TestResultData, cardId: string): strin
   const tracePaths = test.attachments?.traces?.length
     ? test.attachments.traces
     : (test.tracePath ? [test.tracePath] : []);
-  const showTraceViewer = test.status !== 'passed' && tracePaths.length > 0;
+  const showTraceViewer = showTraceSection && test.status !== 'passed' && tracePaths.length > 0;
   if (showTraceViewer) {
     details += `
       <div class="detail-section">
@@ -241,7 +241,7 @@ export function generateTestDetails(test: TestResultData, cardId: string): strin
 /**
  * Generate grouped tests by file
  */
-export function generateGroupedTests(results: TestResultData[]): string {
+export function generateGroupedTests(results: TestResultData[], showTraceSection: boolean): string {
   // Group tests by file
   const groups = new Map<string, TestResultData[]>();
   for (const test of results) {
@@ -268,7 +268,7 @@ export function generateGroupedTests(results: TestResultData[]): string {
         </div>
       </div>
       <div class="file-group-content">
-        ${tests.map(test => generateTestCard(test)).join('\n')}
+        ${tests.map(test => generateTestCard(test, showTraceSection)).join('\n')}
       </div>
     </div>
   `;

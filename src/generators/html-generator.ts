@@ -59,6 +59,7 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const showComparison = (options.enableComparison !== false && !!comparison);
   const cspSafe = options.cspSafe === true;
   const enableTraceViewer = options.enableTraceViewer !== false;
+  const showTraceSection = options.enableTraceViewer !== false;
 
   // Google Fonts links (only included when not in CSP-safe mode)
   const fontLinks = cspSafe ? '' : `
@@ -174,7 +175,7 @@ ${generateStyles(passRate, cspSafe)}
 
     <!-- Test List -->
     <div class="test-list">
-      ${generateGroupedTests(results)}
+      ${generateGroupedTests(results, showTraceSection)}
     </div>
   </div>
 
