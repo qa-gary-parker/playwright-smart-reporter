@@ -100,9 +100,11 @@ export function generateTrendChart(data: ChartData): string {
       const label = i === chartData.length - 1 ? 'Current' : formatShortDate(d.timestamp);
       const isCurrent = i === chartData.length - 1;
       const displayValue = formatValue ? formatValue(value) : value.toString();
+      const runId = d.runId || '';
+      const clickable = !isCurrent && runId;
 
       return `
-        <g class="bar-group" data-tooltip="${label}: ${displayValue}">
+        <g class="bar-group${clickable ? ' clickable' : ''}" data-tooltip="${label}: ${displayValue}" ${clickable ? `data-runid="${runId}" onclick="loadHistoricalRun('${runId}', '${label}')"` : ''}>
           <rect
             x="${x}"
             y="${y}"
@@ -113,7 +115,8 @@ export function generateTrendChart(data: ChartData): string {
             stroke="${isCurrent ? 'var(--text-primary)' : 'none'}"
             stroke-width="${isCurrent ? '2' : '0'}"
             rx="3"
-            class="chart-bar"
+            class="chart-bar${clickable ? ' chart-bar-clickable' : ''}"
+            style="${clickable ? 'cursor: pointer;' : ''}"
           />
         </g>
       `;
