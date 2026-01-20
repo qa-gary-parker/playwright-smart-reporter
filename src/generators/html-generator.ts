@@ -458,8 +458,11 @@ ${generateStyles(passRate, cspSafe)}
   </style>
 </head>
 <body>
+  <!-- Skip to main content for accessibility -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
   <!-- App Shell -->
-  <div class="app-shell">
+  <div class="app-shell" role="application">
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="top-bar-left">
@@ -480,18 +483,37 @@ ${generateStyles(passRate, cspSafe)}
         </nav>
       </div>
       <div class="top-bar-right">
-        <button class="search-trigger" onclick="openSearch()" title="Search (⌘K)">
+        <button class="search-trigger" onclick="openSearch()" title="Search (⌘K)" aria-label="Search tests">
           <span class="search-icon-btn">🔍</span>
           <span class="search-label">Search...</span>
           <kbd class="search-kbd">⌘K</kbd>
         </button>
-        <button class="top-bar-btn" onclick="exportJSON()" title="Export JSON">
-          <span>📥</span>
-          <span class="btn-label">Export</span>
+        <div class="export-dropdown" id="exportDropdown">
+          <button class="top-bar-btn" onclick="toggleExportMenu()" title="Export" aria-haspopup="true" aria-expanded="false">
+            <span>📥</span>
+            <span class="btn-label">Export</span>
+          </button>
+          <div class="export-menu" role="menu">
+            <button class="export-menu-item" onclick="exportJSON()" role="menuitem">
+              <span>📄</span> JSON
+            </button>
+            <button class="export-menu-item" onclick="exportCSV()" role="menuitem">
+              <span>📊</span> CSV
+            </button>
+          </div>
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle light/dark theme">
+          <span class="theme-toggle-icon" id="themeIcon">🌙</span>
         </button>
         <div class="timestamp">${new Date().toLocaleString()}</div>
       </div>
     </header>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Toast notifications container -->
+    <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
@@ -614,7 +636,7 @@ ${generateStyles(passRate, cspSafe)}
     </aside>
 
     <!-- Main Content Area -->
-    <main class="main-content">
+    <main class="main-content" id="main-content" tabindex="-1">
       <!-- Overview View -->
       <section class="view-panel" id="view-overview">
         <div class="view-header">
@@ -642,6 +664,13 @@ ${generateStyles(passRate, cspSafe)}
               </div>
             </div>
             <div class="test-list-content">
+              <!-- Empty state for no results -->
+              <div class="empty-state" id="emptyState" style="display: none;">
+                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-title">No tests found</div>
+                <div class="empty-state-message">No tests match your current filters. Try adjusting your search or filter criteria.</div>
+                <button class="empty-state-action" onclick="clearAllFilters()">Clear filters</button>
+              </div>
               <!-- All Tests Tab -->
               <div class="test-tab-content active" id="tab-all">
                 ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
@@ -800,6 +829,80 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       --accent-orange: #ff8844;
       --sidebar-width: 260px;
       --topbar-height: 56px;
+    }
+
+    /* Light theme - respects system preference */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg-primary: #f5f5f7;
+        --bg-secondary: #ffffff;
+        --bg-card: #ffffff;
+        --bg-card-hover: #f0f0f2;
+        --bg-sidebar: #fafafa;
+        --border-subtle: #e0e0e5;
+        --border-glow: #d0d0d8;
+        --text-primary: #1a1a1f;
+        --text-secondary: #5a5a6e;
+        --text-muted: #8a8a9a;
+        --accent-green: #00aa55;
+        --accent-green-dim: #008844;
+        --accent-red: #dd3344;
+        --accent-red-dim: #bb2233;
+        --accent-yellow: #cc9900;
+        --accent-yellow-dim: #aa7700;
+        --accent-blue: #0077cc;
+        --accent-blue-dim: #005599;
+        --accent-purple: #8844cc;
+        --accent-orange: #dd6622;
+      }
+    }
+
+    /* Manual dark theme override */
+    :root[data-theme="dark"] {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a24;
+      --bg-card-hover: #22222e;
+      --bg-sidebar: #0d0d14;
+      --border-subtle: #2a2a3a;
+      --border-glow: #3b3b4f;
+      --text-primary: #f0f0f5;
+      --text-secondary: #8888a0;
+      --text-muted: #5a5a70;
+      --accent-green: #00ff88;
+      --accent-green-dim: #00cc6a;
+      --accent-red: #ff4466;
+      --accent-red-dim: #cc3355;
+      --accent-yellow: #ffcc00;
+      --accent-yellow-dim: #ccaa00;
+      --accent-blue: #00aaff;
+      --accent-blue-dim: #0088cc;
+      --accent-purple: #aa66ff;
+      --accent-orange: #ff8844;
+    }
+
+    /* Manual light theme override */
+    :root[data-theme="light"] {
+      --bg-primary: #f5f5f7;
+      --bg-secondary: #ffffff;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f0f0f2;
+      --bg-sidebar: #fafafa;
+      --border-subtle: #e0e0e5;
+      --border-glow: #d0d0d8;
+      --text-primary: #1a1a1f;
+      --text-secondary: #5a5a6e;
+      --text-muted: #8a8a9a;
+      --accent-green: #00aa55;
+      --accent-green-dim: #008844;
+      --accent-red: #dd3344;
+      --accent-red-dim: #bb2233;
+      --accent-yellow: #cc9900;
+      --accent-yellow-dim: #aa7700;
+      --accent-blue: #0077cc;
+      --accent-blue-dim: #005599;
+      --accent-purple: #8844cc;
+      --accent-orange: #dd6622;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -4481,6 +4584,374 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-radius: 4px;
       border: 1px solid var(--accent-red-dim);
     }
+
+    /* ============================================
+       TOAST NOTIFICATIONS
+    ============================================ */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      transform: translateX(120%);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      pointer-events: auto;
+      max-width: 320px;
+    }
+
+    .toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+
+    .toast-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+
+    .toast-message {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
+    .toast.success { border-color: var(--accent-green); }
+    .toast.success .toast-icon { color: var(--accent-green); }
+    .toast.error { border-color: var(--accent-red); }
+    .toast.error .toast-icon { color: var(--accent-red); }
+    .toast.info { border-color: var(--accent-blue); }
+    .toast.info .toast-icon { color: var(--accent-blue); }
+
+    /* ============================================
+       THEME TOGGLE
+    ============================================ */
+    .theme-toggle {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-glow);
+      color: var(--text-primary);
+    }
+
+    .theme-toggle-icon { font-size: 1rem; }
+
+    /* ============================================
+       ACCESSIBILITY - FOCUS INDICATORS
+    ============================================ */
+    *:focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 2px;
+    }
+
+    button:focus-visible,
+    .filter-chip:focus-visible,
+    .nav-item:focus-visible,
+    .test-card:focus-visible,
+    .gallery-item:focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(0, 170, 255, 0.2);
+    }
+
+    /* Skip to main content link for screen readers */
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      background: var(--accent-blue);
+      color: white;
+      padding: 8px 16px;
+      z-index: 10001;
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: 0 0 8px 0;
+      transition: top 0.3s ease;
+    }
+
+    .skip-link:focus {
+      top: 0;
+    }
+
+    /* ============================================
+       EMPTY STATE UI
+    ============================================ */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .empty-state-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .empty-state-message {
+      font-size: 0.9rem;
+      max-width: 300px;
+      line-height: 1.5;
+    }
+
+    .empty-state-action {
+      margin-top: 1rem;
+      padding: 8px 16px;
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: background 0.2s ease;
+    }
+
+    .empty-state-action:hover {
+      background: var(--accent-blue-dim);
+    }
+
+    /* ============================================
+       MOBILE RESPONSIVE - SIDEBAR OVERLAY
+    ============================================ */
+    @media (max-width: 768px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: var(--topbar-height);
+        bottom: 0;
+        width: 280px;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 100;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        top: var(--topbar-height);
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+      }
+
+      .sidebar-overlay.show {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .main-panel {
+        grid-column: 1;
+      }
+
+      .top-bar-left .breadcrumbs {
+        display: none;
+      }
+
+      .search-label, .btn-label, .search-kbd {
+        display: none;
+      }
+
+      .filter-chips {
+        flex-wrap: wrap;
+      }
+    }
+
+    /* ============================================
+       SMOOTH TRANSITIONS
+    ============================================ */
+    .test-card,
+    .gallery-item,
+    .nav-item,
+    .filter-chip,
+    .sidebar,
+    .main-panel {
+      transition: all 0.2s ease;
+    }
+
+    .view-panel {
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .test-card-details {
+      animation: slideDown 0.2s ease;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; max-height: 0; }
+      to { opacity: 1; max-height: 2000px; }
+    }
+
+    /* ============================================
+       PRINT STYLESHEET
+    ============================================ */
+    @media print {
+      body {
+        background: white;
+        color: black;
+        overflow: visible;
+        height: auto;
+      }
+
+      .app-shell {
+        display: block;
+      }
+
+      .sidebar,
+      .top-bar,
+      .filter-chips,
+      .search-trigger,
+      .theme-toggle,
+      .toast-container,
+      .lightbox {
+        display: none !important;
+      }
+
+      .main-panel {
+        padding: 0;
+        overflow: visible;
+        height: auto;
+      }
+
+      .test-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid #ccc;
+        margin-bottom: 1rem;
+      }
+
+      .test-card-details {
+        display: block !important;
+        max-height: none !important;
+      }
+
+      .view-panel {
+        display: block !important;
+      }
+
+      a {
+        text-decoration: underline;
+      }
+
+      .progress-ring,
+      .trend-section,
+      .gallery-section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
+
+    /* ============================================
+       CSV EXPORT BUTTON
+    ============================================ */
+    .export-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .export-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      min-width: 140px;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+    }
+
+    .export-dropdown.open .export-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .export-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    .export-menu-item:first-child {
+      border-radius: 8px 8px 0 0;
+    }
+
+    .export-menu-item:last-child {
+      border-radius: 0 0 8px 8px;
+    }
+
+    .export-menu-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
 `;
 }
 
@@ -4511,7 +4982,17 @@ function generateScripts(
     ============================================ */
 
     function toggleSidebar() {
-      document.querySelector('.app-shell').classList.toggle('sidebar-collapsed');
+      const appShell = document.querySelector('.app-shell');
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+
+      // Check if mobile (overlay mode)
+      if (window.innerWidth <= 768) {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('show');
+      } else {
+        appShell.classList.toggle('sidebar-collapsed');
+      }
     }
 
     function switchView(view) {
@@ -4897,6 +5378,9 @@ function generateScripts(
         );
         group.style.display = hasVisible ? 'block' : 'none';
       });
+
+      // Check for empty state
+      checkEmptyState();
     }
 
     // Active filters state - organized by group
@@ -5070,6 +5554,23 @@ function generateScripts(
       document.querySelectorAll('.file-tree-item').forEach(item => {
         item.classList.remove('active');
       });
+
+      // Check for empty state
+      checkEmptyState();
+    }
+
+    function checkEmptyState() {
+      const visibleItems = document.querySelectorAll('.test-list-item:not([style*="display: none"])');
+      const emptyState = document.getElementById('emptyState');
+      const tabs = document.querySelectorAll('.test-tab-content');
+
+      if (visibleItems.length === 0) {
+        emptyState.style.display = 'flex';
+        tabs.forEach(tab => tab.style.opacity = '0.3');
+      } else {
+        emptyState.style.display = 'none';
+        tabs.forEach(tab => tab.style.opacity = '1');
+      }
     }
 
     // Legacy single-filter function for backward compatibility
@@ -5201,12 +5702,14 @@ function generateScripts(
       navigator.clipboard.writeText(text).then(() => {
         btn.textContent = 'Copied!';
         btn.classList.add('copied');
+        showToast('Copied to clipboard', 'success');
         setTimeout(() => {
           btn.textContent = 'Copy';
           btn.classList.remove('copied');
         }, 2000);
       }).catch(() => {
         btn.textContent = 'Failed';
+        showToast('Failed to copy', 'error');
         setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
       });
     }
@@ -5232,7 +5735,120 @@ function generateScripts(
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast('JSON exported successfully', 'success');
+      closeExportMenu();
     }
+
+    // CSV Export
+    function exportCSV() {
+      const headers = ['Title', 'File', 'Status', 'Duration (ms)', 'Flakiness Score', 'Stability Grade', 'Retries'];
+      const rows = tests.map(t => [
+        '"' + (t.title || '').replace(/"/g, '""') + '"',
+        '"' + (t.file || '').replace(/"/g, '""') + '"',
+        t.status || '',
+        t.duration || 0,
+        t.flakinessScore || '',
+        t.stabilityScore?.grade || '',
+        t.retry || 0
+      ]);
+
+      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'test-results-' + new Date().toISOString().split('T')[0] + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('CSV exported successfully', 'success');
+      closeExportMenu();
+    }
+
+    // Export menu toggle
+    function toggleExportMenu() {
+      const dropdown = document.getElementById('exportDropdown');
+      const btn = dropdown.querySelector('.top-bar-btn');
+      dropdown.classList.toggle('open');
+      btn.setAttribute('aria-expanded', dropdown.classList.contains('open'));
+    }
+
+    function closeExportMenu() {
+      const dropdown = document.getElementById('exportDropdown');
+      const btn = dropdown.querySelector('.top-bar-btn');
+      dropdown.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // Close export menu when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('exportDropdown');
+      if (dropdown && !dropdown.contains(e.target)) {
+        closeExportMenu();
+      }
+    });
+
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+
+      const icons = { success: '✓', error: '✗', info: 'ℹ' };
+      toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span><span class="toast-message">' + message + '</span>';
+
+      container.appendChild(toast);
+
+      // Trigger animation
+      requestAnimationFrame(() => {
+        toast.classList.add('show');
+      });
+
+      // Remove after delay
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // Theme toggle
+    function toggleTheme() {
+      const root = document.documentElement;
+      const currentTheme = root.getAttribute('data-theme');
+      const icon = document.getElementById('themeIcon');
+
+      if (currentTheme === 'dark') {
+        root.setAttribute('data-theme', 'light');
+        icon.textContent = '☀️';
+        localStorage.setItem('theme', 'light');
+        showToast('Light theme enabled', 'info');
+      } else if (currentTheme === 'light') {
+        root.removeAttribute('data-theme');
+        icon.textContent = '🌙';
+        localStorage.setItem('theme', 'auto');
+        showToast('Using system theme', 'info');
+      } else {
+        root.setAttribute('data-theme', 'dark');
+        icon.textContent = '🌙';
+        localStorage.setItem('theme', 'dark');
+        showToast('Dark theme enabled', 'info');
+      }
+    }
+
+    // Initialize theme from localStorage
+    (function initTheme() {
+      const saved = localStorage.getItem('theme');
+      const icon = document.getElementById('themeIcon');
+      if (saved === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        if (icon) icon.textContent = '☀️';
+      } else if (saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        if (icon) icon.textContent = '🌙';
+      }
+      // 'auto' or no setting: use system preference (handled by CSS)
+    })();
 
     // Auto-scroll secondary charts to show most recent run
     function scrollChartsToRight() {
