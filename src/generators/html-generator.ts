@@ -6032,12 +6032,9 @@ function generateScripts(
 
 	    function formatDurationMs(ms) {
 	      const n = Number(ms) || 0;
-	      if (n < 1000) {
-	        const rounded = Math.round(n * 100) / 100;
-	        return Number.isInteger(rounded) ? rounded + 'ms' : rounded.toFixed(2) + 'ms';
-	      }
-	      if (n < 60000) return (n / 1000).toFixed(2) + 's';
-	      return (n / 60000).toFixed(2) + 'm';
+	      if (n < 1000) return Math.round(n) + 'ms';
+	      if (n < 60000) return (n / 1000).toFixed(1) + 's';
+	      return (n / 60000).toFixed(1) + 'm';
 	    }
 
 	    function getRunSnapshot(runId) {

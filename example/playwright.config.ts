@@ -18,6 +18,7 @@ export default defineConfig({
       maxHistoryRuns: 10,
       performanceThreshold: 0.2,
       enableHistoryDrilldown: true,
+      enableTraceViewer: true,
     }],
   ],
 });

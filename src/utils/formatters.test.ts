@@ -15,22 +15,22 @@ describe('formatDuration', () => {
   });
 
   it('formats duration in seconds', () => {
-    expect(formatDuration(1000)).toBe('1.00s');
-    expect(formatDuration(1500)).toBe('1.50s');
-    expect(formatDuration(59999)).toBe('60.00s');
+    expect(formatDuration(1000)).toBe('1.0s');
+    expect(formatDuration(1500)).toBe('1.5s');
+    expect(formatDuration(59999)).toBe('60.0s');
   });
 
   it('formats duration in minutes', () => {
-    expect(formatDuration(60000)).toBe('1.00m');
-    expect(formatDuration(90000)).toBe('1.50m');
-    expect(formatDuration(120000)).toBe('2.00m');
+    expect(formatDuration(60000)).toBe('1.0m');
+    expect(formatDuration(90000)).toBe('1.5m');
+    expect(formatDuration(120000)).toBe('2.0m');
   });
 
-  it('formats fractional milliseconds to 2 decimal places', () => {
-    expect(formatDuration(123.456789)).toBe('123.46ms');
-    expect(formatDuration(99.999)).toBe('100ms'); // rounds to whole number
-    expect(formatDuration(0.1)).toBe('0.10ms');
-    expect(formatDuration(50.5)).toBe('50.50ms');
+  it('rounds milliseconds to whole numbers', () => {
+    expect(formatDuration(123.456)).toBe('123ms');
+    expect(formatDuration(99.9)).toBe('100ms');
+    expect(formatDuration(0.4)).toBe('0ms');
+    expect(formatDuration(50.5)).toBe('51ms');
   });
 });
 

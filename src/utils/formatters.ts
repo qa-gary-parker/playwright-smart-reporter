@@ -8,13 +8,9 @@
  * @returns Formatted string (e.g., "1.5s", "2.3m", "450ms")
  */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    // Round to 2 decimal places, but show as integer if it's a whole number
-    const rounded = Math.round(ms * 100) / 100;
-    return Number.isInteger(rounded) ? `${rounded}ms` : `${rounded.toFixed(2)}ms`;
-  }
-  if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
-  return `${(ms / 60000).toFixed(2)}m`;
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
 }
 
 /**
