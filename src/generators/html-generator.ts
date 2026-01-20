@@ -1,12 +1,14 @@
 /**
  * HTML Generator - Main orchestrator for HTML report generation
  * Coordinates all other generators and generates the complete HTML document
+ * 
+ * REDESIGNED: Modern app-shell layout with sidebar, top bar, and master-detail view
  */
 
-import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions } from '../types';
-import { formatDuration } from '../utils';
+import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster } from '../types';
+import { formatDuration, escapeHtml, sanitizeId } from '../utils';
 import { generateTrendChart } from './chart-generator';
-import { generateGroupedTests } from './card-generator';
+import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
 import { generateGallery, generateGalleryScript } from './gallery-generator';
 import { generateComparison, generateComparisonScript } from './comparison-generator';
 
@@ -17,13 +19,352 @@ export interface HtmlGeneratorData {
   options: SmartReporterOptions;
   comparison?: RunComparison;
   historyRunSnapshots?: Record<string, RunSnapshotFile>;
+  failureClusters?: FailureCluster[];
 }
 
 /**
- * Generate complete HTML report
+ * Generate file tree structure for sidebar
+ */
+function generateFileTree(results: TestResultData[]): string {
+  const fileGroups = new Map<string, { passed: number; failed: number; total: number }>();
+  
+  for (const test of results) {
+    const file = test.file;
+    if (!fileGroups.has(file)) {
+      fileGroups.set(file, { passed: 0, failed: 0, total: 0 });
+    }
+    const group = fileGroups.get(file)!;
+    group.total++;
+    if (test.status === 'passed') group.passed++;
+    else if (test.status === 'failed' || test.status === 'timedOut') group.failed++;
+  }
+
+  return Array.from(fileGroups.entries()).map(([file, stats]) => {
+    const statusClass = stats.failed > 0 ? 'has-failures' : 'all-passed';
+    const fileName = file.split(/[\\/]/).pop() || file;
+    return `
+      <div class="file-tree-item ${statusClass}" data-file="${escapeHtml(file)}" onclick="filterByFile('${escapeHtml(file)}')">
+        <span class="file-tree-icon">📄</span>
+        <span class="file-tree-name" title="${escapeHtml(file)}">${escapeHtml(fileName)}</span>
+        <span class="file-tree-stats">
+          ${stats.passed > 0 ? `<span class="file-stat passed">${stats.passed}</span>` : ''}
+          ${stats.failed > 0 ? `<span class="file-stat failed">${stats.failed}</span>` : ''}
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Generate test list items for the main panel
+ */
+function generateTestListItems(results: TestResultData[], showTraceSection: boolean, attention: AttentionSets = { newFailures: new Set(), regressions: new Set(), fixed: new Set() }): string {
+  return results.map(test => {
+    const cardId = sanitizeId(test.testId);
+    const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
+    const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
+    const isSlow = test.performanceTrend?.startsWith('↑') || false;
+    const isNew = test.flakinessIndicator?.includes('New') || false;
+    
+    // Attention states from comparison
+    const isNewFailure = attention.newFailures.has(test.testId);
+    const isRegression = attention.regressions.has(test.testId);
+    const isFixed = attention.fixed.has(test.testId);
+    
+    // Determine stability badge
+    let stabilityBadge = '';
+    if (test.stabilityScore) {
+      const grade = test.stabilityScore.grade;
+      const score = test.stabilityScore.overall;
+      const gradeClass = score >= 90 ? 'grade-a' : score >= 80 ? 'grade-b' : score >= 70 ? 'grade-c' : score >= 60 ? 'grade-d' : 'grade-f';
+      stabilityBadge = `<span class="stability-badge ${gradeClass}">${grade}</span>`;
+    }
+
+    return `
+      <div class="test-list-item ${statusClass}" 
+           id="list-item-${cardId}"
+           data-testid="${escapeHtml(test.testId)}"
+           data-status="${test.status}"
+           data-flaky="${isFlaky}"
+           data-slow="${isSlow}"
+           data-new="${isNew}"
+           data-new-failure="${isNewFailure}"
+           data-regression="${isRegression}"
+           data-fixed="${isFixed}"
+           data-file="${escapeHtml(test.file)}"
+           data-grade="${test.stabilityScore?.grade || ''}"
+           onclick="selectTest('${cardId}')">
+        <div class="test-item-status">
+          <div class="status-dot ${statusClass}"></div>
+        </div>
+        <div class="test-item-info">
+          <div class="test-item-title">${escapeHtml(test.title)}</div>
+          <div class="test-item-file">${escapeHtml(test.file)}</div>
+        </div>
+        <div class="test-item-meta">
+          ${isNewFailure ? '<span class="test-item-badge new-failure">New Failure</span>' : ''}
+          ${isRegression ? '<span class="test-item-badge regression">Regression</span>' : ''}
+          ${isFixed ? '<span class="test-item-badge fixed">Fixed</span>' : ''}
+          ${stabilityBadge}
+          <span class="test-item-duration">${formatDuration(test.duration)}</span>
+          ${isFlaky ? '<span class="test-item-badge flaky">Flaky</span>' : ''}
+          ${isSlow ? '<span class="test-item-badge slow">Slow</span>' : ''}
+          ${isNew ? '<span class="test-item-badge new">New</span>' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Generate the Overview content with executive summary
+ */
+function generateOverviewContent(
+  results: TestResultData[],
+  comparison: RunComparison | undefined,
+  failureClusters: FailureCluster[] | undefined,
+  passed: number,
+  failed: number,
+  skipped: number,
+  flaky: number,
+  slow: number,
+  newTests: number,
+  total: number,
+  passRate: number,
+  totalDuration: number,
+  history: TestHistory
+): string {
+  // Calculate deltas from comparison
+  const prevPassed = comparison?.baselineRun.passed ?? passed;
+  const prevFailed = comparison?.baselineRun.failed ?? failed;
+  const prevPassRate = comparison?.baselineRun.total ? Math.round((comparison.baselineRun.passed / comparison.baselineRun.total) * 100) : passRate;
+  const prevDuration = comparison?.baselineRun.duration ?? totalDuration;
+  
+  const passRateDelta = passRate - prevPassRate;
+  const durationDelta = totalDuration - prevDuration;
+  const durationDeltaPercent = prevDuration > 0 ? Math.round((durationDelta / prevDuration) * 100) : 0;
+
+  // New failures and fixed tests from comparison
+  const newFailures = comparison?.changes.newFailures ?? [];
+  const fixedTests = comparison?.changes.fixedTests ?? [];
+  const regressions = comparison?.changes.regressions ?? [];
+
+  // Calculate suite health score (0-100)
+  const passRateScore = passRate;
+  const flakinessScore = total > 0 ? Math.max(0, 100 - (flaky / total) * 200) : 100;
+  const performanceScore = total > 0 ? Math.max(0, 100 - (slow / total) * 200) : 100;
+  const suiteHealthScore = Math.round((passRateScore * 0.5) + (flakinessScore * 0.3) + (performanceScore * 0.2));
+  const healthGrade = suiteHealthScore >= 90 ? 'A' : suiteHealthScore >= 80 ? 'B' : suiteHealthScore >= 70 ? 'C' : suiteHealthScore >= 60 ? 'D' : 'F';
+  const healthClass = suiteHealthScore >= 90 ? 'excellent' : suiteHealthScore >= 70 ? 'good' : suiteHealthScore >= 50 ? 'fair' : 'poor';
+
+  // Find slowest test and most flaky test
+  const slowestTest = [...results].sort((a, b) => b.duration - a.duration)[0];
+  const mostFlakyTest = [...results].filter(r => r.flakinessScore !== undefined).sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0))[0];
+
+  // Pass rate sparkline from history
+  const passRateHistory = (history.summaries ?? []).slice(-10).map(s => {
+    const rate = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
+    return { rate, passed: s.passed, failed: s.failed };
+  });
+
+  // Generate failure clusters section
+  const clustersHtml = (failureClusters && failureClusters.length > 0) ? `
+    <div class="overview-section">
+      <div class="section-header">
+        <span class="section-icon">🔍</span>
+        <span class="section-title">Failure Clusters</span>
+      </div>
+      <div class="failure-clusters-grid">
+        ${failureClusters.slice(0, 5).map(cluster => `
+          <div class="cluster-card" onclick="filterTests('failed'); switchView('tests');">
+            <div class="cluster-icon">⚠</div>
+            <div class="cluster-content">
+              <div class="cluster-type">${escapeHtml(cluster.errorType)}</div>
+              <div class="cluster-count">${cluster.count} test${cluster.count > 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // Generate attention required section
+  const hasAttentionItems = newFailures.length > 0 || fixedTests.length > 0 || regressions.length > 0 || flaky > 0;
+  const attentionHtml = hasAttentionItems ? `
+    <div class="overview-section attention-section">
+      <div class="section-header">
+        <span class="section-icon">⚡</span>
+        <span class="section-title">Attention Required</span>
+      </div>
+      <div class="attention-grid">
+        ${newFailures.length > 0 ? `
+          <div class="attention-card critical" onclick="filterTests('new-failure'); switchView('tests');">
+            <div class="attention-value">${newFailures.length}</div>
+            <div class="attention-label">New Failures</div>
+            <div class="attention-desc">Tests that were passing, now failing</div>
+          </div>
+        ` : ''}
+        ${regressions.length > 0 ? `
+          <div class="attention-card warning" onclick="filterTests('regression'); switchView('tests');">
+            <div class="attention-value">${regressions.length}</div>
+            <div class="attention-label">Performance Regressions</div>
+            <div class="attention-desc">Tests that got slower</div>
+          </div>
+        ` : ''}
+        ${flaky > 0 ? `
+          <div class="attention-card warning" onclick="filterTests('flaky'); switchView('tests');">
+            <div class="attention-value">${flaky}</div>
+            <div class="attention-label">Flaky Tests</div>
+            <div class="attention-desc">Tests with unstable results</div>
+          </div>
+        ` : ''}
+        ${fixedTests.length > 0 ? `
+          <div class="attention-card success" onclick="filterTests('fixed'); switchView('tests');">
+            <div class="attention-value">${fixedTests.length}</div>
+            <div class="attention-label">Fixed Tests</div>
+            <div class="attention-desc">Tests that were failing, now passing</div>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <!-- Hero Stats Row -->
+    <div class="hero-stats">
+      <div class="hero-stat-card health ${healthClass}">
+        <div class="health-gauge">
+          <svg class="health-ring" viewBox="0 0 100 100">
+            <circle class="health-ring-bg" cx="50" cy="50" r="42" />
+            <circle class="health-ring-fill" cx="50" cy="50" r="42" 
+                    stroke-dasharray="${suiteHealthScore * 2.64} 264"
+                    stroke-dashoffset="0" />
+          </svg>
+          <div class="health-score">
+            <span class="health-grade">${healthGrade}</span>
+            <span class="health-value">${suiteHealthScore}</span>
+          </div>
+        </div>
+        <div class="hero-stat-info">
+          <div class="hero-stat-label">Suite Health</div>
+          <div class="health-breakdown">
+            <span>Pass: ${passRate}%</span>
+            <span>Stability: ${Math.round(flakinessScore)}%</span>
+            <span>Perf: ${Math.round(performanceScore)}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-stat-card">
+        <div class="hero-stat-main">
+          <div class="hero-stat-value">${passRate}%</div>
+          ${passRateDelta !== 0 ? `<div class="hero-stat-delta ${passRateDelta > 0 ? 'positive' : 'negative'}">${passRateDelta > 0 ? '↑' : '↓'}${Math.abs(passRateDelta)}%</div>` : ''}
+        </div>
+        <div class="hero-stat-label">Pass Rate</div>
+        <div class="hero-stat-detail">${passed}/${total} tests</div>
+      </div>
+
+      <div class="hero-stat-card">
+        <div class="hero-stat-main">
+          <div class="hero-stat-value">${formatDuration(totalDuration)}</div>
+          ${durationDeltaPercent !== 0 ? `<div class="hero-stat-delta ${durationDeltaPercent < 0 ? 'positive' : 'negative'}">${durationDeltaPercent < 0 ? '↓' : '↑'}${Math.abs(durationDeltaPercent)}%</div>` : ''}
+        </div>
+        <div class="hero-stat-label">Duration</div>
+        <div class="hero-stat-detail">Total run time</div>
+      </div>
+
+      <div class="hero-stat-card mini-comparison">
+        <div class="mini-bars">
+          <div class="mini-bar-row">
+            <span class="mini-bar-label">Passed</span>
+            <div class="mini-bar-track">
+              <div class="mini-bar passed" style="width: ${(passed / Math.max(total, 1)) * 100}%"></div>
+            </div>
+            <span class="mini-bar-value">${passed}</span>
+          </div>
+          <div class="mini-bar-row">
+            <span class="mini-bar-label">Failed</span>
+            <div class="mini-bar-track">
+              <div class="mini-bar failed" style="width: ${(failed / Math.max(total, 1)) * 100}%"></div>
+            </div>
+            <span class="mini-bar-value">${failed}</span>
+          </div>
+          <div class="mini-bar-row">
+            <span class="mini-bar-label">Skipped</span>
+            <div class="mini-bar-track">
+              <div class="mini-bar skipped" style="width: ${(skipped / Math.max(total, 1)) * 100}%"></div>
+            </div>
+            <span class="mini-bar-value">${skipped}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${attentionHtml}
+
+    ${clustersHtml}
+
+    <!-- Quick Insights -->
+    <div class="overview-section">
+      <div class="section-header">
+        <span class="section-icon">💡</span>
+        <span class="section-title">Quick Insights</span>
+      </div>
+      <div class="insights-grid">
+        ${slowestTest ? `
+          <div class="insight-card" onclick="selectTest('${sanitizeId(slowestTest.testId)}'); switchView('tests');">
+            <div class="insight-icon">🐢</div>
+            <div class="insight-content">
+              <div class="insight-label">Slowest Test</div>
+              <div class="insight-title">${escapeHtml(slowestTest.title)}</div>
+              <div class="insight-value">${formatDuration(slowestTest.duration)}</div>
+            </div>
+          </div>
+        ` : ''}
+        ${mostFlakyTest && mostFlakyTest.flakinessScore && mostFlakyTest.flakinessScore > 0 ? `
+          <div class="insight-card" onclick="selectTest('${sanitizeId(mostFlakyTest.testId)}'); switchView('tests');">
+            <div class="insight-icon">⚡</div>
+            <div class="insight-content">
+              <div class="insight-label">Most Flaky Test</div>
+              <div class="insight-title">${escapeHtml(mostFlakyTest.title)}</div>
+              <div class="insight-value">${Math.round(mostFlakyTest.flakinessScore * 100)}% failure rate</div>
+            </div>
+          </div>
+        ` : ''}
+        <div class="insight-card">
+          <div class="insight-icon">📊</div>
+          <div class="insight-content">
+            <div class="insight-label">Test Distribution</div>
+            <div class="insight-mini-stats">
+              <span class="mini-stat"><span class="dot passed"></span>${passed} passed</span>
+              <span class="mini-stat"><span class="dot failed"></span>${failed} failed</span>
+              <span class="mini-stat"><span class="dot skipped"></span>${skipped} skipped</span>
+            </div>
+          </div>
+        </div>
+        <div class="insight-card">
+          <div class="insight-icon">📈</div>
+          <div class="insight-content">
+            <div class="insight-label">Pass Rate Trend</div>
+            <div class="mini-sparkline">
+              ${passRateHistory.length > 0 ? passRateHistory.map((h, i) => `
+                <div class="spark-col" title="Run ${i + 1}: ${h.rate}%">
+                  <div class="spark-bar" style="height: ${h.rate}%"></div>
+                </div>
+              `).join('') : '<span class="no-data">No history available</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Generate complete HTML report with new app-shell layout
  */
 export function generateHtml(data: HtmlGeneratorData): string {
-  const { results, history, startTime, options, comparison, historyRunSnapshots } = data;
+  const { results, history, startTime, options, comparison, historyRunSnapshots, failureClusters } = data;
 
   const totalDuration = Date.now() - startTime;
   const passed = results.filter((r) => r.status === 'passed').length;
@@ -48,8 +389,36 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const gradeD = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'D').length;
   const gradeF = results.filter((r) => r.stabilityScore && r.stabilityScore.grade === 'F').length;
 
+  // Build attention sets from comparison data
+  const attentionSets: AttentionSets = {
+    newFailures: new Set(comparison?.changes.newFailures.map(t => t.testId) ?? []),
+    regressions: new Set(comparison?.changes.regressions.map(t => t.testId) ?? []),
+    fixed: new Set(comparison?.changes.fixedTests.map(t => t.testId) ?? [])
+  };
+  const newFailuresCount = attentionSets.newFailures.size;
+  const regressionsCount = attentionSets.regressions.size;
+  const fixedCount = attentionSets.fixed.size;
+  const hasAttention = newFailuresCount > 0 || regressionsCount > 0 || fixedCount > 0;
+
+  // Sort results: attention items first (new failures, regressions, fixed), then rest
+  const sortedResults = [...results].sort((a, b) => {
+    const aIsAttention = attentionSets.newFailures.has(a.testId) || attentionSets.regressions.has(a.testId) || attentionSets.fixed.has(a.testId);
+    const bIsAttention = attentionSets.newFailures.has(b.testId) || attentionSets.regressions.has(b.testId) || attentionSets.fixed.has(b.testId);
+    
+    if (aIsAttention && !bIsAttention) return -1;
+    if (!aIsAttention && bIsAttention) return 1;
+    
+    // Within attention items, prioritize: new failures > regressions > fixed
+    if (aIsAttention && bIsAttention) {
+      const aPriority = attentionSets.newFailures.has(a.testId) ? 0 : attentionSets.regressions.has(a.testId) ? 1 : 2;
+      const bPriority = attentionSets.newFailures.has(b.testId) ? 0 : attentionSets.regressions.has(b.testId) ? 1 : 2;
+      return aPriority - bPriority;
+    }
+    
+    return 0;
+  });
+
   // Escape JSON for safe embedding in HTML <script> tags
-  // This prevents </script> or <!-- in error messages from breaking the page
   const testsJson = JSON.stringify(results)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
@@ -60,7 +429,7 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const showComparison = (options.enableComparison !== false && !!comparison);
   const cspSafe = options.cspSafe === true;
   const enableTraceViewer = options.enableTraceViewer !== false;
-  const showTraceSection = options.enableTraceViewer !== false;
+  const showTraceSection = enableTraceViewer;
   const enableHistoryDrilldown = options.enableHistoryDrilldown === true;
   const historyRunSnapshotsJson = enableHistoryDrilldown
     ? JSON.stringify(historyRunSnapshots || {})
@@ -75,6 +444,9 @@ export function generateHtml(data: HtmlGeneratorData): string {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">`;
 
+  // Stats data for JavaScript
+  const statsData = JSON.stringify({ passed, failed, skipped, flaky, slow, newTests, total, passRate, gradeA, gradeB, gradeC, gradeD, gradeF, totalDuration });
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -86,116 +458,315 @@ ${generateStyles(passRate, cspSafe)}
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
-    <header class="header">
-      <div class="logo">
-        <div class="logo-icon">S</div>
-        <div class="logo-text">
-          <h1>Smart Report</h1>
-          <span>playwright test insights</span>
+  <!-- App Shell -->
+  <div class="app-shell">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar (⌘B)">
+          <span class="hamburger-icon">☰</span>
+        </button>
+        <div class="logo">
+          <div class="logo-icon">S</div>
+          <div class="logo-text">
+            <span class="logo-title">Smart Report</span>
+            <span class="logo-subtitle">playwright test insights</span>
+          </div>
         </div>
+        <nav class="breadcrumbs">
+          <span class="breadcrumb active" data-view="tests">Tests</span>
+          <span class="breadcrumb-separator">›</span>
+          <span class="breadcrumb" id="breadcrumb-detail"></span>
+        </nav>
       </div>
-      <div style="display: flex; gap: 1rem; align-items: center;">
-        <button class="export-btn" onclick="exportJSON()">📥 Export JSON</button>
+      <div class="top-bar-right">
+        <button class="search-trigger" onclick="openSearch()" title="Search (⌘K)">
+          <span class="search-icon-btn">🔍</span>
+          <span class="search-label">Search...</span>
+          <kbd class="search-kbd">⌘K</kbd>
+        </button>
+        <button class="top-bar-btn" onclick="exportJSON()" title="Export JSON">
+          <span>📥</span>
+          <span class="btn-label">Export</span>
+        </button>
         <div class="timestamp">${new Date().toLocaleString()}</div>
       </div>
     </header>
 
-    <!-- Progress Ring + Stats -->
-    <div style="display: flex; gap: 2rem; align-items: flex-start; margin-bottom: 2rem;">
-      <div style="text-align: center;">
-        <div class="progress-ring">
-          <svg width="120" height="120">
-            <circle class="bg" cx="60" cy="60" r="50"/>
-            <circle class="progress" cx="60" cy="60" r="50"/>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Progress Ring -->
+      <div class="sidebar-progress">
+        <div class="progress-ring-container">
+          <svg class="progress-ring" width="80" height="80">
+            <circle class="progress-ring-bg" cx="40" cy="40" r="34"/>
+            <circle class="progress-ring-fill" cx="40" cy="40" r="34" 
+                    stroke-dasharray="213.6" 
+                    stroke-dashoffset="${213.6 - (213.6 * passRate) / 100}"/>
           </svg>
-          <div class="value">${passRate}%</div>
+          <div class="progress-ring-value">${passRate}%</div>
         </div>
-        <div style="color: var(--text-secondary); font-size: 0.875rem;">Pass Rate</div>
+        <div class="progress-label">Pass Rate</div>
       </div>
 
-      <div class="stats-grid" style="flex: 1;">
-        <div class="stat-card passed">
-          <div class="stat-value">${passed}</div>
-          <div class="stat-label">Passed</div>
+      <!-- Quick Stats -->
+      <div class="sidebar-stats">
+        <div class="mini-stat passed" onclick="filterTests('passed')" title="Passed tests">
+          <span class="mini-stat-value">${passed}</span>
+          <span class="mini-stat-label">Passed</span>
         </div>
-        <div class="stat-card failed">
-          <div class="stat-value">${failed}</div>
-          <div class="stat-label">Failed</div>
+        <div class="mini-stat failed" onclick="filterTests('failed')" title="Failed tests">
+          <span class="mini-stat-value">${failed}</span>
+          <span class="mini-stat-label">Failed</span>
         </div>
-        <div class="stat-card skipped">
-          <div class="stat-value">${skipped}</div>
-          <div class="stat-label">Skipped</div>
-        </div>
-        <div class="stat-card flaky">
-          <div class="stat-value">${flaky}</div>
-          <div class="stat-label">Flaky</div>
-        </div>
-        <div class="stat-card slow">
-          <div class="stat-value">${slow}</div>
-          <div class="stat-label">Slow</div>
-        </div>
-        <div class="stat-card duration">
-          <div class="stat-value">${formatDuration(totalDuration)}</div>
-          <div class="stat-label">Duration</div>
+        <div class="mini-stat flaky" onclick="filterTests('flaky')" title="Flaky tests">
+          <span class="mini-stat-value">${flaky}</span>
+          <span class="mini-stat-label">Flaky</span>
         </div>
       </div>
-    </div>
 
-    <!-- Trend Chart -->
-    ${generateTrendChart({ results, history, startTime })}
+      <!-- Navigation -->
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Navigation</div>
+        <a class="nav-item active" data-view="overview" onclick="switchView('overview')">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Overview</span>
+        </a>
+        <a class="nav-item" data-view="tests" onclick="switchView('tests')">
+          <span class="nav-icon">🧪</span>
+          <span class="nav-label">Tests</span>
+          <span class="nav-badge">${total}</span>
+        </a>
+        <a class="nav-item" data-view="trends" onclick="switchView('trends')">
+          <span class="nav-icon">📈</span>
+          <span class="nav-label">Trends</span>
+        </a>
+        ${showComparison ? `
+        <a class="nav-item" data-view="comparison" onclick="switchView('comparison')">
+          <span class="nav-icon">⚖️</span>
+          <span class="nav-label">Comparison</span>
+        </a>
+        ` : ''}
+        ${showGallery ? `
+        <a class="nav-item" data-view="gallery" onclick="switchView('gallery')">
+          <span class="nav-icon">🖼️</span>
+          <span class="nav-label">Gallery</span>
+        </a>
+        ` : ''}
+      </nav>
 
-    <!-- Comparison (if enabled and available) -->
-    ${showComparison ? generateComparison(comparison!) : ''}
-
-    <!-- Gallery (if enabled) -->
-    ${showGallery ? generateGallery(results) : ''}
-
-    <!-- Search -->
-    <div class="search-container">
-      <div class="search-wrapper">
-        <span class="search-icon">🔍</span>
-        <input type="text" class="search-input" placeholder="Search tests by name..." oninput="searchTests(this.value)">
+      <!-- Filters -->
+      <div class="sidebar-filters">
+        <div class="nav-section-title">Filters <button class="clear-filters-btn" onclick="clearAllFilters()" title="Clear all filters">✕</button></div>
+        ${hasAttention ? `
+        <div class="filter-group" data-group="attention">
+          <div class="filter-group-title">Attention</div>
+          <div class="filter-chips attention-chips">
+            ${newFailuresCount > 0 ? `<button class="filter-chip attention-new-failure" data-filter="new-failure" data-group="attention" onclick="toggleFilter(this)">New Failure (${newFailuresCount})</button>` : ''}
+            ${regressionsCount > 0 ? `<button class="filter-chip attention-regression" data-filter="regression" data-group="attention" onclick="toggleFilter(this)">Regression (${regressionsCount})</button>` : ''}
+            ${fixedCount > 0 ? `<button class="filter-chip attention-fixed" data-filter="fixed" data-group="attention" onclick="toggleFilter(this)">Fixed (${fixedCount})</button>` : ''}
+          </div>
+        </div>
+        ` : ''}
+        <div class="filter-group" data-group="status">
+          <div class="filter-group-title">Status</div>
+          <div class="filter-chips">
+            <button class="filter-chip" data-filter="passed" data-group="status" onclick="toggleFilter(this)">Passed</button>
+            <button class="filter-chip" data-filter="failed" data-group="status" onclick="toggleFilter(this)">Failed</button>
+            <button class="filter-chip" data-filter="skipped" data-group="status" onclick="toggleFilter(this)">Skipped</button>
+          </div>
+        </div>
+        <div class="filter-group" data-group="health">
+          <div class="filter-group-title">Health</div>
+          <div class="filter-chips">
+            <button class="filter-chip" data-filter="flaky" data-group="health" onclick="toggleFilter(this)">Flaky (${flaky})</button>
+            <button class="filter-chip" data-filter="slow" data-group="health" onclick="toggleFilter(this)">Slow (${slow})</button>
+            <button class="filter-chip" data-filter="new" data-group="health" onclick="toggleFilter(this)">New (${newTests})</button>
+          </div>
+        </div>
+        <div class="filter-group" data-group="grade">
+          <div class="filter-group-title">Grade</div>
+          <div class="filter-chips grade-chips">
+            <button class="filter-chip grade-a" data-filter="grade-a" data-group="grade" onclick="toggleFilter(this)">A</button>
+            <button class="filter-chip grade-b" data-filter="grade-b" data-group="grade" onclick="toggleFilter(this)">B</button>
+            <button class="filter-chip grade-c" data-filter="grade-c" data-group="grade" onclick="toggleFilter(this)">C</button>
+            <button class="filter-chip grade-d" data-filter="grade-d" data-group="grade" onclick="toggleFilter(this)">D</button>
+            <button class="filter-chip grade-f" data-filter="grade-f" data-group="grade" onclick="toggleFilter(this)">F</button>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- Filters -->
-    <div class="filters">
-      <button class="filter-btn active" data-filter="all" onclick="filterTests('all')">All (${total})</button>
-      <button class="filter-btn" data-filter="passed" onclick="filterTests('passed')">Passed (${passed})</button>
-      <button class="filter-btn" data-filter="failed" onclick="filterTests('failed')">Failed (${failed})</button>
-      <button class="filter-btn" data-filter="skipped" onclick="filterTests('skipped')">Skipped (${skipped})</button>
-      <button class="filter-btn" data-filter="flaky" onclick="filterTests('flaky')">Flaky (${flaky})</button>
-      <button class="filter-btn" data-filter="slow" onclick="filterTests('slow')">Slow (${slow})</button>
-      <button class="filter-btn" data-filter="new" onclick="filterTests('new')">New (${newTests})</button>
-    </div>
+      <!-- File Tree -->
+      <div class="sidebar-files">
+        <div class="nav-section-title">Specs</div>
+        <div class="file-tree">
+          ${generateFileTree(results)}
+        </div>
+      </div>
 
-    <!-- Stability Score Filters -->
-    <div class="filters stability-filters">
-      <span class="filter-label">📊 Stability Score:</span>
-      <button class="filter-btn stability-grade" data-filter="grade-a" onclick="filterTests('grade-a')">A (${gradeA})</button>
-      <button class="filter-btn stability-grade" data-filter="grade-b" onclick="filterTests('grade-b')">B (${gradeB})</button>
-      <button class="filter-btn stability-grade" data-filter="grade-c" onclick="filterTests('grade-c')">C (${gradeC})</button>
-      <button class="filter-btn stability-grade" data-filter="grade-d" onclick="filterTests('grade-d')">D (${gradeD})</button>
-      <button class="filter-btn stability-grade" data-filter="grade-f" onclick="filterTests('grade-f')">F (${gradeF})</button>
-    </div>
+      <!-- Duration -->
+      <div class="sidebar-footer">
+        <div class="run-duration">
+          <span class="duration-icon">⏱️</span>
+          <span class="duration-value">${formatDuration(totalDuration)}</span>
+        </div>
+      </div>
+    </aside>
 
-    <!-- Test List -->
-    <div class="test-list">
-      ${generateGroupedTests(results, showTraceSection)}
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Overview View -->
+      <section class="view-panel" id="view-overview">
+        <div class="view-header">
+          <h2 class="view-title">Overview</h2>
+        </div>
+        <div class="overview-content">
+          ${generateOverviewContent(results, comparison, failureClusters, passed, failed, skipped, flaky, slow, newTests, total, passRate, totalDuration, history)}
+        </div>
+      </section>
+
+      <!-- Tests View (Master-Detail) -->
+      <section class="view-panel" id="view-tests" style="display: none;">
+        <div class="master-detail-layout">
+          <!-- Test List (Master) -->
+          <div class="test-list-panel">
+            <div class="test-list-header">
+              <div class="test-list-tabs">
+                <button class="tab-btn active" data-tab="all" onclick="switchTestTab('all')">All Tests</button>
+                <button class="tab-btn" data-tab="by-file" onclick="switchTestTab('by-file')">By Spec</button>
+                <button class="tab-btn" data-tab="by-status" onclick="switchTestTab('by-status')">By Status</button>
+                <button class="tab-btn" data-tab="by-stability" onclick="switchTestTab('by-stability')">By Stability</button>
+              </div>
+              <div class="test-list-search">
+                <input type="text" class="inline-search" placeholder="Filter tests..." oninput="searchTests(this.value)">
+              </div>
+            </div>
+            <div class="test-list-content">
+              <!-- All Tests Tab -->
+              <div class="test-tab-content active" id="tab-all">
+                ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
+              </div>
+              <!-- By Spec Tab -->
+              <div class="test-tab-content" id="tab-by-file">
+                ${generateGroupedTests(sortedResults, showTraceSection, attentionSets)}
+              </div>
+              <!-- By Status Tab -->
+              <div class="test-tab-content" id="tab-by-status">
+                <div class="status-group failed-group">
+                  <div class="status-group-header">
+                    <span class="status-group-dot failed"></span>
+                    <span class="status-group-title">Failed (${failed})</span>
+                  </div>
+                  ${generateTestListItems(sortedResults.filter(r => r.status === 'failed' || r.status === 'timedOut'), showTraceSection, attentionSets)}
+                </div>
+                <div class="status-group passed-group">
+                  <div class="status-group-header">
+                    <span class="status-group-dot passed"></span>
+                    <span class="status-group-title">Passed (${passed})</span>
+                  </div>
+                  ${generateTestListItems(sortedResults.filter(r => r.status === 'passed'), showTraceSection, attentionSets)}
+                </div>
+                <div class="status-group skipped-group">
+                  <div class="status-group-header">
+                    <span class="status-group-dot skipped"></span>
+                    <span class="status-group-title">Skipped (${skipped})</span>
+                  </div>
+                  ${generateTestListItems(sortedResults.filter(r => r.status === 'skipped'), showTraceSection, attentionSets)}
+                </div>
+              </div>
+              <!-- By Stability Tab -->
+              <div class="test-tab-content" id="tab-by-stability">
+                ${['A', 'B', 'C', 'D', 'F'].map(grade => {
+                  const gradeTests = sortedResults.filter(r => r.stabilityScore?.grade === grade);
+                  if (gradeTests.length === 0) return '';
+                  return `
+                    <div class="stability-group grade-${grade.toLowerCase()}-group">
+                      <div class="stability-group-header">
+                        <span class="stability-badge ${grade.toLowerCase()}">${grade}</span>
+                        <span class="stability-group-title">Grade ${grade} (${gradeTests.length})</span>
+                      </div>
+                      ${generateTestListItems(gradeTests, showTraceSection, attentionSets)}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- Test Detail (Detail) -->
+          <div class="test-detail-panel" id="test-detail-panel">
+            <div class="detail-placeholder">
+              <div class="placeholder-icon">🧪</div>
+              <div class="placeholder-text">Select a test to view details</div>
+              <div class="placeholder-hint">Click on any test in the list</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Trends View -->
+      <section class="view-panel" id="view-trends" style="display: none;">
+        <div class="view-header">
+          <h2 class="view-title">Trends</h2>
+        </div>
+        <div class="trends-content">
+          ${generateTrendChart({ results, history, startTime })}
+        </div>
+      </section>
+
+      <!-- Comparison View -->
+      ${showComparison ? `
+      <section class="view-panel" id="view-comparison" style="display: none;">
+        <div class="view-header">
+          <h2 class="view-title">Run Comparison</h2>
+        </div>
+        <div class="comparison-content">
+          ${generateComparison(comparison!)}
+        </div>
+      </section>
+      ` : ''}
+
+      <!-- Gallery View -->
+      ${showGallery ? `
+      <section class="view-panel" id="view-gallery" style="display: none;">
+        <div class="view-header">
+          <h2 class="view-title">Attachments Gallery</h2>
+        </div>
+        <div class="gallery-content">
+          ${generateGallery(results)}
+        </div>
+      </section>
+      ` : ''}
+    </main>
+  </div>
+
+  <!-- Search Modal -->
+  <div class="search-modal" id="search-modal">
+    <div class="search-modal-backdrop" onclick="closeSearch()"></div>
+    <div class="search-modal-content">
+      <div class="search-modal-header">
+        <span class="search-modal-icon">🔍</span>
+        <input type="text" class="search-modal-input" id="search-modal-input" placeholder="Search tests..." oninput="handleSearchInput(this.value)">
+        <kbd class="search-modal-esc">ESC</kbd>
+      </div>
+      <div class="search-modal-results" id="search-modal-results"></div>
     </div>
   </div>
 
+  <!-- Hidden data containers for detail rendering -->
+  <div id="test-cards-data" style="display: none;">
+    ${results.map(test => generateTestCard(test, showTraceSection)).join('\n')}
+  </div>
+
   <script>
-${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson)}
+${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson, statsData)}
   </script>
 </body>
 </html>`;
 }
 
 /**
- * Generate all CSS styles
+ * Generate all CSS styles for the new app-shell layout
  */
 function generateStyles(passRate: number, cspSafe: boolean = false): string {
   // Font families - use system fonts in CSP-safe mode
@@ -204,13 +775,14 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     : "'Space Grotesk', system-ui, sans-serif";
   const monoFont = cspSafe
     ? "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
-    : "${monoFont}";
+    : "'JetBrains Mono', ui-monospace, monospace";
 
   return `    :root {
       --bg-primary: #0a0a0f;
       --bg-secondary: #12121a;
       --bg-card: #1a1a24;
       --bg-card-hover: #22222e;
+      --bg-sidebar: #0d0d14;
       --border-subtle: #2a2a3a;
       --border-glow: #3b3b4f;
       --text-primary: #f0f0f5;
@@ -226,6 +798,8 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       --accent-blue-dim: #0088cc;
       --accent-purple: #aa66ff;
       --accent-orange: #ff8844;
+      --sidebar-width: 260px;
+      --topbar-height: 56px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -234,169 +808,1523 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       font-family: ${primaryFont};
       background: var(--bg-primary);
       color: var(--text-primary);
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
       line-height: 1.5;
     }
 
-    /* Subtle grid background */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(var(--border-subtle) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
-      background-size: 60px 60px;
-      opacity: 0.3;
-      pointer-events: none;
-      z-index: -1;
+    /* ============================================
+       APP SHELL LAYOUT
+    ============================================ */
+    .app-shell {
+      display: grid;
+      grid-template-areas:
+        "topbar topbar"
+        "sidebar main";
+      grid-template-columns: var(--sidebar-width) 1fr;
+      grid-template-rows: var(--topbar-height) 1fr;
+      height: 100vh;
+      overflow: hidden;
     }
 
-    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+    .app-shell.sidebar-collapsed {
+      grid-template-columns: 0 1fr;
+    }
 
-    /* Header */
-    .header {
+    .app-shell.sidebar-collapsed .sidebar {
+      transform: translateX(-100%);
+    }
+
+    /* ============================================
+       TOP BAR
+    ============================================ */
+    .top-bar {
+      grid-area: topbar;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
+      padding: 0 1rem;
+      background: var(--bg-secondary);
       border-bottom: 1px solid var(--border-subtle);
+      z-index: 100;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .sidebar-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sidebar-toggle:hover {
+      background: var(--bg-card);
+      border-color: var(--border-glow);
+      color: var(--text-primary);
+    }
+
+    .hamburger-icon {
+      font-size: 1.1rem;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 1rem;
+      gap: 0.75rem;
     }
 
     .logo-icon {
-      width: 48px;
-      height: 48px;
+      width: 32px;
+      height: 32px;
       background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%);
-      border-radius: 12px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.5rem;
-      box-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--bg-primary);
     }
 
-    .logo-text h1 {
-      font-size: 1.5rem;
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+
+    .logo-title {
+      font-size: 0.95rem;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
 
-    .logo-text span {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
+    .logo-subtitle {
+      font-size: 0.65rem;
+      color: var(--text-muted);
       font-family: ${monoFont};
     }
+
+    .breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: 1rem;
+      padding-left: 1rem;
+      border-left: 1px solid var(--border-subtle);
+    }
+
+    .breadcrumb {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .breadcrumb:hover { color: var(--text-secondary); }
+    .breadcrumb.active { color: var(--text-primary); font-weight: 500; }
+
+    .breadcrumb-separator {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    .search-trigger {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 200px;
+    }
+
+    .search-trigger:hover {
+      border-color: var(--border-glow);
+      color: var(--text-secondary);
+    }
+
+    .search-icon-btn { font-size: 0.85rem; }
+    .search-label { flex: 1; text-align: left; font-size: 0.85rem; }
+    .search-kbd {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+
+    .top-bar-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: ${monoFont};
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+
+    .top-bar-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .btn-label { font-size: 0.8rem; }
 
     .timestamp {
       font-family: ${monoFont};
-      font-size: 0.875rem;
+      font-size: 0.75rem;
       color: var(--text-muted);
-      background: var(--bg-secondary);
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
+      padding: 0.4rem 0.75rem;
+      background: var(--bg-card);
       border: 1px solid var(--border-subtle);
+      border-radius: 8px;
     }
 
-    /* Stats Grid */
-    .stats-grid {
+    /* ============================================
+       SIDEBAR
+    ============================================ */
+    .sidebar {
+      grid-area: sidebar;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-subtle);
+      overflow-y: auto;
+      overflow-x: hidden;
+      transition: transform 0.2s ease;
+    }
+
+    .sidebar-progress {
+      padding: 1.25rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .progress-ring-container {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      margin: 0 auto;
+    }
+
+    .progress-ring {
+      transform: rotate(-90deg);
+    }
+
+    .progress-ring-bg {
+      fill: none;
+      stroke: var(--border-subtle);
+      stroke-width: 6;
+    }
+
+    .progress-ring-fill {
+      fill: none;
+      stroke: var(--accent-green);
+      stroke-width: 6;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.5s ease;
+      filter: drop-shadow(0 0 6px var(--accent-green));
+    }
+
+    .progress-ring-value {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: ${monoFont};
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+
+    .progress-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .sidebar-stats {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .mini-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.5rem;
+      background: var(--bg-card);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mini-stat:hover {
+      background: var(--bg-card-hover);
+      transform: translateY(-1px);
+    }
+
+    .mini-stat-value {
+      font-family: ${monoFont};
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .mini-stat-label {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .mini-stat.passed .mini-stat-value { color: var(--accent-green); }
+    .mini-stat.failed .mini-stat-value { color: var(--accent-red); }
+    .mini-stat.flaky .mini-stat-value { color: var(--accent-yellow); }
+
+    .sidebar-nav {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .nav-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .clear-filters-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.7rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      opacity: 0.6;
+      transition: all 0.2s;
+    }
+
+    .clear-filters-btn:hover {
+      opacity: 1;
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.85rem;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-shadow: inset 3px 0 0 var(--accent-green);
+    }
+
+    .nav-icon { font-size: 1rem; }
+    .nav-label { flex: 1; }
+    .nav-badge {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-filters {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .filter-group {
+      margin-bottom: 0.75rem;
+    }
+
+    .filter-group:last-child { margin-bottom: 0; }
+
+    .filter-group-title {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      padding-left: 0.25rem;
+    }
+
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .filter-chip {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      padding: 0.3rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-chip:hover {
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border-color: var(--border-glow);
+    }
+
+    .filter-chip.active {
+      background: var(--text-primary);
+      color: var(--bg-primary);
+      border-color: var(--text-primary);
+    }
+
+    .grade-chips .filter-chip {
+      min-width: 28px;
+      text-align: center;
+    }
+
+    .filter-chip.grade-a { border-color: var(--accent-green-dim); }
+    .filter-chip.grade-a:hover, .filter-chip.grade-a.active { background: var(--accent-green); color: var(--bg-primary); border-color: var(--accent-green); }
+    .filter-chip.grade-b { border-color: var(--accent-blue-dim); }
+    .filter-chip.grade-b:hover, .filter-chip.grade-b.active { background: var(--accent-blue); color: var(--bg-primary); border-color: var(--accent-blue); }
+    .filter-chip.grade-c { border-color: var(--accent-yellow-dim); }
+    .filter-chip.grade-c:hover, .filter-chip.grade-c.active { background: var(--accent-yellow); color: var(--bg-primary); border-color: var(--accent-yellow); }
+    .filter-chip.grade-d { border-color: var(--accent-orange); }
+    .filter-chip.grade-d:hover, .filter-chip.grade-d.active { background: var(--accent-orange); color: var(--bg-primary); border-color: var(--accent-orange); }
+    .filter-chip.grade-f { border-color: var(--accent-red-dim); }
+    .filter-chip.grade-f:hover, .filter-chip.grade-f.active { background: var(--accent-red); color: var(--bg-primary); border-color: var(--accent-red); }
+
+    /* Attention filter chips */
+    .attention-chips .filter-chip {
+      font-weight: 500;
+    }
+    .filter-chip.attention-new-failure { border-color: var(--accent-red-dim); }
+    .filter-chip.attention-new-failure:hover:not(.active) { 
+      background: rgba(255, 68, 102, 0.15); 
+      color: var(--accent-red); 
+      border-color: var(--accent-red); 
+    }
+    .filter-chip.attention-new-failure.active { 
+      background: var(--accent-red); 
+      color: var(--bg-primary); 
+      border-color: var(--accent-red); 
+    }
+    .filter-chip.attention-regression { border-color: var(--accent-orange); }
+    .filter-chip.attention-regression:hover:not(.active) { 
+      background: rgba(255, 136, 68, 0.15); 
+      color: var(--accent-orange); 
+      border-color: var(--accent-orange); 
+    }
+    .filter-chip.attention-regression.active { 
+      background: var(--accent-orange); 
+      color: var(--bg-primary); 
+      border-color: var(--accent-orange); 
+    }
+    .filter-chip.attention-fixed { border-color: var(--accent-green-dim); }
+    .filter-chip.attention-fixed:hover:not(.active) { 
+      background: rgba(0, 255, 136, 0.15); 
+      color: var(--accent-green); 
+      border-color: var(--accent-green); 
+    }
+    .filter-chip.attention-fixed.active { 
+      background: var(--accent-green); 
+      color: var(--bg-primary); 
+      border-color: var(--accent-green); 
+    }
+
+    .sidebar-files {
+      flex: 1;
+      padding: 0.75rem;
+      overflow-y: auto;
+    }
+
+    .file-tree {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .file-tree-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.8rem;
+    }
+
+    .file-tree-item:hover {
+      background: var(--bg-card);
+    }
+
+    .file-tree-item.active {
+      background: var(--bg-card);
+      box-shadow: inset 2px 0 0 var(--accent-blue);
+    }
+
+    .file-tree-icon { font-size: 0.85rem; }
+    .file-tree-name {
+      flex: 1;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-tree-item.has-failures .file-tree-name { color: var(--accent-red); }
+    .file-tree-item.all-passed .file-tree-name { color: var(--text-secondary); }
+
+    .file-tree-stats {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .file-stat {
+      font-family: ${monoFont};
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+    }
+
+    .file-stat.passed { color: var(--accent-green); background: rgba(0, 255, 136, 0.1); }
+    .file-stat.failed { color: var(--accent-red); background: rgba(255, 68, 102, 0.1); }
+
+    .sidebar-footer {
+      padding: 0.75rem;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .run-duration {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: ${monoFont};
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* ============================================
+       MAIN CONTENT AREA
+    ============================================ */
+    .main-content {
+      grid-area: main;
+      overflow-y: auto;
+      background: var(--bg-primary);
+    }
+
+    .view-panel {
+      height: 100%;
+      overflow-y: auto;
+    }
+
+    .view-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-secondary);
+    }
+
+    .view-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    /* ============================================
+       OVERVIEW VIEW
+    ============================================ */
+    .overview-content {
+      padding: 1.5rem;
+    }
+
+    .overview-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 1rem;
       margin-bottom: 2rem;
     }
 
-    @media (max-width: 900px) {
-      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .stat-card.large {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      transition: all 0.2s;
     }
 
-    @media (max-width: 500px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .stat-card.large:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
     }
 
-    .stat-card {
+    .stat-icon {
+      font-size: 1.5rem;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: var(--bg-secondary);
+    }
+
+    .stat-card.large.passed .stat-icon { background: rgba(0, 255, 136, 0.1); color: var(--accent-green); }
+    .stat-card.large.failed .stat-icon { background: rgba(255, 68, 102, 0.1); color: var(--accent-red); }
+    .stat-card.large.skipped .stat-icon { background: rgba(90, 90, 112, 0.1); color: var(--text-muted); }
+    .stat-card.large.flaky .stat-icon { background: rgba(255, 204, 0, 0.1); color: var(--accent-yellow); }
+    .stat-card.large.slow .stat-icon { background: rgba(255, 136, 68, 0.1); color: var(--accent-orange); }
+    .stat-card.large.duration .stat-icon { background: rgba(0, 170, 255, 0.1); color: var(--accent-blue); }
+
+    .stat-content { flex: 1; }
+
+    .stat-card.large .stat-value {
+      font-family: ${monoFont};
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-card.large .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .overview-trends {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+
+    /* ============================================
+       OVERVIEW - HERO STATS
+    ============================================ */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-stat-card {
       background: var(--bg-card);
       border: 1px solid var(--border-subtle);
       border-radius: 16px;
       padding: 1.25rem;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-      transition: all 0.3s ease;
+      transition: all 0.2s;
     }
 
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: var(--stat-color);
-      opacity: 0.8;
-    }
-
-    .stat-card:hover {
+    .hero-stat-card:hover {
       transform: translateY(-2px);
-      border-color: var(--stat-color);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px color-mix(in srgb, var(--stat-color) 20%, transparent);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
     }
 
-    .stat-value {
+    .hero-stat-card.health {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .health-gauge {
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+
+    .health-ring {
+      transform: rotate(-90deg);
+      width: 100%;
+      height: 100%;
+    }
+
+    .health-ring-bg {
+      fill: none;
+      stroke: var(--border-subtle);
+      stroke-width: 8;
+    }
+
+    .health-ring-fill {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+      transition: stroke-dasharray 0.5s ease;
+    }
+
+    .hero-stat-card.health.excellent .health-ring-fill { stroke: var(--accent-green); }
+    .hero-stat-card.health.good .health-ring-fill { stroke: var(--accent-blue); }
+    .hero-stat-card.health.fair .health-ring-fill { stroke: var(--accent-yellow); }
+    .hero-stat-card.health.poor .health-ring-fill { stroke: var(--accent-red); }
+
+    .health-score {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .health-grade {
+      font-size: 1.5rem;
+      font-weight: 800;
+      display: block;
+    }
+
+    .hero-stat-card.health.excellent .health-grade { color: var(--accent-green); }
+    .hero-stat-card.health.good .health-grade { color: var(--accent-blue); }
+    .hero-stat-card.health.fair .health-grade { color: var(--accent-yellow); }
+    .hero-stat-card.health.poor .health-grade { color: var(--accent-red); }
+
+    .health-value {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .hero-stat-info {
+      flex: 1;
+    }
+
+    .health-breakdown {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    .hero-stat-main {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .hero-stat-value {
       font-family: ${monoFont};
-      font-size: 2rem;
+      font-size: 1.75rem;
       font-weight: 700;
-      color: var(--stat-color);
-      text-shadow: 0 0 20px color-mix(in srgb, var(--stat-color) 40%, transparent);
+      color: var(--text-primary);
     }
 
-    .stat-label {
+    .hero-stat-delta {
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+    }
+
+    .hero-stat-delta.positive {
+      color: var(--accent-green);
+      background: rgba(0, 255, 136, 0.1);
+    }
+
+    .hero-stat-delta.negative {
+      color: var(--accent-red);
+      background: rgba(255, 68, 102, 0.1);
+    }
+
+    .hero-stat-label {
       font-size: 0.75rem;
+      color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.05em;
+    }
+
+    .hero-stat-detail {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    /* Mini Comparison Bars */
+    .mini-comparison {
+      padding: 1rem;
+    }
+
+    .mini-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .mini-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .mini-bar-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      width: 50px;
+    }
+
+    .mini-bar-track {
+      flex: 1;
+      height: 8px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .mini-bar {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .mini-bar.passed { background: var(--accent-green); }
+    .mini-bar.failed { background: var(--accent-red); }
+    .mini-bar.skipped { background: var(--text-muted); }
+
+    .mini-bar-value {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      width: 30px;
+      text-align: right;
+    }
+
+    /* ============================================
+       OVERVIEW - ATTENTION SECTION
+    ============================================ */
+    .overview-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .section-icon {
+      font-size: 1.1rem;
+    }
+
+    .section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+
+    .attention-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+
+    .attention-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 4px solid transparent;
+    }
+
+    .attention-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .attention-card.critical {
+      border-left-color: var(--accent-red);
+      background: linear-gradient(135deg, rgba(255, 68, 102, 0.05) 0%, transparent 50%);
+    }
+
+    .attention-card.warning {
+      border-left-color: var(--accent-yellow);
+      background: linear-gradient(135deg, rgba(255, 204, 0, 0.05) 0%, transparent 50%);
+    }
+
+    .attention-card.success {
+      border-left-color: var(--accent-green);
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.05) 0%, transparent 50%);
+    }
+
+    .attention-value {
+      font-family: ${monoFont};
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .attention-label {
+      font-size: 0.85rem;
+      font-weight: 600;
       color: var(--text-secondary);
       margin-top: 0.25rem;
     }
 
-    .stat-card.passed { --stat-color: var(--accent-green); }
-    .stat-card.failed { --stat-color: var(--accent-red); }
-    .stat-card.skipped { --stat-color: var(--text-muted); }
-    .stat-card.flaky { --stat-color: var(--accent-yellow); }
-    .stat-card.slow { --stat-color: var(--accent-orange); }
-    .stat-card.duration { --stat-color: var(--accent-blue); }
+    .attention-desc {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
 
-    /* Progress Ring */
-    .progress-ring {
-      width: 120px;
-      height: 120px;
-      margin: 0 auto 1.5rem;
+    /* ============================================
+       OVERVIEW - FAILURE CLUSTERS
+    ============================================ */
+    .failure-clusters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .cluster-card {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .cluster-card:hover {
+      background: var(--bg-secondary);
+      border-color: var(--accent-red);
+    }
+
+    .cluster-icon {
+      font-size: 1.2rem;
+      color: var(--accent-red);
+    }
+
+    .cluster-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cluster-type {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cluster-count {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    /* ============================================
+       OVERVIEW - QUICK INSIGHTS
+    ============================================ */
+    .insights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .insight-card {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .insight-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .insight-icon {
+      font-size: 1.5rem;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-secondary);
+      border-radius: 10px;
+    }
+
+    .insight-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .insight-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .insight-title {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .insight-value {
+      font-family: ${monoFont};
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .insight-mini-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.25rem;
+    }
+
+    .mini-stat {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .dot.passed { background: var(--accent-green); }
+    .dot.failed { background: var(--accent-red); }
+    .dot.skipped { background: var(--text-muted); }
+
+    .mini-sparkline {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 30px;
+      margin-top: 0.5rem;
+    }
+
+    .spark-col {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .spark-bar {
+      width: 100%;
+      background: var(--accent-green);
+      border-radius: 2px;
+      min-height: 3px;
+      transition: height 0.3s ease;
+    }
+
+    .mini-sparkline .no-data {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    /* ============================================
+       TESTS VIEW - MASTER-DETAIL LAYOUT
+    ============================================ */
+    .master-detail-layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: 100%;
+    }
+
+    .test-list-panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-subtle);
+      background: var(--bg-secondary);
+      overflow: hidden;
+    }
+
+    .test-list-header {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+    }
+
+    .test-list-tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .tab-btn {
+      font-size: 0.75rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .tab-btn:hover {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+    }
+
+    .tab-btn.active {
+      background: var(--text-primary);
+      color: var(--bg-primary);
+    }
+
+    .test-list-search {
+      width: 100%;
+    }
+
+    .inline-search {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: ${monoFont};
+      font-size: 0.8rem;
+    }
+
+    .inline-search:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+
+    .inline-search::placeholder { color: var(--text-muted); }
+
+    .test-list-content {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .test-tab-content {
+      display: none;
+      padding: 0.5rem;
+    }
+
+    .test-tab-content.active { display: block; }
+
+    /* Test List Items */
+    .test-list-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      margin-bottom: 0.25rem;
+      background: var(--bg-card);
+      border: 1px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .test-list-item:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-subtle);
+    }
+
+    .test-list-item.selected {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-blue);
+      box-shadow: inset 3px 0 0 var(--accent-blue);
+    }
+
+    .test-item-status { flex-shrink: 0; }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .status-dot.passed { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+    .status-dot.failed { background: var(--accent-red); box-shadow: 0 0 8px var(--accent-red); }
+    .status-dot.skipped { background: var(--text-muted); }
+
+    .test-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .test-item-title {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .test-item-file {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .test-item-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .test-item-duration {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .test-item-badge {
+      font-family: ${monoFont};
+      font-size: 0.6rem;
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .test-item-badge.flaky { background: rgba(255, 204, 0, 0.15); color: var(--accent-yellow); }
+    .test-item-badge.slow { background: rgba(255, 136, 68, 0.15); color: var(--accent-orange); }
+    .test-item-badge.new { background: rgba(0, 170, 255, 0.15); color: var(--accent-blue); }
+    
+    /* Attention badges - more prominent */
+    .test-item-badge.new-failure { 
+      background: rgba(255, 68, 102, 0.2); 
+      color: var(--accent-red); 
+      font-weight: 600;
+      animation: pulse-badge 2s ease-in-out infinite;
+    }
+    .test-item-badge.regression { 
+      background: rgba(255, 136, 68, 0.2); 
+      color: var(--accent-orange);
+      font-weight: 600;
+    }
+    .test-item-badge.fixed { 
+      background: rgba(0, 255, 136, 0.2); 
+      color: var(--accent-green);
+      font-weight: 600;
+    }
+
+    @keyframes pulse-badge {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .stability-badge {
+      font-family: ${monoFont};
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+    }
+
+    .stability-badge.grade-a { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
+    .stability-badge.grade-b { background: rgba(0, 170, 255, 0.15); color: var(--accent-blue); }
+    .stability-badge.grade-c { background: rgba(255, 204, 0, 0.15); color: var(--accent-yellow); }
+    .stability-badge.grade-d { background: rgba(255, 136, 68, 0.15); color: var(--accent-orange); }
+    .stability-badge.grade-f { background: rgba(255, 68, 102, 0.15); color: var(--accent-red); }
+
+    /* Status/Stability Groups */
+    .status-group, .stability-group {
+      margin-bottom: 1rem;
+    }
+
+    .status-group-header, .stability-group-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .status-group-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .status-group-dot.passed { background: var(--accent-green); }
+    .status-group-dot.failed { background: var(--accent-red); }
+    .status-group-dot.skipped { background: var(--text-muted); }
+
+    /* Test Detail Panel */
+    .test-detail-panel {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background: var(--bg-primary);
+    }
+
+    .detail-placeholder {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      color: var(--text-muted);
+    }
+
+    .placeholder-icon { font-size: 4rem; opacity: 0.3; }
+    .placeholder-text { font-size: 1.1rem; }
+    .placeholder-hint { font-size: 0.85rem; opacity: 0.6; }
+
+    /* Detail View Content (when test is selected) */
+    .detail-view-content {
+      padding: 1.5rem;
+    }
+
+    .detail-view-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 1.5rem;
+    }
+
+    .detail-status-indicator {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 0.25rem;
+    }
+
+    .detail-status-indicator.passed { background: var(--accent-green); box-shadow: 0 0 12px var(--accent-green); }
+    .detail-status-indicator.failed { background: var(--accent-red); box-shadow: 0 0 12px var(--accent-red); }
+    .detail-status-indicator.skipped { background: var(--text-muted); }
+
+    .detail-info { flex: 1; min-width: 0; }
+
+    .detail-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 0.25rem 0;
+      word-break: break-word;
+    }
+
+    .detail-file {
+      font-family: ${monoFont};
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .detail-duration {
+      font-family: ${monoFont};
+      font-size: 1rem;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    /* Make test-card work inside detail panel */
+    .test-detail-panel .test-card {
+      background: transparent;
+      border: none;
+      border-radius: 0;
+    }
+
+    .test-detail-panel .test-card-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      cursor: default;
+    }
+
+    .test-detail-panel .test-details {
+      display: block !important;
+      padding: 1.5rem;
+      background: transparent;
+      border-top: none;
+    }
+
+    /* ============================================
+       SEARCH MODAL
+    ============================================ */
+    .search-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 15vh;
+    }
+
+    .search-modal.open { display: flex; }
+
+    .search-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+    }
+
+    .search-modal-content {
       position: relative;
+      width: 100%;
+      max-width: 600px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
     }
 
-    .progress-ring svg {
-      transform: rotate(-90deg);
+    .search-modal-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-subtle);
     }
 
-    .progress-ring circle {
-      fill: none;
-      stroke-width: 8;
-      stroke-linecap: round;
+    .search-modal-icon { font-size: 1.25rem; color: var(--text-muted); }
+
+    .search-modal-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 1rem;
+      font-family: inherit;
     }
 
-    .progress-ring .bg { stroke: var(--border-subtle); }
-    .progress-ring .progress {
-      stroke: var(--accent-green);
-      stroke-dasharray: 314;
-      stroke-dashoffset: calc(314 - (314 * ${passRate}) / 100);
-      transition: stroke-dashoffset 1s ease;
-      filter: drop-shadow(0 0 8px var(--accent-green));
+    .search-modal-input::placeholder { color: var(--text-muted); }
+
+    .search-modal-esc {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      color: var(--text-muted);
     }
+
+    .search-modal-results {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .search-result-item:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .search-result-item .status-dot { flex-shrink: 0; }
+
+    .search-result-info { flex: 1; min-width: 0; }
+
+    .search-result-title {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .search-result-file {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* ============================================
+       EXISTING STYLES (preserved from original)
+    ============================================ */
 
     .progress-ring .value {
       position: absolute;
@@ -677,8 +2605,12 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     /* Chart Bar Hover Effects */
     .chart-bar {
-      cursor: pointer;
+      cursor: default;
       transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .chart-bar-clickable {
+      cursor: pointer;
     }
 
     .chart-bar:hover {
@@ -687,11 +2619,72 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .bar-group {
+      cursor: default;
+    }
+
+    .bar-group.clickable {
       cursor: pointer;
+    }
+
+    .bar-group.clickable:hover .chart-bar {
+      transform: translateY(-2px);
+      filter: brightness(1.2);
     }
 
     .bar-group:hover .chart-bar {
       transform: translateY(-2px);
+    }
+
+    /* History Banner */
+    .history-banner {
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      margin-top: 0.75rem;
+      background: linear-gradient(135deg, rgba(0, 170, 255, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+      border: 1px solid var(--accent-blue-dim);
+      border-radius: 8px;
+    }
+
+    .history-banner-icon {
+      font-size: 1.25rem;
+    }
+
+    .history-banner-text {
+      flex: 1;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .history-banner-text strong {
+      color: var(--accent-blue);
+    }
+
+    .history-banner-close {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: var(--accent-blue);
+      color: var(--bg-primary);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .history-banner-close:hover {
+      filter: brightness(1.1);
+    }
+
+    /* Historical test item badge */
+    .test-item-badge.historical {
+      background: rgba(168, 85, 247, 0.15);
+      color: #a855f7;
+    }
+
+    .test-list-item.historical-item {
+      border-left: 3px solid #a855f7;
     }
 
     /* Chart Tooltip */
@@ -1848,6 +3841,63 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       padding-top: 0.1rem;
     }
 
+    .trace-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .trace-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      background: var(--bg-primary);
+    }
+
+    .trace-meta {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .trace-file {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .trace-file-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-path {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .trace-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-shrink: 0;
+      padding-top: 0.1rem;
+    }
+
     .attachment-link {
       display: inline-flex;
       align-items: center;
@@ -2435,7 +4485,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 }
 
 /**
- * Generate all JavaScript
+ * Generate all JavaScript for the new app-shell layout
  */
 function generateScripts(
   testsJson: string,
@@ -2443,16 +4493,396 @@ function generateScripts(
   includeComparison: boolean,
   enableTraceViewer: boolean,
   enableHistoryDrilldown: boolean,
-  historyRunSnapshotsJson: string
+  historyRunSnapshotsJson: string,
+  statsData: string
 ): string {
   return `    const tests = ${testsJson};
+    const stats = ${statsData};
     const traceViewerEnabled = ${enableTraceViewer ? 'true' : 'false'};
     const historyDrilldownEnabled = ${enableHistoryDrilldown ? 'true' : 'false'};
     const historyRunSnapshots = ${historyRunSnapshotsJson};
     const detailsBodyCache = new WeakMap();
+    let currentView = 'overview';
+    let selectedTestId = null;
+    let currentTestTab = 'all';
+
+    /* ============================================
+       APP SHELL NAVIGATION
+    ============================================ */
+
+    function toggleSidebar() {
+      document.querySelector('.app-shell').classList.toggle('sidebar-collapsed');
+    }
+
+    function switchView(view) {
+      // Update nav items
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.view === view);
+      });
+
+      // Hide all view panels
+      document.querySelectorAll('.view-panel').forEach(panel => {
+        panel.style.display = 'none';
+      });
+
+      // Show selected view
+      const viewPanel = document.getElementById('view-' + view);
+      if (viewPanel) {
+        viewPanel.style.display = 'block';
+      }
+
+      // Update breadcrumb
+      const breadcrumbDetail = document.getElementById('breadcrumb-detail');
+      if (breadcrumbDetail) {
+        breadcrumbDetail.textContent = view.charAt(0).toUpperCase() + view.slice(1);
+      }
+
+      currentView = view;
+    }
+
+    // Track global historical run selection
+    let globalHistoricalRunId = null;
+    let globalHistoricalRunLabel = '';
+
+    function loadHistoricalRun(runId, label) {
+      if (!historyDrilldownEnabled) {
+        alert('History drilldown is not enabled. Set enableHistoryDrilldown: true in reporter options.');
+        return;
+      }
+
+      const runData = historyRunSnapshots[runId];
+      if (!runData || !runData.tests) {
+        alert('No snapshot data available for this run. Historical snapshots may not have been saved for this run.');
+        return;
+      }
+
+      // Set global historical run
+      globalHistoricalRunId = runId;
+      globalHistoricalRunLabel = label;
+
+      // Show history banner
+      showGlobalHistoryBanner(label);
+
+      // Switch to tests view
+      switchView('tests');
+      switchTestTab('all');
+
+      // Auto-select the first test to show historical data
+      const firstTestItem = document.querySelector('.test-list-item');
+      if (firstTestItem) {
+        const testId = firstTestItem.id.replace('list-item-', '');
+        selectTest(testId);
+      }
+    }
+
+    function showGlobalHistoryBanner(label) {
+      const viewHeader = document.querySelector('#view-tests .view-header');
+      if (viewHeader) {
+        let historyBanner = viewHeader.querySelector('.history-banner');
+        if (!historyBanner) {
+          historyBanner = document.createElement('div');
+          historyBanner.className = 'history-banner';
+          viewHeader.appendChild(historyBanner);
+        }
+        historyBanner.innerHTML = \`
+          <span class="history-banner-icon">📅</span>
+          <span class="history-banner-text">Viewing run: <strong>\${label}</strong> — Each test shows this run's data. Use per-test history dots to compare.</span>
+          <button class="history-banner-close" onclick="exitGlobalHistoricalView()">Back to Current Run</button>
+        \`;
+        historyBanner.style.display = 'flex';
+      }
+    }
+
+    function exitGlobalHistoricalView() {
+      globalHistoricalRunId = null;
+      globalHistoricalRunLabel = '';
+
+      // Hide history banner
+      const historyBanner = document.querySelector('.history-banner');
+      if (historyBanner) {
+        historyBanner.style.display = 'none';
+      }
+
+      // Reset all test cards to current state
+      document.querySelectorAll('.test-card').forEach(card => {
+        const testIdEl = card.querySelector('.history-dot[data-testid]');
+        const testId = testIdEl ? testIdEl.getAttribute('data-testid') : null;
+        if (testId) {
+          resetCardToCurrentState(card, testId);
+        }
+      });
+
+      // Re-select current test to refresh detail panel
+      if (selectedTestId) {
+        selectTest(selectedTestId);
+      }
+    }
+
+    function resetCardToCurrentState(card, testId) {
+      const details = card.querySelector('.test-details');
+      const body = details ? details.querySelector('[data-details-body]') : null;
+      if (body) {
+        const original = detailsBodyCache.get(body);
+        if (typeof original === 'string') {
+          body.innerHTML = original;
+        }
+      }
+      clearSelectedDots(card);
+      clearSelectedDurationBars(card);
+      showBackButton(card, false);
+      restoreTrendUI(card, testId);
+    }
+
+    function applyHistoricalRunToCard(card, testId, runId) {
+      const runData = getRunSnapshot(runId);
+      const snapshot = runData && runData.tests ? runData.tests[testId] : null;
+      
+      if (!snapshot) {
+        // No data for this test in this run - might be a new test
+        return false;
+      }
+
+      const details = card.querySelector('.test-details');
+      const body = details ? details.querySelector('[data-details-body]') : null;
+      if (!body) return false;
+
+      // Cache original content
+      if (!detailsBodyCache.has(body)) {
+        detailsBodyCache.set(body, body.innerHTML);
+      }
+
+      // Find and select the appropriate history dot
+      const dots = card.querySelectorAll('.history-dot[data-runid]');
+      let matchingDot = null;
+      dots.forEach(d => {
+        if (d.getAttribute('data-runid') === runId) {
+          matchingDot = d;
+        }
+      });
+
+      clearSelectedDots(card);
+      clearSelectedDurationBars(card);
+      if (matchingDot) {
+        matchingDot.classList.add('selected');
+      }
+
+      // Render snapshot body
+      const testModel = getTestModel(testId);
+      const avg = testModel ? computeAvgDurationFromHistory(testModel) : 0;
+      body.innerHTML = renderSnapshotBody(snapshot, avg);
+
+      // Update trend UI
+      updateTrendUI(card, testId, runId, snapshot.duration);
+      showBackButton(card, true);
+
+      return true;
+    }
+
+    function switchTestTab(tab) {
+      // Update tab buttons
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+
+      // Hide all tab content
+      document.querySelectorAll('.test-tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+
+      // Show selected tab
+      const tabContent = document.getElementById('tab-' + tab);
+      if (tabContent) {
+        tabContent.classList.add('active');
+      }
+
+      currentTestTab = tab;
+    }
+
+    function selectTest(testId) {
+      // Update selection in list
+      document.querySelectorAll('.test-list-item').forEach(item => {
+        item.classList.toggle('selected', item.id === 'list-item-' + testId);
+      });
+
+      // Find test data - use same sanitization as TypeScript sanitizeId()
+      const test = tests.find(t => {
+        const id = String(t.testId || '').replace(/[^a-zA-Z0-9]/g, '_');
+        return id === testId;
+      });
+
+      if (!test) {
+        return;
+      }
+
+      selectedTestId = testId;
+
+      // Get the pre-rendered card from hidden container - use getElementById for reliability
+      const cardId = 'card-' + testId;
+      const cardHtml = document.getElementById(cardId);
+      const detailPanel = document.getElementById('test-detail-panel');
+
+      if (cardHtml && detailPanel) {
+        // Clone and display the card
+        const clone = cardHtml.cloneNode(true);
+        clone.classList.add('expanded');
+        clone.style.display = 'block';
+        
+        // Make sure test-details is visible
+        const details = clone.querySelector('.test-details');
+        if (details) {
+          details.style.display = 'block';
+        }
+
+        detailPanel.innerHTML = '';
+        detailPanel.appendChild(clone);
+
+        // If global historical run is set, apply it to this card
+        // Use test.testId (original) not testId (sanitized) for snapshot lookup
+        if (globalHistoricalRunId) {
+          applyHistoricalRunToCard(clone, test.testId, globalHistoricalRunId);
+        }
+
+        // Update breadcrumb
+        const breadcrumbDetail = document.getElementById('breadcrumb-detail');
+        if (breadcrumbDetail) {
+          breadcrumbDetail.textContent = test.title;
+        }
+      } else {
+        // Fallback: render basic details if card not found
+        const detailPanel = document.getElementById('test-detail-panel');
+        if (detailPanel) {
+          const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
+          detailPanel.innerHTML = \`
+            <div class="detail-view-content">
+              <div class="detail-view-header">
+                <div class="detail-status-indicator \${statusClass}"></div>
+                <div class="detail-info">
+                  <h2 class="detail-title">\${escapeHtmlUnsafe(test.title)}</h2>
+                  <div class="detail-file">\${escapeHtmlUnsafe(test.file)}</div>
+                </div>
+                <div class="detail-duration">\${formatDurationMs(test.duration)}</div>
+              </div>
+              \${test.error ? \`
+                <div class="detail-section">
+                  <div class="detail-label"><span class="icon">⚠</span> Error</div>
+                  <div class="error-box">\${escapeHtmlUnsafe(test.error)}</div>
+                </div>
+              \` : ''}
+              \${test.steps && test.steps.length > 0 ? \`
+                <div class="detail-section">
+                  <div class="detail-label"><span class="icon">⏱</span> Steps (\${test.steps.length})</div>
+                  <div class="steps-container">
+                    \${test.steps.map(step => \`
+                      <div class="step-row \${step.isSlowest ? 'slowest' : ''}">
+                        <span class="step-title">\${escapeHtmlUnsafe(step.title)}</span>
+                        <span class="step-duration">\${formatDurationMs(step.duration)}</span>
+                      </div>
+                    \`).join('')}
+                  </div>
+                </div>
+              \` : ''}
+              \${test.aiSuggestion ? \`
+                <div class="detail-section">
+                  <div class="detail-label"><span class="icon">🤖</span> AI Suggestion</div>
+                  <div class="ai-box">\${escapeHtmlUnsafe(test.aiSuggestion)}</div>
+                </div>
+              \` : ''}
+            </div>
+          \`;
+        }
+      }
+    }
+
+    function filterByFile(file) {
+      // Clear all filters first
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.remove('active');
+      });
+      document.querySelector('.filter-chip[data-filter="all"]')?.classList.add('active');
+
+      // Switch to tests view
+      switchView('tests');
+
+      // Filter test list items by file
+      document.querySelectorAll('.test-list-item').forEach(item => {
+        const itemFile = item.dataset.file;
+        item.style.display = (itemFile === file) ? 'flex' : 'none';
+      });
+
+      // Update active file in tree
+      document.querySelectorAll('.file-tree-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.file === file);
+      });
+    }
+
+    /* ============================================
+       SEARCH FUNCTIONALITY
+    ============================================ */
+
+    function openSearch() {
+      const modal = document.getElementById('search-modal');
+      modal.classList.add('open');
+      document.getElementById('search-modal-input').focus();
+    }
+
+    function closeSearch() {
+      const modal = document.getElementById('search-modal');
+      modal.classList.remove('open');
+      document.getElementById('search-modal-input').value = '';
+      document.getElementById('search-modal-results').innerHTML = '';
+    }
+
+    function handleSearchInput(query) {
+      const resultsContainer = document.getElementById('search-modal-results');
+      if (!query.trim()) {
+        resultsContainer.innerHTML = '';
+        return;
+      }
+
+      const lowerQuery = query.toLowerCase();
+      const matches = tests.filter(t => {
+        return t.title.toLowerCase().includes(lowerQuery) ||
+               t.file.toLowerCase().includes(lowerQuery);
+      }).slice(0, 10);
+
+      resultsContainer.innerHTML = matches.map(t => {
+        const statusClass = t.status === 'passed' ? 'passed' : t.status === 'skipped' ? 'skipped' : 'failed';
+        // Use same sanitizeId logic as TypeScript: replace all non-alphanumeric with underscore
+        const testId = String(t.testId || '').replace(/[^a-zA-Z0-9]/g, '_');
+        return \`
+          <div class="search-result-item" onclick="selectSearchResult('\${testId}')">
+            <div class="status-dot \${statusClass}"></div>
+            <div class="search-result-info">
+              <div class="search-result-title">\${escapeHtmlUnsafe(t.title)}</div>
+              <div class="search-result-file">\${escapeHtmlUnsafe(t.file)}</div>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function selectSearchResult(testId) {
+      closeSearch();
+      switchView('tests');
+      selectTest(testId);
+    }
+
+    /* ============================================
+       FILTER FUNCTIONALITY (updated for new layout)
+    ============================================ */
 
     function searchTests(query) {
       const lowerQuery = query.toLowerCase();
+
+      // Filter test list items
+      document.querySelectorAll('.test-list-item').forEach(item => {
+        const title = item.querySelector('.test-item-title')?.textContent?.toLowerCase() || '';
+        const file = item.querySelector('.test-item-file')?.textContent?.toLowerCase() || '';
+        const matches = title.includes(lowerQuery) || file.includes(lowerQuery);
+        item.style.display = matches ? 'flex' : 'none';
+      });
+
+      // Also handle old test-card format for grouped view
       document.querySelectorAll('.test-card').forEach(card => {
         const title = card.querySelector('.test-title')?.textContent?.toLowerCase() || '';
         const file = card.querySelector('.test-file')?.textContent?.toLowerCase() || '';
@@ -2462,7 +4892,6 @@ function generateScripts(
 
       // Also show/hide file groups if all tests are hidden
       document.querySelectorAll('.file-group').forEach(group => {
-        const visibleTests = group.querySelectorAll('.test-card[style="display: block"], .test-card:not([style*="display"])');
         const hasVisible = Array.from(group.querySelectorAll('.test-card')).some(
           card => card.style.display !== 'none'
         );
@@ -2470,42 +4899,282 @@ function generateScripts(
       });
     }
 
-    function filterTests(filter) {
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.filter === filter);
+    // Active filters state - organized by group
+    const activeFilters = {
+      attention: new Set(),
+      status: new Set(),
+      health: new Set(),
+      grade: new Set()
+    };
+
+    function toggleFilter(chip) {
+      const filter = chip.dataset.filter;
+      const group = chip.dataset.group;
+
+      // Toggle the filter in the appropriate group
+      if (activeFilters[group].has(filter)) {
+        activeFilters[group].delete(filter);
+        chip.classList.remove('active');
+      } else {
+        activeFilters[group].add(filter);
+        chip.classList.add('active');
+      }
+
+      applyFilters();
+    }
+
+    function clearAllFilters() {
+      activeFilters.attention.clear();
+      activeFilters.status.clear();
+      activeFilters.health.clear();
+      activeFilters.grade.clear();
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.remove('active');
+      });
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const hasAttentionFilters = activeFilters.attention.size > 0;
+      const hasStatusFilters = activeFilters.status.size > 0;
+      const hasHealthFilters = activeFilters.health.size > 0;
+      const hasGradeFilters = activeFilters.grade.size > 0;
+      const hasAnyFilter = hasAttentionFilters || hasStatusFilters || hasHealthFilters || hasGradeFilters;
+
+      // Filter test list items
+      document.querySelectorAll('.test-list-item').forEach(item => {
+        const status = item.dataset.status;
+        const isFlaky = item.dataset.flaky === 'true';
+        const isSlow = item.dataset.slow === 'true';
+        const isNew = item.dataset.new === 'true';
+        const isNewFailure = item.dataset.newFailure === 'true';
+        const isRegression = item.dataset.regression === 'true';
+        const isFixed = item.dataset.fixed === 'true';
+        const grade = item.dataset.grade;
+
+        // If no filters active, show all
+        if (!hasAnyFilter) {
+          item.style.display = 'flex';
+          return;
+        }
+
+        // Check each filter group (OR within group, AND between groups)
+        let matchesAttention = !hasAttentionFilters;
+        let matchesStatus = !hasStatusFilters;
+        let matchesHealth = !hasHealthFilters;
+        let matchesGrade = !hasGradeFilters;
+
+        // Attention group - OR logic
+        if (hasAttentionFilters) {
+          matchesAttention = 
+            (activeFilters.attention.has('new-failure') && isNewFailure) ||
+            (activeFilters.attention.has('regression') && isRegression) ||
+            (activeFilters.attention.has('fixed') && isFixed);
+        }
+
+        // Status group - OR logic
+        if (hasStatusFilters) {
+          matchesStatus = 
+            (activeFilters.status.has('passed') && status === 'passed') ||
+            (activeFilters.status.has('failed') && (status === 'failed' || status === 'timedOut')) ||
+            (activeFilters.status.has('skipped') && status === 'skipped');
+        }
+
+        // Health group - OR logic
+        if (hasHealthFilters) {
+          matchesHealth = 
+            (activeFilters.health.has('flaky') && isFlaky) ||
+            (activeFilters.health.has('slow') && isSlow) ||
+            (activeFilters.health.has('new') && isNew);
+        }
+
+        // Grade group - OR logic
+        if (hasGradeFilters) {
+          matchesGrade = 
+            (activeFilters.grade.has('grade-a') && grade === 'A') ||
+            (activeFilters.grade.has('grade-b') && grade === 'B') ||
+            (activeFilters.grade.has('grade-c') && grade === 'C') ||
+            (activeFilters.grade.has('grade-d') && grade === 'D') ||
+            (activeFilters.grade.has('grade-f') && grade === 'F');
+        }
+
+        // AND between groups
+        const show = matchesAttention && matchesStatus && matchesHealth && matchesGrade;
+        item.style.display = show ? 'flex' : 'none';
       });
 
+      // Also filter test-cards in hidden container and file groups
       document.querySelectorAll('.test-card').forEach(card => {
         const status = card.dataset.status;
         const isFlaky = card.dataset.flaky === 'true';
         const isSlow = card.dataset.slow === 'true';
         const isNew = card.dataset.new === 'true';
+        const isNewFailure = card.dataset.newFailure === 'true';
+        const isRegression = card.dataset.regression === 'true';
+        const isFixed = card.dataset.fixed === 'true';
         const grade = card.dataset.grade;
 
-        let show = filter === 'all' ||
-          (filter === 'passed' && status === 'passed') ||
-          (filter === 'failed' && (status === 'failed' || status === 'timedOut')) ||
-          (filter === 'skipped' && status === 'skipped') ||
-          (filter === 'flaky' && isFlaky) ||
-          (filter === 'slow' && isSlow) ||
-          (filter === 'new' && isNew) ||
-          (filter === 'grade-a' && grade === 'A') ||
-          (filter === 'grade-b' && grade === 'B') ||
-          (filter === 'grade-c' && grade === 'C') ||
-          (filter === 'grade-d' && grade === 'D') ||
-          (filter === 'grade-f' && grade === 'F');
+        if (!hasAnyFilter) {
+          card.style.display = 'block';
+          return;
+        }
 
+        let matchesAttention = !hasAttentionFilters;
+        let matchesStatus = !hasStatusFilters;
+        let matchesHealth = !hasHealthFilters;
+        let matchesGrade = !hasGradeFilters;
+
+        if (hasAttentionFilters) {
+          matchesAttention = 
+            (activeFilters.attention.has('new-failure') && isNewFailure) ||
+            (activeFilters.attention.has('regression') && isRegression) ||
+            (activeFilters.attention.has('fixed') && isFixed);
+        }
+
+        if (hasStatusFilters) {
+          matchesStatus = 
+            (activeFilters.status.has('passed') && status === 'passed') ||
+            (activeFilters.status.has('failed') && (status === 'failed' || status === 'timedOut')) ||
+            (activeFilters.status.has('skipped') && status === 'skipped');
+        }
+
+        if (hasHealthFilters) {
+          matchesHealth = 
+            (activeFilters.health.has('flaky') && isFlaky) ||
+            (activeFilters.health.has('slow') && isSlow) ||
+            (activeFilters.health.has('new') && isNew);
+        }
+
+        if (hasGradeFilters) {
+          matchesGrade = 
+            (activeFilters.grade.has('grade-a') && grade === 'A') ||
+            (activeFilters.grade.has('grade-b') && grade === 'B') ||
+            (activeFilters.grade.has('grade-c') && grade === 'C') ||
+            (activeFilters.grade.has('grade-d') && grade === 'D') ||
+            (activeFilters.grade.has('grade-f') && grade === 'F');
+        }
+
+        const show = matchesAttention && matchesStatus && matchesHealth && matchesGrade;
         card.style.display = show ? 'block' : 'none';
       });
 
       // Update group visibility
       document.querySelectorAll('.file-group').forEach(group => {
-        const hasVisible = Array.from(group.querySelectorAll('.test-card')).some(
-          card => card.style.display !== 'none'
+        const hasVisible = Array.from(group.querySelectorAll('.test-list-item, .test-card')).some(
+          el => el.style.display !== 'none'
         );
         group.style.display = hasVisible ? 'block' : 'none';
       });
+
+      // Clear file tree selection
+      document.querySelectorAll('.file-tree-item').forEach(item => {
+        item.classList.remove('active');
+      });
     }
+
+    // Legacy single-filter function for backward compatibility
+    function filterTests(filter) {
+      clearAllFilters();
+      if (filter !== 'all') {
+        const chip = document.querySelector('.filter-chip[data-filter="' + filter + '"]');
+        if (chip) toggleFilter(chip);
+      }
+    }
+
+    /* ============================================
+       KEYBOARD SHORTCUTS
+    ============================================ */
+
+    document.addEventListener('keydown', (e) => {
+      // Ignore if typing in input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        if (e.key === 'Escape') {
+          closeSearch();
+        }
+        return;
+      }
+
+      // Command/Ctrl + K for search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        openSearch();
+        return;
+      }
+
+      // Command/Ctrl + B for sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      }
+
+      // Escape to close search
+      if (e.key === 'Escape') {
+        closeSearch();
+      }
+
+      // Arrow navigation in test list
+      if (currentView === 'tests') {
+        const items = Array.from(document.querySelectorAll('.test-list-item:not([style*="display: none"])'));
+        const selectedItem = document.querySelector('.test-list-item.selected');
+        let currentIndex = selectedItem ? items.indexOf(selectedItem) : -1;
+
+        if (e.key === 'ArrowDown' || e.key === 'j') {
+          e.preventDefault();
+          currentIndex = Math.min(currentIndex + 1, items.length - 1);
+          if (items[currentIndex]) {
+            const testId = items[currentIndex].id.replace('list-item-', '');
+            selectTest(testId);
+            items[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        } else if (e.key === 'ArrowUp' || e.key === 'k') {
+          e.preventDefault();
+          currentIndex = Math.max(currentIndex - 1, 0);
+          if (items[currentIndex]) {
+            const testId = items[currentIndex].id.replace('list-item-', '');
+            selectTest(testId);
+            items[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }
+      }
+
+      // Old keyboard nav for test cards
+      const cards = Array.from(document.querySelectorAll('.test-card:not([style*="display: none"])'));
+      const focused = document.querySelector('.test-card.keyboard-focus');
+      let currentIndex = focused ? cards.indexOf(focused) : -1;
+
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        if (cards.length > 0 && !document.querySelector('.test-list-item.selected')) {
+          e.preventDefault();
+          if (focused) focused.classList.remove('keyboard-focus');
+          currentIndex = Math.min(currentIndex + 1, cards.length - 1);
+          if (cards[currentIndex]) {
+            cards[currentIndex].classList.add('keyboard-focus');
+            cards[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        if (cards.length > 0 && !document.querySelector('.test-list-item.selected')) {
+          e.preventDefault();
+          if (focused) focused.classList.remove('keyboard-focus');
+          currentIndex = Math.max(currentIndex - 1, 0);
+          if (cards[currentIndex]) {
+            cards[currentIndex].classList.add('keyboard-focus');
+            cards[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }
+      } else if (e.key === 'Enter' && focused) {
+        e.preventDefault();
+        const header = focused.querySelector('.test-card-header');
+        if (header) header.click();
+      } else if (e.key === 'Escape' && focused) {
+        focused.classList.remove('keyboard-focus');
+      }
+    });
+
+    /* ============================================
+       EXISTING FUNCTIONS (preserved)
+    ============================================ */
 
     function toggleDetails(id) {
       const card = document.getElementById('card-' + id);
@@ -2541,39 +5210,6 @@ function generateScripts(
         setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
       });
     }
-
-    // Keyboard navigation
-    document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
-
-      const cards = Array.from(document.querySelectorAll('.test-card:not([style*="display: none"])'));
-      const focused = document.querySelector('.test-card.keyboard-focus');
-      let currentIndex = focused ? cards.indexOf(focused) : -1;
-
-      if (e.key === 'ArrowDown' || e.key === 'j') {
-        e.preventDefault();
-        if (focused) focused.classList.remove('keyboard-focus');
-        currentIndex = Math.min(currentIndex + 1, cards.length - 1);
-        if (cards[currentIndex]) {
-          cards[currentIndex].classList.add('keyboard-focus');
-          cards[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }
-      } else if (e.key === 'ArrowUp' || e.key === 'k') {
-        e.preventDefault();
-        if (focused) focused.classList.remove('keyboard-focus');
-        currentIndex = Math.max(currentIndex - 1, 0);
-        if (cards[currentIndex]) {
-          cards[currentIndex].classList.add('keyboard-focus');
-          cards[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }
-      } else if (e.key === 'Enter' && focused) {
-        e.preventDefault();
-        const header = focused.querySelector('.test-card-header');
-        if (header) header.click();
-      } else if (e.key === 'Escape' && focused) {
-        focused.classList.remove('keyboard-focus');
-      }
-    });
 
     function exportJSON() {
       const data = {
@@ -2853,12 +5489,12 @@ function generateScripts(
     // Run on page load
     window.addEventListener('DOMContentLoaded', () => {
       scrollChartsToRight();
+      initHistoryDrilldown();
       if (!traceViewerEnabled) {
         document.querySelectorAll('[data-trace]').forEach(el => {
           el.style.display = 'none';
         });
       }
-      initHistoryDrilldown();
     });
 
     function viewTraceFromEl(el) {

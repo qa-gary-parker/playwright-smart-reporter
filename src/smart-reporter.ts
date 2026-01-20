@@ -413,6 +413,7 @@ class SmartReporter implements Reporter {
 	      options: this.options,
 	      comparison,
 	      historyRunSnapshots,
+	      failureClusters,
 	    };
 
     // Generate and save HTML report

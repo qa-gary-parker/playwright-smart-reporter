@@ -178,8 +178,6 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
             const suffix = tracePaths.length > 1 ? ` #${idx + 1}` : '';
             const safeTrace = escapeHtml(trace);
             const fileName = escapeHtml(trace.split(/[\\\\/]/).pop() || trace);
-            const cmdId = `trace-cmd-${cardId}-${idx}`;
-            const cmd = `npx playwright-smart-reporter-view-trace "${trace.replace(/"/g, '\\"')}" --dir "."`;
 
             return `
               <div class="trace-row">
@@ -255,9 +253,18 @@ function formatHistoryTimestamp(timestamp: string): string {
 }
 
 /**
- * Generate grouped tests by file
+ * Attention sets for highlighting tests requiring attention
  */
-export function generateGroupedTests(results: TestResultData[], showTraceSection: boolean): string {
+export interface AttentionSets {
+  newFailures: Set<string>;
+  regressions: Set<string>;
+  fixed: Set<string>;
+}
+
+/**
+ * Generate grouped tests by file - uses list items for selection behavior
+ */
+export function generateGroupedTests(results: TestResultData[], showTraceSection: boolean, attention: AttentionSets = { newFailures: new Set(), regressions: new Set(), fixed: new Set() }): string {
   // Group tests by file
   const groups = new Map<string, TestResultData[]>();
   for (const test of results) {
@@ -273,6 +280,62 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
     const failed = tests.filter(t => t.status === 'failed' || t.status === 'timedOut').length;
     const groupId = sanitizeId(file);
 
+    // Generate list items (not full cards) so clicking selects and shows in detail panel
+    const testListItems = tests.map(test => {
+      const cardId = sanitizeId(test.testId);
+      const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
+      const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
+      const isSlow = test.performanceTrend?.startsWith('↑') || false;
+      const isNew = test.flakinessIndicator?.includes('New') || false;
+      
+      // Attention states from comparison
+      const isNewFailure = attention.newFailures.has(test.testId);
+      const isRegression = attention.regressions.has(test.testId);
+      const isFixed = attention.fixed.has(test.testId);
+      
+      // Determine stability badge
+      let stabilityBadge = '';
+      if (test.stabilityScore) {
+        const grade = test.stabilityScore.grade;
+        const score = test.stabilityScore.overall;
+        const gradeClass = score >= 90 ? 'grade-a' : score >= 80 ? 'grade-b' : score >= 70 ? 'grade-c' : score >= 60 ? 'grade-d' : 'grade-f';
+        stabilityBadge = `<span class="stability-badge ${gradeClass}">${grade}</span>`;
+      }
+
+      return `
+        <div class="test-list-item ${statusClass}" 
+             id="list-item-${cardId}"
+             data-testid="${escapeHtml(test.testId)}"
+             data-status="${test.status}"
+             data-flaky="${isFlaky}"
+             data-slow="${isSlow}"
+             data-new="${isNew}"
+             data-new-failure="${isNewFailure}"
+             data-regression="${isRegression}"
+             data-fixed="${isFixed}"
+             data-file="${escapeHtml(test.file)}"
+             data-grade="${test.stabilityScore?.grade || ''}"
+             onclick="selectTest('${cardId}')">
+          <div class="test-item-status">
+            <div class="status-dot ${statusClass}"></div>
+          </div>
+          <div class="test-item-info">
+            <div class="test-item-title">${escapeHtml(test.title)}</div>
+          </div>
+          <div class="test-item-meta">
+            ${isNewFailure ? '<span class="test-item-badge new-failure">New Failure</span>' : ''}
+            ${isRegression ? '<span class="test-item-badge regression">Regression</span>' : ''}
+            ${isFixed ? '<span class="test-item-badge fixed">Fixed</span>' : ''}
+            ${stabilityBadge}
+            <span class="test-item-duration">${formatDuration(test.duration)}</span>
+            ${isFlaky ? '<span class="test-item-badge flaky">Flaky</span>' : ''}
+            ${isSlow ? '<span class="test-item-badge slow">Slow</span>' : ''}
+            ${isNew ? '<span class="test-item-badge new">New</span>' : ''}
+          </div>
+        </div>
+      `;
+    }).join('\n');
+
     return `
     <div id="group-${groupId}" class="file-group">
       <div class="file-group-header" onclick="toggleGroup('${groupId}')">
@@ -284,7 +347,7 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
         </div>
       </div>
       <div class="file-group-content">
-        ${tests.map(test => generateTestCard(test, showTraceSection)).join('\n')}
+        ${testListItems}
       </div>
     </div>
   `;
