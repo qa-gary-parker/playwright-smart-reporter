@@ -114,11 +114,11 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
 	            <div class="history-label">Duration Trend</div>
 	            <div class="duration-chart">
 	              ${test.history.map((h, i) => {
-                const height = maxDuration > 0 ? Math.max(4, (h.duration / maxDuration) * 28) : 4;
+                const height = maxDuration > 0 ? Math.max(4, (h.duration / maxDuration) * 28).toFixed(1) : '4';
                 const runIdAttr = h.runId ? ` data-runid="${escapeHtml(h.runId)}"` : '';
                 return `<div class="duration-bar history-duration"${runIdAttr} style="height: ${height}px" title="Run ${i + 1}: ${formatDuration(h.duration)}"></div>`;
               }).join('')}
-              <div class="duration-bar current ${currentTrendClass}" style="height: ${maxDuration > 0 ? Math.max(4, (test.duration / maxDuration) * 28) : 4}px" title="Current: ${formatDuration(test.duration)}"></div>
+              <div class="duration-bar current ${currentTrendClass}" style="height: ${maxDuration > 0 ? Math.max(4, (test.duration / maxDuration) * 28).toFixed(1) : '4'}px" title="Current: ${formatDuration(test.duration)}"></div>
             </div>
             <div class="history-stats">
               <span class="history-stat">Avg: <span data-role="avg-duration">${formatDuration(avgDuration)}</span></span>
@@ -143,7 +143,7 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
             <div class="step-row ${step.isSlowest ? 'slowest' : ''}">
               <span class="step-title" title="${escapeHtml(step.title)}">${escapeHtml(step.title)}</span>
               <div class="step-bar-container">
-                <div class="step-bar" style="width: ${maxDuration > 0 ? (step.duration / maxDuration) * 100 : 0}%"></div>
+                <div class="step-bar" style="width: ${maxDuration > 0 ? ((step.duration / maxDuration) * 100).toFixed(1) : '0'}%"></div>
               </div>
               <span class="step-duration">${formatDuration(step.duration)}</span>
               ${step.isSlowest ? '<span class="slowest-badge">Slowest</span>' : ''}

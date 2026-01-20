@@ -180,15 +180,28 @@ function generateOverviewContent(
         <span class="section-title">Failure Clusters</span>
       </div>
       <div class="failure-clusters-grid">
-        ${failureClusters.slice(0, 5).map(cluster => `
+        ${failureClusters.slice(0, 5).map(cluster => {
+          const firstError = cluster.tests[0]?.error || '';
+          const errorPreview = firstError.split('\n')[0].slice(0, 100) + (firstError.length > 100 ? '...' : '');
+          const affectedFiles = [...new Set(cluster.tests.map(t => t.file))];
+          return `
           <div class="cluster-card" onclick="filterTests('failed'); switchView('tests');">
-            <div class="cluster-icon">⚠</div>
-            <div class="cluster-content">
+            <div class="cluster-header">
+              <div class="cluster-icon">⚠️</div>
               <div class="cluster-type">${escapeHtml(cluster.errorType)}</div>
               <div class="cluster-count">${cluster.count} test${cluster.count > 1 ? 's' : ''}</div>
             </div>
+            ${errorPreview ? `<div class="cluster-error">${escapeHtml(errorPreview)}</div>` : ''}
+            <div class="cluster-tests">
+              ${cluster.tests.slice(0, 3).map(t => `<span class="cluster-test-name">${escapeHtml(t.title)}</span>`).join('')}
+              ${cluster.tests.length > 3 ? `<span class="cluster-more">+${cluster.tests.length - 3} more</span>` : ''}
+            </div>
+            <div class="cluster-files">
+              ${affectedFiles.slice(0, 2).map(f => `<span class="cluster-file">${escapeHtml(f)}</span>`).join('')}
+              ${affectedFiles.length > 2 ? `<span class="cluster-more">+${affectedFiles.length - 2} files</span>` : ''}
+            </div>
           </div>
-        `).join('')}
+        `}).join('')}
       </div>
     </div>
   ` : '';
@@ -280,24 +293,24 @@ function generateOverviewContent(
 
       <div class="hero-stat-card mini-comparison">
         <div class="mini-bars">
-          <div class="mini-bar-row">
+          <div class="mini-bar-row clickable" onclick="filterByStatus('passed')" title="View passed tests" role="button" tabindex="0">
             <span class="mini-bar-label">Passed</span>
             <div class="mini-bar-track">
-              <div class="mini-bar passed" style="width: ${(passed / Math.max(total, 1)) * 100}%"></div>
+              <div class="mini-bar passed" style="width: ${((passed / Math.max(total, 1)) * 100).toFixed(1)}%"></div>
             </div>
             <span class="mini-bar-value">${passed}</span>
           </div>
-          <div class="mini-bar-row">
+          <div class="mini-bar-row clickable" onclick="filterByStatus('failed')" title="View failed tests" role="button" tabindex="0">
             <span class="mini-bar-label">Failed</span>
             <div class="mini-bar-track">
-              <div class="mini-bar failed" style="width: ${(failed / Math.max(total, 1)) * 100}%"></div>
+              <div class="mini-bar failed" style="width: ${((failed / Math.max(total, 1)) * 100).toFixed(1)}%"></div>
             </div>
             <span class="mini-bar-value">${failed}</span>
           </div>
-          <div class="mini-bar-row">
+          <div class="mini-bar-row clickable" onclick="filterByStatus('skipped')" title="View skipped tests" role="button" tabindex="0">
             <span class="mini-bar-label">Skipped</span>
             <div class="mini-bar-track">
-              <div class="mini-bar skipped" style="width: ${(skipped / Math.max(total, 1)) * 100}%"></div>
+              <div class="mini-bar skipped" style="width: ${((skipped / Math.max(total, 1)) * 100).toFixed(1)}%"></div>
             </div>
             <span class="mini-bar-value">${skipped}</span>
           </div>
@@ -336,7 +349,7 @@ function generateOverviewContent(
             </div>
           </div>
         ` : ''}
-        <div class="insight-card">
+        <div class="insight-card clickable" onclick="switchView('tests')" title="View all tests">
           <div class="insight-icon">📊</div>
           <div class="insight-content">
             <div class="insight-label">Test Distribution</div>
@@ -347,7 +360,7 @@ function generateOverviewContent(
             </div>
           </div>
         </div>
-        <div class="insight-card">
+        <div class="insight-card clickable" onclick="switchView('trends')" title="View trends">
           <div class="insight-icon">📈</div>
           <div class="insight-content">
             <div class="insight-label">Pass Rate Trend</div>
@@ -538,12 +551,12 @@ ${generateStyles(passRate, cspSafe)}
     <aside class="sidebar" id="sidebar">
       <!-- Progress Ring -->
       <div class="sidebar-progress">
-        <div class="progress-ring-container">
+        <div class="progress-ring-container clickable" onclick="switchView('tests')" title="View all tests" role="button" tabindex="0">
           <svg class="progress-ring" width="80" height="80">
             <circle class="progress-ring-bg" cx="40" cy="40" r="34"/>
-            <circle class="progress-ring-fill" cx="40" cy="40" r="34" 
-                    stroke-dasharray="213.6" 
-                    stroke-dashoffset="${213.6 - (213.6 * passRate) / 100}"/>
+            <circle class="progress-ring-fill" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.6"
+                    stroke-dashoffset="${(213.6 - (213.6 * passRate) / 100).toFixed(1)}"/>
           </svg>
           <div class="progress-ring-value">${passRate}%</div>
         </div>
@@ -932,6 +945,14 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    button {
+      background: none;
+      border: none;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+
     body {
       font-family: ${primaryFont};
       background: var(--bg-primary);
@@ -953,6 +974,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       grid-template-rows: var(--topbar-height) 1fr;
       height: 100vh;
       overflow: hidden;
+      transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .app-shell.sidebar-collapsed {
@@ -961,6 +983,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .app-shell.sidebar-collapsed .sidebar {
       transform: translateX(-100%);
+      opacity: 0;
     }
 
     /* ============================================
@@ -1149,7 +1172,12 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-right: 1px solid var(--border-subtle);
       overflow-y: auto;
       overflow-x: hidden;
-      transition: transform 0.2s ease;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    }
+
+    /* Hidden by default on desktop */
+    .sidebar-overlay {
+      display: none;
     }
 
     .sidebar-progress {
@@ -1163,6 +1191,16 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       width: 80px;
       height: 80px;
       margin: 0 auto;
+    }
+
+    .progress-ring-container.clickable {
+      cursor: pointer;
+      transition: transform 0.2s, filter 0.2s;
+    }
+
+    .progress-ring-container.clickable:hover {
+      transform: scale(1.05);
+      filter: brightness(1.1);
     }
 
     .progress-ring {
@@ -1218,13 +1256,15 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       align-items: center;
       padding: 0.5rem;
       background: var(--bg-card);
-      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .mini-stat:hover {
       background: var(--bg-card-hover);
+      border-color: var(--border-glow);
       transform: translateY(-1px);
     }
 
@@ -1249,16 +1289,24 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-bottom: 1px solid var(--border-subtle);
     }
 
+    .sidebar-nav [role="tablist"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
     .nav-section-title {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 0.5rem;
       font-size: 0.65rem;
       font-weight: 600;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.1em;
       padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
     }
 
     .clear-filters-btn {
@@ -1280,9 +1328,12 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .nav-item {
+      position: relative;
       display: flex;
+      flex-direction: row;
       align-items: center;
       gap: 0.75rem;
+      width: 100%;
       padding: 0.6rem 0.75rem;
       border-radius: 8px;
       color: var(--text-secondary);
@@ -1290,6 +1341,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       cursor: pointer;
       transition: all 0.2s;
       font-size: 0.85rem;
+      text-align: left;
     }
 
     .nav-item:hover {
@@ -1299,12 +1351,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .nav-item.active {
       background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: inset 3px 0 0 var(--accent-green);
+      color: var(--accent-green);
+      border-left: 3px solid var(--accent-green);
+      padding-left: calc(0.75rem - 3px);
     }
 
-    .nav-icon { font-size: 1rem; }
-    .nav-label { flex: 1; }
+    .nav-icon { font-size: 1rem; flex-shrink: 0; }
+    .nav-label { flex: 1; font-weight: 500; white-space: nowrap; }
     .nav-badge {
       font-family: ${monoFont};
       font-size: 0.7rem;
@@ -1340,9 +1393,9 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .filter-chip {
       font-family: ${monoFont};
-      font-size: 0.7rem;
-      padding: 0.3rem 0.5rem;
-      border-radius: 6px;
+      font-size: 0.65rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 20px;
       border: 1px solid var(--border-subtle);
       background: transparent;
       color: var(--text-muted);
@@ -1357,9 +1410,9 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .filter-chip.active {
-      background: var(--text-primary);
-      color: var(--bg-primary);
-      border-color: var(--text-primary);
+      background: var(--bg-card);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
     }
 
     .grade-chips .filter-chip {
@@ -1556,11 +1609,17 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       background: var(--bg-secondary);
     }
 
+    .stat-card.large.passed { border-left: 3px solid var(--accent-green); }
     .stat-card.large.passed .stat-icon { background: rgba(0, 255, 136, 0.1); color: var(--accent-green); }
+    .stat-card.large.failed { border-left: 3px solid var(--accent-red); }
     .stat-card.large.failed .stat-icon { background: rgba(255, 68, 102, 0.1); color: var(--accent-red); }
+    .stat-card.large.skipped { border-left: 3px solid var(--text-muted); }
     .stat-card.large.skipped .stat-icon { background: rgba(90, 90, 112, 0.1); color: var(--text-muted); }
+    .stat-card.large.flaky { border-left: 3px solid var(--accent-yellow); }
     .stat-card.large.flaky .stat-icon { background: rgba(255, 204, 0, 0.1); color: var(--accent-yellow); }
+    .stat-card.large.slow { border-left: 3px solid var(--accent-orange); }
     .stat-card.large.slow .stat-icon { background: rgba(255, 136, 68, 0.1); color: var(--accent-orange); }
+    .stat-card.large.duration { border-left: 3px solid var(--accent-blue); }
     .stat-card.large.duration .stat-icon { background: rgba(0, 170, 255, 0.1); color: var(--accent-blue); }
 
     .stat-content { flex: 1; }
@@ -1743,6 +1802,18 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       gap: 0.5rem;
     }
 
+    .mini-bar-row.clickable {
+      cursor: pointer;
+      padding: 0.35rem 0.5rem;
+      margin: -0.35rem -0.5rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .mini-bar-row.clickable:hover {
+      background: var(--bg-card-hover);
+    }
+
     .mini-bar-label {
       font-size: 0.7rem;
       color: var(--text-muted);
@@ -1862,49 +1933,100 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     ============================================ */
     .failure-clusters-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
     }
 
     .cluster-card {
       display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem 1rem;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem;
       background: var(--bg-card);
       border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent-red);
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .cluster-card:hover {
-      background: var(--bg-secondary);
-      border-color: var(--accent-red);
+      background: var(--bg-card-hover);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .cluster-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     .cluster-icon {
-      font-size: 1.2rem;
-      color: var(--accent-red);
-    }
-
-    .cluster-content {
-      flex: 1;
-      min-width: 0;
+      font-size: 1rem;
     }
 
     .cluster-type {
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--text-secondary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent-red);
+      flex: 1;
     }
 
     .cluster-count {
       font-size: 0.7rem;
       color: var(--text-muted);
+      background: var(--bg-secondary);
+      padding: 0.15rem 0.5rem;
+      border-radius: 10px;
+    }
+
+    .cluster-error {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cluster-tests {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .cluster-test-name {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 150px;
+    }
+
+    .cluster-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.25rem;
+    }
+
+    .cluster-file {
+      font-family: ${monoFont};
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    .cluster-more {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      font-style: italic;
     }
 
     /* ============================================
@@ -2056,24 +2178,26 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
     .tab-btn {
       font-size: 0.75rem;
-      padding: 0.4rem 0.75rem;
-      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
       border: 1px solid transparent;
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
       transition: all 0.2s;
       font-family: inherit;
+      font-weight: 500;
     }
 
     .tab-btn:hover {
-      background: var(--bg-secondary);
+      background: var(--bg-card);
       color: var(--text-secondary);
     }
 
     .tab-btn.active {
-      background: var(--text-primary);
-      color: var(--bg-primary);
+      background: var(--bg-card);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
     }
 
     .test-list-search {
@@ -3305,6 +3429,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       border-radius: 12px;
       overflow: hidden;
       transition: all 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
     /* Allow history tooltips to escape the card when expanded */
@@ -3312,11 +3437,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       overflow: visible;
       position: relative;
       z-index: 1;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .test-card:hover {
       border-color: var(--border-glow);
       background: var(--bg-card-hover);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
 
     .test-card.keyboard-focus {
@@ -3347,34 +3474,21 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       height: 10px;
       border-radius: 50%;
       flex-shrink: 0;
-      animation: pulse 2s infinite;
     }
 
     .status-indicator.passed {
       background: var(--accent-green);
-      box-shadow: 0 0 12px var(--accent-green);
+      box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
     }
 
     .status-indicator.failed {
       background: var(--accent-red);
-      box-shadow: 0 0 12px var(--accent-red);
-      animation: pulse-red 1.5s infinite;
+      box-shadow: 0 0 8px rgba(255, 68, 102, 0.5);
     }
 
     .status-indicator.skipped {
       background: var(--text-muted);
       box-shadow: none;
-      animation: none;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
-
-    @keyframes pulse-red {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.8; transform: scale(1.1); }
     }
 
     .test-info { min-width: 0; flex: 1; }
@@ -4854,47 +4968,32 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     /* ============================================
-       MOBILE RESPONSIVE - SIDEBAR OVERLAY
+       MOBILE RESPONSIVE - PERSISTENT SIDEBAR
     ============================================ */
     @media (max-width: 768px) {
+      :root {
+        --sidebar-width: 200px;
+      }
+
       .app-shell {
-        grid-template-columns: 1fr;
+        grid-template-columns: var(--sidebar-width) 1fr;
+      }
+
+      .app-shell.sidebar-collapsed {
+        grid-template-columns: 0 1fr;
+      }
+
+      .app-shell.sidebar-collapsed .sidebar {
+        transform: translateX(-100%);
       }
 
       .sidebar {
-        position: fixed;
-        left: 0;
-        top: var(--topbar-height);
-        bottom: 0;
-        width: 280px;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-        z-index: 100;
-        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+        width: var(--sidebar-width);
       }
 
-      .sidebar.open {
-        transform: translateX(0);
-      }
-
+      /* Hide overlay on mobile - sidebar is persistent */
       .sidebar-overlay {
-        position: fixed;
-        inset: 0;
-        top: var(--topbar-height);
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 99;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
-      }
-
-      .sidebar-overlay.show {
-        opacity: 1;
-        visibility: visible;
-      }
-
-      .main-panel {
-        grid-column: 1;
+        display: none;
       }
 
       .top-bar-left .breadcrumbs {
@@ -4907,6 +5006,52 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
 
       .filter-chips {
         flex-wrap: wrap;
+      }
+
+      /* Compact sidebar elements */
+      .sidebar-progress {
+        padding: 0.75rem;
+      }
+
+      .progress-ring-container {
+        width: 60px;
+        height: 60px;
+      }
+
+      .progress-ring {
+        width: 60px;
+        height: 60px;
+      }
+
+      .progress-ring circle {
+        cx: 30;
+        cy: 30;
+        r: 25;
+      }
+
+      .progress-ring-value {
+        font-size: 0.9rem;
+      }
+
+      .nav-item {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.8rem;
+      }
+
+      .nav-icon {
+        font-size: 0.9rem;
+      }
+
+      .mini-stat {
+        padding: 0.4rem;
+      }
+
+      .mini-stat-value {
+        font-size: 0.85rem;
+      }
+
+      .mini-stat-label {
+        font-size: 0.55rem;
       }
     }
 
@@ -5088,21 +5233,12 @@ function generateScripts(
 
     function toggleSidebar() {
       const appShell = document.querySelector('.app-shell');
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebarOverlay');
       const toggleBtn = document.querySelector('.sidebar-toggle');
 
-      // Check if mobile (overlay mode)
-      if (window.innerWidth <= 768) {
-        sidebar.classList.toggle('open');
-        overlay.classList.toggle('show');
-        const isOpen = sidebar.classList.contains('open');
-        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      } else {
-        appShell.classList.toggle('sidebar-collapsed');
-        const isExpanded = !appShell.classList.contains('sidebar-collapsed');
-        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
-      }
+      // Same collapse behavior for all screen sizes
+      appShell.classList.toggle('sidebar-collapsed');
+      const isExpanded = !appShell.classList.contains('sidebar-collapsed');
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
     }
 
     function switchView(view) {
@@ -5408,6 +5544,27 @@ function generateScripts(
       document.querySelectorAll('.file-tree-item').forEach(item => {
         item.classList.toggle('active', item.dataset.file === file);
       });
+    }
+
+    function filterByStatus(status) {
+      // Switch to tests view first
+      switchView('tests');
+
+      // Clear all filters and activate the matching status filter
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.remove('active');
+        chip.setAttribute('aria-pressed', 'false');
+      });
+
+      // Find and activate the matching status filter chip
+      const statusChip = document.querySelector('.filter-chip[data-filter="' + status + '"]');
+      if (statusChip) {
+        statusChip.classList.add('active');
+        statusChip.setAttribute('aria-pressed', 'true');
+      }
+
+      // Apply filter to test cards and list items
+      applyFilters();
     }
 
     /* ============================================

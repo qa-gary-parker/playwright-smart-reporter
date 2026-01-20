@@ -84,19 +84,19 @@ export function generateTrendChart(data: ChartData): string {
     const yTicks = 5;
     const yGridLines = Array.from({ length: yTicks + 1 }, (_, i) => {
       const value = Math.round((maxValue / yTicks) * i);
-      const y = padding.top + plotHeight - (i / yTicks) * plotHeight;
+      const y = (padding.top + plotHeight - (i / yTicks) * plotHeight).toFixed(1);
       return `
         <line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" stroke="var(--border-subtle)" stroke-width="1" opacity="0.2"/>
-        <text x="${padding.left - 8}" y="${y + 4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${value}</text>
+        <text x="${padding.left - 8}" y="${(parseFloat(y) + 4).toFixed(1)}" fill="var(--text-muted)" font-size="10" text-anchor="end">${value}</text>
       `;
     }).join('');
 
     // Generate bars with tooltips
     const bars = chartData.map((d, i) => {
       const value = getValue(d);
-      const x = padding.left + i * spacing + (spacing - barWidth) / 2;
-      const barHeight = (value / maxValue) * plotHeight;
-      const y = padding.top + plotHeight - barHeight;
+      const x = (padding.left + i * spacing + (spacing - barWidth) / 2).toFixed(1);
+      const barHeight = ((value / maxValue) * plotHeight).toFixed(1);
+      const y = (padding.top + plotHeight - parseFloat(barHeight)).toFixed(1);
       const label = i === chartData.length - 1 ? 'Current' : formatShortDate(d.timestamp);
       const isCurrent = i === chartData.length - 1;
       const displayValue = formatValue ? formatValue(value) : value.toString();
@@ -108,7 +108,7 @@ export function generateTrendChart(data: ChartData): string {
           <rect
             x="${x}"
             y="${y}"
-            width="${barWidth}"
+            width="${barWidth.toFixed(1)}"
             height="${barHeight}"
             fill="${color}"
             opacity="${isCurrent ? '1' : '0.85'}"
@@ -125,7 +125,7 @@ export function generateTrendChart(data: ChartData): string {
     // Generate x-axis labels
     const xLabels = chartData.map((d, i) => {
       if (chartData.length > 10 && i % 2 !== 0 && i !== chartData.length - 1) return '';
-      const x = padding.left + i * spacing + spacing / 2;
+      const x = (padding.left + i * spacing + spacing / 2).toFixed(1);
       const label = i === chartData.length - 1 ? 'Now' : formatShortDate(d.timestamp);
       return `<text x="${x}" y="${chartHeight - 8}" fill="var(--text-muted)" font-size="9" text-anchor="middle">${label}</text>`;
     }).join('');

@@ -32,8 +32,8 @@ export class PerformanceAnalyzer {
       return;
     }
 
-    // Calculate average duration from history
-    const avgDuration = relevantHistory.reduce((sum, e) => sum + e.duration, 0) / relevantHistory.length;
+    // Calculate average duration from history (rounded to whole ms)
+    const avgDuration = Math.round(relevantHistory.reduce((sum, e) => sum + e.duration, 0) / relevantHistory.length);
     test.averageDuration = avgDuration;
 
     // Calculate performance trend
@@ -62,8 +62,8 @@ export class PerformanceAnalyzer {
    * Calculate detailed performance metrics
    */
   private calculateMetrics(current: number, average: number): PerformanceMetrics {
-    const percentChange = ((current - average) / average) * 100;
-    const absoluteChange = current - average;
+    const percentChange = Math.round(((current - average) / average) * 1000) / 10; // 1 decimal place
+    const absoluteChange = Math.round(current - average); // whole ms
     const isRegression = percentChange > this.performanceThreshold * 100;
     const isImprovement = percentChange < -this.performanceThreshold * 100;
 

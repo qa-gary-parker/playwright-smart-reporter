@@ -31,7 +31,7 @@ export class FlakinessAnalyzer {
     }
 
     const failures = relevantHistory.filter(e => !e.passed).length;
-    const flakinessScore = failures / relevantHistory.length;
+    const flakinessScore = Math.round((failures / relevantHistory.length) * 100) / 100; // 2 decimal places
 
     test.flakinessScore = flakinessScore;
     test.flakinessIndicator = this.getFlakinessIndicator(flakinessScore);
