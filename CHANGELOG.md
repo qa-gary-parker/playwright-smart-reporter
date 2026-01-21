@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-01-21
+
+### Fixed
+
+- **Timed Out Tests Now Counted as Failed** ([#12](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/12))
+  - Tests with `timedOut` status are now correctly counted as failed in summary stats
+  - Comparison detection for new failures and fixed tests now includes timedOut status
+  - Previously, timedOut tests showed as 0 failed in stats
+
+## [1.0.2] - 2026-01-21
+
+### Added
+
+- **Network Logs**: Zero-config extraction of network requests from Playwright trace files
+  - View HTTP method, URL, status code, duration, and payload sizes
+  - Expandable entries show headers, request body, and timing breakdown
+  - Configurable via `enableNetworkLogs`, `networkLogExcludeAssets`, `networkLogMaxEntries`
+- **Tag-Based Filtering**: Filter tests by tags like `@smoke`, `@critical`
+  - Tags extracted from test annotations and test titles
+  - Tags displayed as badges on test cards
+- **Suite-Based Filtering**: Filter by test suite from `test.describe()` blocks
+  - Suite name shown in test card header
+  - Hierarchical suite support
+
+### Changed
+
+- **Branding Update**: Renamed to "StageWright Local" with tagline "Get your test stage right."
+
+### Fixed
+
+- **Sidebar Stats Click**: Clicking Passed/Failed/Flaky stats now works from any view (switches to Tests view)
+- **Expand/Collapse in Detail Panel**: Test cards in detail panel now expand correctly
+  - Fixed event handling for cloned cards
+  - Removed redundant expand icon from detail panel cards
+
 ## [1.0.0] - 2026-01-20
 
 ### Major Release - Full Reporter Redesign

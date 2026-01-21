@@ -85,6 +85,19 @@ The reporter has been completely redesigned with a modern, professional interfac
 - **Sidebar Animation** - Smooth collapse/expand with opacity transitions
 - **Refined Styling** - Subtle shadows, colored borders, and improved visual hierarchy
 
+## Recent Updates
+
+### v1.0.3
+
+- **Fixed timedOut Tests Stats** - Tests with `timedOut` status now correctly counted as failed ([#12](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/12))
+
+### v1.0.2
+
+- **Network Logs** - Zero-config extraction of network requests from Playwright trace files
+- **Tag-Based Filtering** - Filter tests by tags like `@smoke`, `@critical`
+- **Suite-Based Filtering** - Filter by test suite from `test.describe()` blocks
+- **Branding Update** - Report title updated to "StageWright Local"
+
 ---
 
 ## Installation
