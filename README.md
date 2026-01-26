@@ -184,7 +184,7 @@ export GEMINI_API_KEY=your-api-key
 **Provider Priority:** If multiple API keys are set, the reporter will use the first one found in this order:
 1. Anthropic Claude (`claude-3-haiku-20240307`)
 2. OpenAI (`gpt-3.5-turbo`)
-3. Google Gemini (`gemini-2.5-flash-lite`)
+3. Google Gemini (`gemini-2.5-flash`)
 
 The reporter will automatically analyze failures and provide fix suggestions in the report.
 
