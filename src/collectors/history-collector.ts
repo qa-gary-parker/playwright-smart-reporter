@@ -158,10 +158,11 @@ export class HistoryCollector {
         const screenshots = result.attachments?.screenshots?.filter(s => !s.startsWith('data:')) ?? [];
         const videos = result.attachments?.videos ?? [];
         const traces = result.attachments?.traces ?? [];
-        const hasAttachments = screenshots.length > 0 || videos.length > 0 || traces.length > 0;
+        const custom = result.attachments?.custom ?? [];
+        const hasAttachments = screenshots.length > 0 || videos.length > 0 || traces.length > 0 || custom.length > 0;
 
         const attachments = hasAttachments
-          ? { screenshots, videos, traces }
+          ? { screenshots, videos, traces, custom }
           : undefined;
 
         snapshots[result.testId] = {

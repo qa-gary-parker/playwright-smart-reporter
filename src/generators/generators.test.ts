@@ -391,6 +391,7 @@ describe('gallery-generator', () => {
             screenshots: ['data:image/png;base64,abc'],
             videos: ['/path/to/video.webm'],
             traces: ['/path/to/trace.zip'],
+            custom: [],
           },
         }),
       ];

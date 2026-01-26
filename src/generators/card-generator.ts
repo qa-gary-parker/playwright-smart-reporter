@@ -6,6 +6,20 @@ import type { TestResultData, NetworkLogData, NetworkLogEntry } from '../types';
 import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../utils';
 
 /**
+ * Get appropriate icon for attachment content type
+ */
+function getAttachmentIcon(contentType: string): string {
+  if (contentType.startsWith('image/')) return '🖼️';
+  if (contentType.startsWith('video/')) return '🎬';
+  if (contentType.startsWith('audio/')) return '🔊';
+  if (contentType.startsWith('text/')) return '📄';
+  if (contentType.includes('json')) return '📋';
+  if (contentType.includes('pdf')) return '📑';
+  if (contentType.includes('zip') || contentType.includes('tar') || contentType.includes('gzip')) return '📦';
+  return '📎';
+}
+
+/**
  * Generate a single test card
  */
 export function generateTestCard(test: TestResultData, showTraceSection: boolean): string {
@@ -247,6 +261,30 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
         <div class="detail-label"><span class="icon">📎</span> Attachments</div>
         <div class="attachments">
           <a href="file://${test.videoPath}" class="attachment-link" target="_blank">🎬 Video</a>
+        </div>
+      </div>
+    `;
+  }
+
+  // Issue #15: Display custom attachments
+  if (test.attachments?.custom && test.attachments.custom.length > 0) {
+    const customAttachmentsList = test.attachments.custom.map(att => {
+      const icon = getAttachmentIcon(att.contentType);
+      if (att.path) {
+        return `<a href="file://${escapeHtml(att.path)}" class="attachment-link" target="_blank">${icon} ${escapeHtml(att.name)}</a>`;
+      } else if (att.body) {
+        // Inline content - create a download link
+        const dataUri = `data:${att.contentType};base64,${att.body}`;
+        return `<a href="${dataUri}" class="attachment-link" download="${escapeHtml(att.name)}">${icon} ${escapeHtml(att.name)}</a>`;
+      }
+      return `<span class="attachment-name">${icon} ${escapeHtml(att.name)}</span>`;
+    }).join('');
+
+    bodyDetails += `
+      <div class="detail-section">
+        <div class="detail-label"><span class="icon">📎</span> Custom Attachments</div>
+        <div class="attachments">
+          ${customAttachmentsList}
         </div>
       </div>
     `;

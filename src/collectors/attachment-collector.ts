@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestResult } from '@playwright/test/reporter';
-import type { AttachmentData } from '../types';
+import type { AttachmentData, CustomAttachment } from '../types';
 
 export interface AttachmentCollectorOptions {
   cspSafe?: boolean;           // If true, save screenshots as files instead of base64
@@ -59,11 +59,15 @@ export class AttachmentCollector {
       screenshots: [],
       videos: [],
       traces: [],
+      custom: [],  // Issue #15: Support custom attachments
     };
 
-    // Collect screenshots
+    // Standard Playwright attachment names to exclude from custom collection
+    const standardNames = new Set(['screenshot', 'video', 'trace']);
+
+    // Collect screenshots (both standard and custom image attachments)
     const screenshots = result.attachments.filter(
-      a => a.name === 'screenshot' && a.contentType.startsWith('image/')
+      a => (a.name === 'screenshot' || a.contentType.startsWith('image/'))
     );
 
     for (const screenshot of screenshots) {
@@ -115,6 +119,27 @@ export class AttachmentCollector {
       }
     }
 
+    // Issue #15: Collect custom attachments (non-standard attachments from testInfo.attach())
+    const customAttachments = result.attachments.filter(
+      a => !standardNames.has(a.name) && !a.contentType.startsWith('image/')
+    );
+
+    for (const custom of customAttachments) {
+      const customData: CustomAttachment = {
+        name: custom.name,
+        contentType: custom.contentType,
+      };
+
+      if (custom.path) {
+        customData.path = custom.path;
+      } else if (custom.body) {
+        // Convert body to base64 for inline display
+        customData.body = custom.body.toString('base64');
+      }
+
+      attachments.custom.push(customData);
+    }
+
     return attachments;
   }
 
@@ -144,6 +169,7 @@ export class AttachmentCollector {
   hasAttachments(attachments: AttachmentData): boolean {
     return attachments.screenshots.length > 0 ||
            attachments.videos.length > 0 ||
-           attachments.traces.length > 0;
+           attachments.traces.length > 0 ||
+           attachments.custom.length > 0;
   }
 }

@@ -129,6 +129,9 @@ export interface TestResultData {
   duration: number;
   error?: string;
   retry: number;
+  // Playwright outcome and expected status for proper handling of retries and test.fail()
+  outcome?: 'expected' | 'unexpected' | 'flaky' | 'skipped';
+  expectedStatus?: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
   aiPrompt?: string;         // NEW: Playwright-style prompt sent to AI (no binaries)
   flakinessScore?: number;
   flakinessIndicator?: string;
@@ -186,9 +189,18 @@ export interface StabilityScore {
 
 // NEW: Enhanced Attachments
 export interface AttachmentData {
-  screenshots: string[];      // Base64 data URIs
+  screenshots: string[];      // Base64 data URIs or file paths
   videos: string[];           // File paths
   traces: string[];           // Trace file paths
+  custom: CustomAttachment[]; // Issue #15: Support custom attachments
+}
+
+// Issue #15: Custom attachment from testInfo.attach()
+export interface CustomAttachment {
+  name: string;
+  contentType: string;
+  path?: string;              // File path for file attachments
+  body?: string;              // Base64 content for inline attachments
 }
 
 // NEW: Performance Analysis

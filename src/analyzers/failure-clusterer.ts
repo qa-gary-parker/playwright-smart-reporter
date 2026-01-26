@@ -7,10 +7,13 @@ import { hashString } from '../utils/sanitizers';
 export class FailureClusterer {
   /**
    * Cluster failed tests by error type
+   * Excludes expected failures (tests marked with test.fail() that actually fail)
    */
   clusterFailures(results: TestResultData[]): FailureCluster[] {
+    // Only cluster truly unexpected failures - exclude expected failures (Issue #16)
     const failedTests = results.filter(r =>
-      r.status === 'failed' || r.status === 'timedOut'
+      (r.status === 'failed' || r.status === 'timedOut') &&
+      r.outcome !== 'expected'  // Exclude expected failures
     );
 
     if (failedTests.length === 0) return [];

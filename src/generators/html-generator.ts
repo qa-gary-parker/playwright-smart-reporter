@@ -11,6 +11,8 @@ import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
 import { generateGallery, generateGalleryScript } from './gallery-generator';
 import { generateComparison, generateComparisonScript } from './comparison-generator';
+// Issue #13: Inline trace viewer integration
+import { generateJSZipScript, generateTraceViewerHtml, generateTraceViewerStyles, generateTraceViewerScript } from './trace-viewer-generator';
 
 export interface HtmlGeneratorData {
   results: TestResultData[];
@@ -388,12 +390,24 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const { results, history, startTime, options, comparison, historyRunSnapshots, failureClusters } = data;
 
   const totalDuration = Date.now() - startTime;
-  const passed = results.filter((r) => r.status === 'passed').length;
-  const failed = results.filter((r) => r.status === 'failed' || r.status === 'timedOut').length;
-  const skipped = results.filter((r) => r.status === 'skipped').length;
-  const flaky = results.filter(
-    (r) => r.flakinessScore && r.flakinessScore >= 0.3
+
+  // Issue #17 & #16: Use outcome-based counting for accurate stats
+  // - Flaky tests (outcome='flaky') passed on retry - count as passed AND flaky
+  // - Expected failures (outcome='expected', expectedStatus='failed') - count as passed
+  // - Unexpected failures (outcome='unexpected') - count as failed
+  const passed = results.filter((r) =>
+    r.status === 'passed' ||
+    r.outcome === 'expected' ||  // Expected failures behaved as expected
+    r.outcome === 'flaky'        // Flaky tests passed on retry
   ).length;
+  const failed = results.filter((r) =>
+    r.outcome === 'unexpected' &&
+    (r.status === 'failed' || r.status === 'timedOut')
+  ).length;
+  const skipped = results.filter((r) => r.status === 'skipped').length;
+  // Flaky: tests that passed on retry (outcome='flaky')
+  // This is more accurate than flakinessScore which is history-based
+  const flaky = results.filter((r) => r.outcome === 'flaky').length;
   const slow = results.filter((r) =>
     r.performanceTrend?.startsWith('↑')
   ).length;
@@ -859,13 +873,21 @@ ${generateStyles(passRate, cspSafe)}
     </div>
   </div>
 
+  <!-- Issue #13: Inline Trace Viewer Modal -->
+  ${enableTraceViewer ? generateTraceViewerHtml() : ''}
+
   <!-- Hidden data containers for detail rendering -->
   <div id="test-cards-data" style="display: none;">
     ${results.map(test => generateTestCard(test, showTraceSection)).join('\n')}
   </div>
 
+  <!-- Issue #13: JSZip library for trace extraction -->
+  ${enableTraceViewer ? `<script>${generateJSZipScript()}</script>` : ''}
+
   <script>
 ${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson, statsData)}
+
+${enableTraceViewer ? generateTraceViewerScript() : ''}
   </script>
 </body>
 </html>`;
@@ -5529,6 +5551,9 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       background: var(--bg-card-hover);
       color: var(--text-primary);
     }
+
+    /* Issue #13: Inline Trace Viewer Styles */
+    ${generateTraceViewerStyles(monoFont)}
 `;
 }
 

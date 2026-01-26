@@ -97,6 +97,7 @@ class SmartReporter implements Reporter {
   // State
   private options: SmartReporterOptions;
   private results: TestResultData[] = [];
+  private resultsMap: Map<string, TestResultData> = new Map(); // Track final result per test
   private outputDir: string = '';
   private startTime: number = 0;
   private fullConfig: FullConfig | null = null;
@@ -183,12 +184,29 @@ class SmartReporter implements Reporter {
     const attachments = this.attachmentCollector.collectAttachments(result);
     const history = this.historyCollector.getTestHistory(testId);
 
-    // Extract tags from annotations (e.g., @smoke, @critical)
-    const tags = test.annotations
-      .filter(a => a.type === 'tag' || a.type.startsWith('@'))
-      .map(a => a.type.startsWith('@') ? a.type : `@${a.description || a.type}`);
+    // Issue #15: Improved tag extraction
+    // 1. Use test.tags directly (Playwright's built-in tag collection)
+    // 2. Fall back to annotations for older Playwright versions
+    // 3. Extract from test title as backup
+    const tags: string[] = [];
 
-    // Also extract tags from test title (e.g., "Login @smoke @critical")
+    // Primary source: test.tags (includes @-tokens from title and test.describe tags)
+    if (test.tags && Array.isArray(test.tags)) {
+      for (const tag of test.tags) {
+        const normalizedTag = tag.startsWith('@') ? tag : `@${tag}`;
+        if (!tags.includes(normalizedTag)) tags.push(normalizedTag);
+      }
+    }
+
+    // Secondary source: annotations (for backwards compatibility)
+    for (const a of test.annotations) {
+      if (a.type === 'tag' || a.type.startsWith('@')) {
+        const tag = a.type.startsWith('@') ? a.type : `@${a.description || a.type}`;
+        if (!tags.includes(tag)) tags.push(tag);
+      }
+    }
+
+    // Tertiary source: extract from test title (e.g., "Login @smoke @critical")
     const titleTagMatches = test.title.match(/@[\w-]+/g);
     if (titleTagMatches) {
       for (const tag of titleTagMatches) {
@@ -200,6 +218,12 @@ class SmartReporter implements Reporter {
     const titlePath = test.titlePath();
     const suites = titlePath.slice(1, -1); // Remove project name (first) and test title (last)
     const suite = suites.length > 0 ? suites[suites.length - 1] : undefined;
+
+    // Get test outcome and expected status for proper handling of:
+    // - Flaky tests (passed on retry)
+    // - Expected failures (test.fail())
+    const outcome = test.outcome(); // 'expected' | 'unexpected' | 'flaky' | 'skipped'
+    const expectedStatus = test.expectedStatus; // 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted'
 
     // Build test result data
     const testData: TestResultData = {
@@ -215,6 +239,9 @@ class SmartReporter implements Reporter {
       tags: tags.length > 0 ? tags : undefined,
       suite,
       suites: suites.length > 0 ? suites : undefined,
+      // Track outcome and expected status for proper counting
+      outcome,
+      expectedStatus,
     };
 
     // Add error if failed (strip ANSI codes for clean display)
@@ -317,7 +344,13 @@ class SmartReporter implements Reporter {
     this.retryAnalyzer.analyze(testData, history);
     this.stabilityScorer.scoreTest(testData);
 
-    this.results.push(testData);
+    // Store result - only keep the final attempt for each test (Issue #17 fix)
+    // This prevents double-counting when tests retry
+    const existingResult = this.resultsMap.get(testId);
+    if (!existingResult || result.retry > existingResult.retry) {
+      // This is a newer attempt - replace the previous one
+      this.resultsMap.set(testId, testData);
+    }
   }
 
   /**
@@ -326,6 +359,10 @@ class SmartReporter implements Reporter {
    * @param result - Full test run result
    */
   async onEnd(result: FullResult): Promise<void> {
+    // Convert resultsMap to array - this ensures we only have the final attempt for each test
+    // This fixes Issue #17: retries no longer double-counted
+    this.results = Array.from(this.resultsMap.values());
+
     // Get failure clusters
     const failureClusters = this.failureClusterer.clusterFailures(this.results);
 
@@ -343,11 +380,21 @@ class SmartReporter implements Reporter {
     if (options.enableComparison !== false) {
       const baselineRun = this.historyCollector.getBaselineRun();
       if (baselineRun) {
-        // Build current run summary
-        const passed = this.results.filter(r => r.status === 'passed').length;
-        const failed = this.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+        // Build current run summary with proper outcome-based counting
+        // Issue #17: Use outcome to properly count flaky tests
+        // Issue #16: Tests with expectedStatus='failed' that fail are counted as passed (expected behavior)
+        const passed = this.results.filter(r =>
+          r.status === 'passed' ||
+          r.outcome === 'expected' ||  // Expected failures count as "passed" (they behaved as expected)
+          r.outcome === 'flaky'        // Flaky tests passed on retry
+        ).length;
+        const failed = this.results.filter(r =>
+          r.outcome === 'unexpected' && // Only count truly unexpected failures
+          (r.status === 'failed' || r.status === 'timedOut')
+        ).length;
         const skipped = this.results.filter(r => r.status === 'skipped').length;
-        const flaky = this.results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3).length;
+        // Flaky: tests that passed on retry (outcome === 'flaky')
+        const flaky = this.results.filter(r => r.outcome === 'flaky').length;
         const slow = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
         const duration = Date.now() - this.startTime;
 
@@ -460,13 +507,20 @@ class SmartReporter implements Reporter {
     // Generate and save HTML report
     const html = generateHtml(htmlData);
     fs.writeFileSync(outputPath, html);
+
+    // Issue #15: Better console output with command to open report
     console.log(`\n📊 Smart Report: ${outputPath}`);
+    console.log(`   View report: npx playwright show-report ${path.dirname(outputPath)} --reporter=html`);
+    console.log(`   Or open directly: open "${outputPath}"`);
 
     // Update history
     this.historyCollector.updateHistory(this.results);
 
-    // Send webhook notifications if enabled
-    const failed = this.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+    // Send webhook notifications if enabled - use outcome-based counting
+    const failed = this.results.filter(r =>
+      r.outcome === 'unexpected' &&
+      (r.status === 'failed' || r.status === 'timedOut')
+    ).length;
     if (failed > 0) {
       await this.slackNotifier.notify(this.results);
       await this.teamsNotifier.notify(this.results);

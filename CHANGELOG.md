@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.5] - 2026-01-26
+
+### Fixed
+
+- **Retries Double-Counted** ([#17](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/17))
+  - Test retries no longer inflate test counts (e.g., 509 tests showing as 530)
+  - Only the final attempt for each test is counted
+  - Uses Playwright's `test.outcome()` to properly identify flaky tests
+
+- **Expected Failures Incorrectly Reported** ([#16](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/16))
+  - Tests marked with `test.fail()` that actually fail are now counted as passed (expected behavior)
+  - Uses Playwright's `expectedStatus` to determine expected outcomes
+  - Expected failures are excluded from failure clustering
+
+### Added
+
+- **Improved Tag Extraction** ([#15](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/15))
+  - Tags now extracted from `test.tags` property (Playwright's built-in collection)
+  - Falls back to annotations and title parsing for backwards compatibility
+  - Tags are visible in the test cards and sidebar filters
+
+- **Better Console Output** ([#15](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/15))
+  - Report path now includes helpful commands to open the report
+  - Shows `npx playwright show-report` and `open` commands
+
+- **Custom Attachments Support** ([#15](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/15))
+  - Attachments added via `testInfo.attach()` are now collected and displayed
+  - Custom attachments appear in test details with appropriate icons
+
+- **Inline Trace Viewer** ([#13](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/13))
+  - View Playwright traces directly in the dashboard without CLI commands
+  - Full-featured viewer with timeline, actions, snapshots, console, and network tabs
+  - Includes JSZip for client-side trace extraction
+  - Fallback to CLI command when viewing from file:// protocol
+
+- **Attachment Gallery** ([#14](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/14))
+  - Gallery view displays all screenshots, videos, and traces in a grid
+  - Lightbox support for screenshot viewing with keyboard navigation
+  - Filter by attachment type (screenshots, videos, traces)
+
 ## [1.0.4] - 2026-01-26
 
 ### Added

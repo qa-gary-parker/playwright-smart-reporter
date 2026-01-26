@@ -253,4 +253,57 @@ describe('FailureClusterer', () => {
       expect(clusterer.getClusterSummary(cluster)).toBe('Timeout Error: 5 tests affected');
     });
   });
+
+  // Issue #16: Test expected failure exclusion
+  describe('expected failure exclusion', () => {
+    it('excludes expected failures from clustering', () => {
+      const results: TestResultData[] = [
+        createTestResult({
+          status: 'failed',
+          error: 'AssertionError: expected 1 to equal 2',
+          outcome: 'unexpected',  // Truly unexpected failure
+        }),
+        createTestResult({
+          testId: 'test-2',
+          status: 'failed',
+          error: 'AssertionError: expected 1 to equal 2',
+          outcome: 'expected',  // Expected failure (test.fail())
+        }),
+        createTestResult({
+          testId: 'test-3',
+          status: 'failed',
+          error: 'AssertionError: expected 1 to equal 2',
+          outcome: 'unexpected',  // Truly unexpected failure
+        }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      // Should only cluster the 2 unexpected failures, not the expected one
+      expect(clusters.length).toBe(1);
+      expect(clusters[0].count).toBe(2);
+      expect(clusters[0].tests.length).toBe(2);
+      expect(clusters[0].tests.every(t => t.outcome === 'unexpected')).toBe(true);
+    });
+
+    it('returns empty array when all failures are expected', () => {
+      const results: TestResultData[] = [
+        createTestResult({
+          status: 'failed',
+          error: 'AssertionError: expected failure',
+          outcome: 'expected',
+        }),
+        createTestResult({
+          testId: 'test-2',
+          status: 'failed',
+          error: 'AssertionError: expected failure',
+          outcome: 'expected',
+        }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      expect(clusters).toEqual([]);
+    });
+  });
 });
