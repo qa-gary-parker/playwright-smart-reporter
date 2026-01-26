@@ -6,10 +6,12 @@ import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats } f
 export class AIAnalyzer {
   private anthropicKey?: string;
   private openaiKey?: string;
+  private geminiKey?: string;
 
   constructor() {
     this.anthropicKey = process.env.ANTHROPIC_API_KEY;
     this.openaiKey = process.env.OPENAI_API_KEY;
+    this.geminiKey = process.env.GEMINI_API_KEY;
   }
 
   /**
@@ -22,8 +24,8 @@ export class AIAnalyzer {
 
     if (failedTests.length === 0) return;
 
-    if (!this.anthropicKey && !this.openaiKey) {
-      console.log('💡 Tip: Set ANTHROPIC_API_KEY or OPENAI_API_KEY for AI failure analysis');
+    if (!this.anthropicKey && !this.openaiKey && !this.geminiKey) {
+      console.log('💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis');
       return;
     }
 
@@ -44,7 +46,7 @@ export class AIAnalyzer {
    */
   async analyzeClusters(clusters: FailureCluster[]): Promise<void> {
     if (clusters.length === 0) return;
-    if (!this.anthropicKey && !this.openaiKey) return;
+    if (!this.anthropicKey && !this.openaiKey && !this.geminiKey) return;
 
     console.log(`\n🤖 Analyzing ${clusters.length} failure cluster(s) with AI...`);
 
@@ -170,13 +172,15 @@ Provide a brief, actionable suggestion to fix these failures.`;
   }
 
   /**
-   * Call AI API (Anthropic or OpenAI)
+   * Call AI API (Anthropic, OpenAI, or Gemini)
    */
   private async callAI(prompt: string): Promise<string> {
     if (this.anthropicKey) {
       return this.callAnthropic(prompt);
     } else if (this.openaiKey) {
       return this.callOpenAI(prompt);
+    } else if (this.geminiKey) {
+      return this.callGemini(prompt);
     }
     return 'AI analysis not available';
   }
@@ -237,9 +241,39 @@ Provide a brief, actionable suggestion to fix these failures.`;
   }
 
   /**
+   * Call Gemini API
+   */
+  private async callGemini(prompt: string): Promise<string> {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': this.geminiKey!,
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }],
+        }],
+        generationConfig: {
+          maxOutputTokens: 512,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      candidates: Array<{ content: { parts: Array<{ text: string }> }; role: string }>;
+    };
+    return data.candidates[0]?.content?.parts[0]?.text || 'No suggestion available';
+  }
+
+  /**
    * Check if AI analysis is available
    */
   isAvailable(): boolean {
-    return !!(this.anthropicKey || this.openaiKey);
+    return !!(this.anthropicKey || this.openaiKey || this.geminiKey);
   }
 }

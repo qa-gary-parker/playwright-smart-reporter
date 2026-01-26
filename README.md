@@ -10,7 +10,7 @@ An intelligent Playwright HTML reporter with AI-powered failure analysis, flakin
 ## Features
 
 ### Core Analysis
-- **AI Failure Analysis** - Get AI-powered suggestions to fix failing tests (Claude/OpenAI)
+- **AI Failure Analysis** - Get AI-powered suggestions to fix failing tests (Claude/OpenAI/Gemini)
 - **Flakiness Detection** - Tracks test history to identify unreliable tests
 - **Performance Regression Alerts** - Warns when tests get significantly slower
 - **Stability Scoring** - Composite health metrics (0-100 with letter grades A+ to F)
@@ -176,7 +176,15 @@ export ANTHROPIC_API_KEY=your-api-key
 
 # OR using OpenAI
 export OPENAI_API_KEY=your-api-key
+
+# OR using Google Gemini
+export GEMINI_API_KEY=your-api-key
 ```
+
+**Provider Priority:** If multiple API keys are set, the reporter will use the first one found in this order:
+1. Anthropic Claude (`claude-3-haiku-20240307`)
+2. OpenAI (`gpt-3.5-turbo`)
+3. Google Gemini (`gemini-2.5-flash-lite`)
 
 The reporter will automatically analyze failures and provide fix suggestions in the report.
 
