@@ -39,6 +39,26 @@ export interface SmartReporterOptions {
   networkLogFilter?: string;       // Only show URLs containing this string
   networkLogExcludeAssets?: boolean; // Exclude static assets (default: true)
   networkLogMaxEntries?: number;   // Max entries per test (default: 50)
+
+  // Issue #22: Step filtering - hide verbose pw:api steps
+  filterPwApiSteps?: boolean;      // Default: false (show all steps for backwards compatibility)
+
+  // Issue #20: Path resolution relative to current working directory
+  // When true, outputFile and historyFile are resolved relative to process.cwd()
+  // When false (default), paths are resolved relative to Playwright's rootDir
+  relativeToCwd?: boolean;         // Default: false (backwards compatible)
+
+  // Issue #21: Project-based history separation
+  // Set this to isolate history per project (e.g., 'api', 'ui', 'regression')
+  // Supports {project} placeholder in historyFile path
+  projectName?: string;            // e.g., 'api-tests' or 'ui-regression'
+
+  // Cloud upload options (for StageWright cloud service)
+  apiKey?: string;                 // API key for cloud service
+  projectId?: string;              // Project ID in cloud service
+  uploadToCloud?: boolean;         // Enable cloud upload (default: false)
+  cloudEndpoint?: string;          // Custom cloud endpoint URL
+  uploadArtifacts?: boolean;       // Upload attachments to cloud (default: true)
 }
 
 // ============================================================================

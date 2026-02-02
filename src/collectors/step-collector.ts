@@ -2,9 +2,30 @@ import type { TestResult } from '@playwright/test/reporter';
 import type { StepData } from '../types';
 
 /**
+ * Options for step collection
+ */
+export interface StepCollectorOptions {
+  /**
+   * When true, filters out pw:api steps and only shows test.step entries.
+   * Useful when you have custom test.step descriptions and don't want the
+   * verbose Playwright API calls cluttering the step list.
+   * Default: false (show all steps)
+   */
+  filterPwApiSteps?: boolean;
+}
+
+/**
  * Extracts and processes step timing data from test results
  */
 export class StepCollector {
+  private options: StepCollectorOptions;
+
+  constructor(options: StepCollectorOptions = {}) {
+    this.options = {
+      filterPwApiSteps: options.filterPwApiSteps ?? false,
+    };
+  }
+
   /**
    * Extract step timings from a test result
    * @param result - Playwright TestResult
@@ -12,11 +33,16 @@ export class StepCollector {
    */
   extractSteps(result: TestResult): StepData[] {
     const steps: StepData[] = [];
+    const filterPwApi = this.options.filterPwApiSteps;
 
     // Recursively extract steps from the result
     const processStep = (step: TestResult['steps'][0]) => {
       // Only include meaningful steps (skip internal hooks)
-      if (step.category === 'test.step' || step.category === 'pw:api') {
+      // Issue #22: Optionally filter out pw:api steps
+      const isTestStep = step.category === 'test.step';
+      const isPwApi = step.category === 'pw:api';
+
+      if (isTestStep || (isPwApi && !filterPwApi)) {
         steps.push({
           title: step.title,
           duration: step.duration,

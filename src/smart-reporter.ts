@@ -107,7 +107,10 @@ class SmartReporter implements Reporter {
     this.options = options;
 
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
-    this.stepCollector = new StepCollector();
+    // Issue #22: Pass filterPwApiSteps option to StepCollector
+    this.stepCollector = new StepCollector({
+      filterPwApiSteps: options.filterPwApiSteps,
+    });
     this.attachmentCollector = new AttachmentCollector();
 
     // Note: NetworkCollector is initialized in onBegin when we have access to full config
@@ -130,7 +133,9 @@ class SmartReporter implements Reporter {
    */
   onBegin(config: FullConfig, _suite: Suite): void {
     this.startTime = Date.now();
-    this.outputDir = config.rootDir;
+    // Issue #20: Support path resolution relative to current working directory
+    // When relativeToCwd is true, use process.cwd() instead of config.rootDir
+    this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
     this.fullConfig = config;
 
     // Initialize HistoryCollector and load history

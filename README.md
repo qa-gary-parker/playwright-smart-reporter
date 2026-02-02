@@ -177,6 +177,9 @@ export default defineConfig({
 | `stabilityThreshold` | `70` | Minimum stability score (C grade) to avoid warnings |
 | `retryFailureThreshold` | `3` | Number of retries before flagging as problematic |
 | `baselineRunId` | - | Optional: Run ID to use as baseline for comparisons |
+| `filterPwApiSteps` | `false` | Hide verbose `pw:api` steps, only show custom `test.step` entries |
+| `relativeToCwd` | `false` | Resolve outputFile/historyFile relative to current working directory instead of Playwright's rootDir |
+| `projectName` | - | Isolate history per project (e.g., 'api', 'ui'). Supports `{project}` placeholder in historyFile |
 
 
 ### AI Analysis
@@ -271,6 +274,22 @@ Visual grid of all test attachments:
 - ⚪ **New** (no history yet)
 - ⚪ **Skipped** (test was skipped)
 
+### Flakiness Detection: Smart Reporter vs Playwright
+
+**Important:** Smart Reporter's flakiness detection works differently from Playwright's built-in HTML report:
+
+| Aspect | Playwright HTML Report | Smart Reporter |
+|--------|------------------------|----------------|
+| **Scope** | Single test run | Historical data across multiple runs |
+| **Criteria** | Test fails then passes on retry within the same run | Test has failed 30%+ of the time historically |
+| **Use Case** | Identifies immediate retry success | Identifies chronically unreliable tests |
+
+**Example:**
+- A test fails once, then passes on retry → Playwright marks it "flaky", Smart Reporter marks it "stable" (if it usually passes)
+- A test passes today but failed in 4 of the last 10 runs → Playwright marks it "passed", Smart Reporter marks it "flaky"
+
+This historical approach helps identify tests that need attention even if they happen to pass in the current run.
+
 ## Stability Grades
 
 - **A+ (95-100)**: Rock solid, consistently passing
@@ -352,6 +371,102 @@ use: {
 }
 ```
 
+## Step Filtering
+
+By default, the report shows all test steps including Playwright API calls (`pw:api`) like `locator('button').click()`. If you use custom `test.step()` descriptions, you may want to hide the verbose API calls.
+
+### Configuration
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    // Hide pw:api steps, only show custom test.step entries
+    filterPwApiSteps: true,
+  }],
+]
+```
+
+### Example
+
+```typescript
+// Your test code
+test('login flow', async ({ page }) => {
+  await test.step('Navigate to login page', async () => {
+    await page.goto('/login');
+  });
+
+  await test.step('Enter credentials', async () => {
+    await page.fill('#username', 'user');
+    await page.fill('#password', 'pass');
+  });
+
+  await test.step('Submit login form', async () => {
+    await page.click('button[type="submit"]');
+  });
+});
+```
+
+**With `filterPwApiSteps: false` (default):**
+- Navigate to login page
+- page.goto('/login')
+- Enter credentials
+- page.fill('#username', 'user')
+- page.fill('#password', 'pass')
+- Submit login form
+- page.click('button[type="submit"]')
+
+**With `filterPwApiSteps: true`:**
+- Navigate to login page
+- Enter credentials
+- Submit login form
+
+## Multi-Project History
+
+When running different test suites (API tests, UI tests, regression, smoke), you may want separate history files to avoid mixing metrics. Use the `projectName` option to isolate history per project.
+
+### Configuration
+
+```typescript
+// For API tests
+reporter: [
+  ['playwright-smart-reporter', {
+    projectName: 'api',
+    // Creates: test-history-api.json
+  }],
+]
+
+// For UI tests
+reporter: [
+  ['playwright-smart-reporter', {
+    projectName: 'ui',
+    // Creates: test-history-ui.json
+  }],
+]
+
+// Using {project} placeholder
+reporter: [
+  ['playwright-smart-reporter', {
+    projectName: 'regression',
+    historyFile: 'reports/{project}/history.json',
+    // Creates: reports/regression/history.json
+  }],
+]
+```
+
+### Path Resolution
+
+By default, `outputFile` and `historyFile` are resolved relative to Playwright's `rootDir`. If you prefer paths relative to your current working directory, enable `relativeToCwd`:
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    relativeToCwd: true,
+    outputFile: './reports/smart-report.html',
+    historyFile: './reports/test-history.json',
+  }],
+]
+```
+
 ## CI Integration
 
 ### Persisting History Across Runs
@@ -407,6 +522,85 @@ test:
     key: test-history-{{ .Branch }}-{{ .Revision }}
     paths:
       - test-history.json
+```
+
+#### Azure DevOps
+
+```yaml
+# azure-pipelines.yml
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20.x'
+    displayName: 'Install Node.js'
+
+  - script: npm ci
+    displayName: 'Install dependencies'
+
+  - script: npx playwright install --with-deps
+    displayName: 'Install Playwright browsers'
+
+  # Cache test history for flakiness detection
+  - task: Cache@2
+    inputs:
+      key: 'test-history | "$(Build.SourceBranchName)"'
+      restoreKeys: |
+        test-history |
+      path: test-history.json
+    displayName: 'Cache test history'
+
+  - script: npx playwright test
+    displayName: 'Run Playwright tests'
+    continueOnError: true
+
+  # Publish the HTML report as a pipeline artifact
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: 'smart-report.html'
+      artifact: 'playwright-smart-report'
+      publishLocation: 'pipeline'
+    displayName: 'Publish Smart Report'
+    condition: always()
+
+  # Optional: Publish test results for Azure DevOps test tab
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: 'test-results/results.xml'
+      mergeTestResults: true
+    displayName: 'Publish test results'
+    condition: always()
+```
+
+**Viewing the Report in Azure DevOps:**
+1. After the pipeline runs, go to the pipeline summary
+2. Click on "Published" under the artifacts section
+3. Download or view the `playwright-smart-report` artifact
+4. Open `smart-report.html` in your browser
+
+**Alternative: Publish to Azure DevOps Wiki or Static Site:**
+```yaml
+# Upload report to Azure Blob Storage for easy viewing
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'your-subscription'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az storage blob upload \
+        --account-name yourstorageaccount \
+        --container-name reports \
+        --name "playwright-report-$(Build.BuildId).html" \
+        --file smart-report.html \
+        --content-type "text/html"
+  displayName: 'Upload report to Azure Storage'
+  condition: always()
 ```
 
 ### CI Environment Detection

@@ -8,16 +8,30 @@ import { renderMarkdownLite } from '../utils';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
 
   constructor(options: SmartReporterOptions, outputDir: string) {
+    // Issue #21: Support {project} placeholder in historyFile path
+    let historyFile = options.historyFile ?? 'test-history.json';
+    if (options.projectName) {
+      // Replace {project} placeholder with actual project name
+      historyFile = historyFile.replace('{project}', options.projectName);
+      // If no placeholder was used but projectName is set, prepend project name
+      if (!options.historyFile?.includes('{project}')) {
+        const ext = path.extname(historyFile);
+        const base = path.basename(historyFile, ext);
+        const dir = path.dirname(historyFile);
+        historyFile = path.join(dir, `${base}-${options.projectName}${ext}`);
+      }
+    }
+
     this.options = {
       outputFile: options.outputFile ?? 'smart-report.html',
-      historyFile: options.historyFile ?? 'test-history.json',
+      historyFile,
       maxHistoryRuns: options.maxHistoryRuns ?? 10,
       performanceThreshold: options.performanceThreshold ?? 0.2,
       enableRetryAnalysis: options.enableRetryAnalysis ?? true,
@@ -45,6 +59,12 @@ export class HistoryCollector {
       uploadToCloud: options.uploadToCloud ?? false,
       cloudEndpoint: options.cloudEndpoint,
       uploadArtifacts: options.uploadArtifacts ?? true,
+      // Issue #21: Store project name for reference
+      projectName: options.projectName,
+      // Issue #22: Step filtering
+      filterPwApiSteps: options.filterPwApiSteps ?? false,
+      // Issue #20: Path resolution
+      relativeToCwd: options.relativeToCwd ?? false,
     };
     this.outputDir = outputDir;
     this.currentRun = {
