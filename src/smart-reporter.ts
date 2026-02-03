@@ -221,16 +221,21 @@ class SmartReporter implements Reporter {
 
     // Extract suite hierarchy from titlePath (last element is test title itself)
     const titlePath = test.titlePath();
-    const projectName = titlePath.length > 0 ? titlePath[0] : undefined; // First element is project name
-    const suites = titlePath.slice(1, -1); // Remove project name (first) and test title (last)
+    // Filter out empty strings from titlePath (some Playwright versions include empty root)
+    const filteredPath = titlePath.filter(p => p && p.length > 0);
+    const suites = filteredPath.slice(1, -1); // Remove project name (first) and test title (last)
     const suite = suites.length > 0 ? suites[suites.length - 1] : undefined;
 
-    // Extract browser name from project configuration (if available)
+    // Extract browser name and project name from project configuration (if available)
     // Common patterns: 'chromium', 'firefox', 'webkit', 'Desktop Chrome', 'Mobile Safari', etc.
     let browserName: string | undefined;
+    let projectName: string | undefined;
     try {
       const project = test.parent?.project?.();
       if (project) {
+        // Get project name directly from project configuration
+        projectName = project.name || undefined;
+
         // Try to get browser from project use.browserName or infer from project name
         const browserFromUse = project.use?.browserName;
         if (browserFromUse) {
@@ -251,7 +256,7 @@ class SmartReporter implements Reporter {
       // Project info not available - only log unexpected errors in debug scenarios
       // This is expected to fail for some test setups where project() is not available
       if (process.env.DEBUG) {
-        console.warn('Could not extract browser info:', err);
+        console.warn('Could not extract browser/project info:', err);
       }
     }
 

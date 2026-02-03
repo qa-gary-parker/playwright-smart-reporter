@@ -3640,6 +3640,24 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       flex-wrap: wrap;
     }
 
+    .test-badges-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      flex-wrap: wrap;
+      margin-top: 0.4rem;
+      padding-top: 0.4rem;
+      border-top: 1px dashed var(--border-color);
+    }
+
+    .badge-separator {
+      width: 1px;
+      height: 14px;
+      background: var(--border-color);
+      margin: 0 0.15rem;
+      flex-shrink: 0;
+    }
+
     .test-suite-badge {
       font-family: ${monoFont};
       font-size: 0.65rem;
@@ -3651,73 +3669,92 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .test-tags {
-      display: flex;
-      gap: 0.25rem;
+      display: inline-flex;
+      gap: 0.3rem;
       flex-wrap: wrap;
     }
 
     .test-tag {
       font-family: ${monoFont};
       font-size: 0.6rem;
-      padding: 0.1rem 0.35rem;
-      border-radius: 3px;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
       background: var(--accent-blue);
       color: white;
-      opacity: 0.85;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .test-browser-badge {
       font-family: ${monoFont};
       font-size: 0.6rem;
-      padding: 0.1rem 0.35rem;
-      border-radius: 3px;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
       background: var(--accent-purple);
       color: white;
-      opacity: 0.9;
-      margin-left: 0.25rem;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .test-project-badge {
       font-family: ${monoFont};
       font-size: 0.6rem;
-      padding: 0.1rem 0.35rem;
-      border-radius: 3px;
-      background: var(--bg-card);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: var(--bg-hover);
       border: 1px solid var(--accent-purple);
-      color: var(--text-secondary);
-      margin-left: 0.25rem;
+      color: var(--accent-purple);
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .test-annotation-badge {
       font-family: ${monoFont};
       font-size: 0.6rem;
-      padding: 0.1rem 0.35rem;
-      border-radius: 3px;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
       background: var(--bg-hover);
       color: var(--text-secondary);
-      margin-right: 0.25rem;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
     .test-annotation-badge.annotation-slow {
       background: #fef3c7;
       color: #92400e;
+      border: 1px solid #fcd34d;
     }
 
     .test-annotation-badge.annotation-fixme,
     .test-annotation-badge.annotation-fix {
       background: #fce7f3;
       color: #9d174d;
+      border: 1px solid #f9a8d4;
     }
 
     .test-annotation-badge.annotation-skip {
       background: #e0e7ff;
       color: #3730a3;
+      border: 1px solid #a5b4fc;
     }
 
     .test-annotation-badge.annotation-issue,
     .test-annotation-badge.annotation-bug {
       background: #fee2e2;
       color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    .test-annotation-badge.annotation-critical {
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #f87171;
+    }
+
+    .test-annotation-badge.annotation-experimental {
+      background: #ecfdf5;
+      color: #059669;
+      border: 1px solid #6ee7b7;
     }
 
     .suite-chips .filter-chip,

@@ -117,6 +117,13 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
       }).join('')
     : '';
 
+  // Combine all badges into a single badges row for cleaner layout
+  const hasBadges = browserHtml || projectHtml || annotationsHtml || tagsHtml;
+  const badgesHtml = hasBadges ? `
+              <div class="test-badges-row">
+                ${browserHtml}${projectHtml}${annotationsHtml ? `<span class="badge-separator"></span>${annotationsHtml}` : ''}${tagsHtml ? `${annotationsHtml ? '' : '<span class="badge-separator"></span>'}${tagsHtml}` : ''}
+              </div>` : '';
+
   return `
     <div id="card-${cardId}" class="test-card"
          data-status="${test.status}"
@@ -132,14 +139,10 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
             <div class="test-title-row">
               <span class="test-title">${escapeHtml(test.title)}</span>
               ${suiteHtml}
-              ${browserHtml}
-              ${projectHtml}
             </div>
             <div class="test-meta-row">
               <span class="test-file">${escapeHtml(test.file)}</span>
-              ${annotationsHtml}
-              ${tagsHtml}
-            </div>
+            </div>${badgesHtml}
           </div>
         </div>
         <div class="test-card-right">

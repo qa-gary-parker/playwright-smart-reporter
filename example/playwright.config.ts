@@ -1,4 +1,4 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Example Playwright configuration with Smart Reporter
@@ -9,6 +9,18 @@ export default defineConfig({
   testDir: './',
   timeout: 30000,
   retries: 2, // Enable retries to demonstrate flaky test detection
+
+  // Multiple projects to showcase browser/project badges
+  projects: [
+    {
+      name: 'Desktop Chrome',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'] },
+    },
+  ],
 
   use: {
     headless: true,
