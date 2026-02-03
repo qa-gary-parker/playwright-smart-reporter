@@ -4,6 +4,10 @@
 
 An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and a modern interactive dashboard.
 
+**Now available for both Node.js and Python!** 🎉
+- **Node.js/TypeScript**: `npm install playwright-smart-reporter`
+- **Python/pytest**: See [Python README](./python/README.md)
+
 ![Report Overview](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/report-overview-v1.png)
 *v1.0.0 dashboard featuring: sidebar navigation, suite health grade, attention-based filtering, failure clusters, quick insights, and interactive trend charts*
 
