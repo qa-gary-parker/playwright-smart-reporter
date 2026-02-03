@@ -3666,6 +3666,60 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       opacity: 0.85;
     }
 
+    .test-browser-badge {
+      font-family: ${monoFont};
+      font-size: 0.6rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      background: var(--accent-purple);
+      color: white;
+      opacity: 0.9;
+      margin-left: 0.25rem;
+    }
+
+    .test-project-badge {
+      font-family: ${monoFont};
+      font-size: 0.6rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      background: var(--bg-card);
+      border: 1px solid var(--accent-purple);
+      color: var(--text-secondary);
+      margin-left: 0.25rem;
+    }
+
+    .test-annotation-badge {
+      font-family: ${monoFont};
+      font-size: 0.6rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      margin-right: 0.25rem;
+    }
+
+    .test-annotation-badge.annotation-slow {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .test-annotation-badge.annotation-fixme,
+    .test-annotation-badge.annotation-fix {
+      background: #fce7f3;
+      color: #9d174d;
+    }
+
+    .test-annotation-badge.annotation-skip {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+
+    .test-annotation-badge.annotation-issue,
+    .test-annotation-badge.annotation-bug {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
     .suite-chips .filter-chip,
     .tag-chips .filter-chip {
       background: var(--bg-card);

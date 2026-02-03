@@ -845,6 +845,155 @@ cp blob-reports/machine1/*.zip blob-reports/machine2/*.zip blob-reports/merged/
 npx playwright merge-reports --reporter=playwright-smart-reporter blob-reports/merged
 ```
 
+## Multi-Browser Support
+
+When running tests across multiple browsers or projects, the reporter displays browser and project information:
+
+### What's Displayed
+
+- **Browser badge** - Shows which browser the test ran on (🌐 Chromium, 🦊 Firefox, 🧭 WebKit)
+- **Project badge** - Shows the Playwright project name (e.g., "Desktop Chrome", "Mobile Safari")
+- **Data attributes** - `data-browser` and `data-project` for custom filtering
+
+### Example Configuration
+
+```typescript
+// playwright.config.ts
+export default defineConfig({
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'Mobile Chrome', use: { ...devices['Pixel 5'] } },
+  ],
+  reporter: [['playwright-smart-reporter']],
+});
+```
+
+The report will show badges like `🌐 chromium` or `🧭 webkit` next to each test, making it easy to identify browser-specific failures.
+
+## Annotations Display
+
+Beyond tags, the reporter now displays all test annotations including `@slow`, `@fixme`, `@skip`, and custom annotations:
+
+### Supported Annotation Types
+
+| Annotation | Icon | Description |
+|------------|------|-------------|
+| `slow` | 🐢 | Test marked as slow |
+| `fixme` / `fix` | 🔧 | Known issue to be fixed |
+| `skip` | ⏭️ | Skipped with reason |
+| `fail` | ❌ | Expected to fail |
+| `issue` / `bug` | 🐛 | Associated issue |
+| `flaky` | 🎲 | Known flaky test |
+| `todo` | 📝 | Work in progress |
+| Custom | 📌 | Any other annotation |
+
+### Example Usage
+
+```typescript
+test('payment flow', async ({ page }) => {
+  test.slow();  // Will show 🐢 slow badge
+  // ...
+});
+
+test('known issue', async ({ page }) => {
+  test.fixme();  // Will show 🔧 fixme badge
+  // ...
+});
+
+test.skip('not implemented', async ({ page }) => {
+  // Will show ⏭️ skip badge with reason
+});
+
+// Custom annotations
+test('feature test', async ({ page }) => {
+  test.info().annotations.push({ type: 'issue', description: 'JIRA-123' });
+  // Will show 🐛 issue badge
+});
+```
+
+## Cucumber Integration
+
+Smart Reporter works with Playwright + Cucumber frameworks. Here's how to set it up:
+
+### With @cucumber/cucumber and playwright-bdd
+
+```typescript
+// playwright.config.ts
+import { defineConfig } from '@playwright/test';
+import { defineBddConfig } from 'playwright-bdd';
+
+const testDir = defineBddConfig({
+  features: 'features/**/*.feature',
+  steps: 'steps/**/*.ts',
+});
+
+export default defineConfig({
+  testDir,
+  reporter: [
+    ['playwright-smart-reporter', {
+      outputFile: 'reports/smart-report.html',
+      historyFile: 'reports/test-history.json',
+    }],
+  ],
+});
+```
+
+### With cucumber-playwright
+
+```typescript
+// playwright.config.ts
+export default defineConfig({
+  testDir: './features',
+  testMatch: '**/*.feature',
+  reporter: [
+    ['playwright-smart-reporter', {
+      outputFile: 'cucumber-smart-report.html',
+    }],
+  ],
+});
+```
+
+### Notes on Cucumber Integration
+
+- Feature file names appear in the test file path
+- Scenario names appear as test titles
+- Scenario outlines generate multiple test entries (one per example)
+- Tags from feature files (`@smoke`, `@regression`) are captured
+- Step timings are captured from Cucumber's step hooks
+
+## Frequently Asked Questions
+
+### Does Smart Reporter support Python/pytest-playwright?
+
+**No.** Smart Reporter is a Node.js/TypeScript package designed specifically for `@playwright/test`. It cannot be installed via pip or used with Python-based Playwright.
+
+**Alternatives for Python:**
+- [pytest-html](https://pytest-html.readthedocs.io/) - HTML reports for pytest
+- [allure-pytest](https://allurereport.org/docs/pytest/) - Feature-rich reporting
+- [pytest-playwright's built-in options](https://playwright.dev/python/docs/test-runners)
+
+### I'm getting RangeError with large test suites (~300 tests)
+
+This was fixed in **v1.0.6**. Update to the latest version:
+
+```bash
+npm update playwright-smart-reporter
+# or
+npm install playwright-smart-reporter@latest
+```
+
+The fix removes large base64 data (screenshots, traces) from embedded JSON while preserving visual display.
+
+### Why does Smart Reporter show different flakiness than Playwright's HTML report?
+
+See [Flakiness Detection: Smart Reporter vs Playwright](#flakiness-detection-smart-reporter-vs-playwright) - they use different methodologies (historical vs single-run).
+
+### How do I see which browser a test ran on?
+
+As of the latest version, browser badges are automatically displayed when using multi-project/multi-browser configurations. Look for badges like `🌐 chromium` or `🦊 firefox` next to test titles.
+
 ## Troubleshooting
 
 ### Common Issues

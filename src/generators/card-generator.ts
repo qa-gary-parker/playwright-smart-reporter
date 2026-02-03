@@ -20,6 +20,33 @@ function getAttachmentIcon(contentType: string): string {
 }
 
 /**
+ * Get browser icon based on browser name
+ */
+function getBrowserIcon(browser: string): string {
+  const name = browser.toLowerCase();
+  if (name.includes('chromium') || name.includes('chrome')) return '🌐';
+  if (name.includes('firefox')) return '🦊';
+  if (name.includes('webkit') || name.includes('safari')) return '🧭';
+  if (name.includes('edge')) return '🔷';
+  return '🖥️';
+}
+
+/**
+ * Get annotation icon based on annotation type
+ */
+function getAnnotationIcon(type: string): string {
+  const t = type.toLowerCase();
+  if (t === 'slow') return '🐢';
+  if (t === 'fixme' || t === 'fix') return '🔧';
+  if (t === 'skip') return '⏭️';
+  if (t === 'fail' || t === 'expected-failure') return '❌';
+  if (t === 'issue' || t === 'bug') return '🐛';
+  if (t === 'flaky') return '🎲';
+  if (t === 'todo') return '📝';
+  return '📌';
+}
+
+/**
  * Generate a single test card
  */
 export function generateTestCard(test: TestResultData, showTraceSection: boolean): string {
@@ -55,6 +82,9 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
   const tagsAttr = test.tags && test.tags.length > 0 ? ` data-tags="${test.tags.map(t => escapeHtml(t)).join(',')}"` : '';
   const suiteAttr = test.suite ? ` data-suite="${escapeHtml(test.suite)}"` : '';
   const suitesAttr = test.suites && test.suites.length > 0 ? ` data-suites="${test.suites.map(s => escapeHtml(s)).join(',')}"` : '';
+  // Browser/project data attributes for filtering
+  const browserAttr = test.browser ? ` data-browser="${escapeHtml(test.browser)}"` : '';
+  const projectAttr = test.project ? ` data-project="${escapeHtml(test.project)}"` : '';
 
   // Generate tags display
   const tagsHtml = test.tags && test.tags.length > 0
@@ -66,6 +96,27 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
     ? `<span class="test-suite-badge" title="Suite: ${test.suites?.map(s => escapeHtml(s)).join(' > ') || escapeHtml(test.suite)}">${escapeHtml(test.suite)}</span>`
     : '';
 
+  // Generate browser badge display (for multi-browser setups)
+  const browserHtml = test.browser
+    ? `<span class="test-browser-badge" title="Browser: ${escapeHtml(test.browser)}">${getBrowserIcon(test.browser)} ${escapeHtml(test.browser)}</span>`
+    : '';
+
+  // Generate project badge display (for multi-project setups)
+  const projectHtml = test.project && test.project !== test.browser
+    ? `<span class="test-project-badge" title="Project: ${escapeHtml(test.project)}">${escapeHtml(test.project)}</span>`
+    : '';
+
+  // Generate annotation badges (non-tag annotations like @slow, @fixme)
+  const annotationsHtml = test.annotations && test.annotations.length > 0
+    ? test.annotations.map(a => {
+        const icon = getAnnotationIcon(a.type);
+        const title = a.description ? `${a.type}: ${escapeHtml(a.description)}` : a.type;
+        // Normalize type to lowercase alphanumeric for CSS class (e.g., 'expected-failure' -> 'expected-failure')
+        const cssType = a.type.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+        return `<span class="test-annotation-badge annotation-${cssType}" title="${escapeHtml(title)}">${icon} ${escapeHtml(a.type)}</span>`;
+      }).join('')
+    : '';
+
   return `
     <div id="card-${cardId}" class="test-card"
          data-status="${test.status}"
@@ -73,7 +124,7 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
          data-unstable="${isUnstable}"
          data-slow="${isSlow}"
          data-new="${isNew}"
-         data-grade="${test.stabilityScore?.grade || ''}"${tagsAttr}${suiteAttr}${suitesAttr}>
+         data-grade="${test.stabilityScore?.grade || ''}"${tagsAttr}${suiteAttr}${suitesAttr}${browserAttr}${projectAttr}>
       <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}', event)"` : ''}>
         <div class="test-card-left">
           <div class="status-indicator ${test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed'}"></div>
@@ -81,9 +132,12 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
             <div class="test-title-row">
               <span class="test-title">${escapeHtml(test.title)}</span>
               ${suiteHtml}
+              ${browserHtml}
+              ${projectHtml}
             </div>
             <div class="test-meta-row">
               <span class="test-file">${escapeHtml(test.file)}</span>
+              ${annotationsHtml}
               ${tagsHtml}
             </div>
           </div>

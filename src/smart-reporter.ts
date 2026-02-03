@@ -221,8 +221,51 @@ class SmartReporter implements Reporter {
 
     // Extract suite hierarchy from titlePath (last element is test title itself)
     const titlePath = test.titlePath();
+    const projectName = titlePath.length > 0 ? titlePath[0] : undefined; // First element is project name
     const suites = titlePath.slice(1, -1); // Remove project name (first) and test title (last)
     const suite = suites.length > 0 ? suites[suites.length - 1] : undefined;
+
+    // Extract browser name from project configuration (if available)
+    // Common patterns: 'chromium', 'firefox', 'webkit', 'Desktop Chrome', 'Mobile Safari', etc.
+    let browserName: string | undefined;
+    try {
+      const project = test.parent?.project?.();
+      if (project) {
+        // Try to get browser from project use.browserName or infer from project name
+        const browserFromUse = project.use?.browserName;
+        if (browserFromUse) {
+          browserName = browserFromUse;
+        } else if (project.name) {
+          // Infer from common project naming patterns
+          const name = project.name.toLowerCase();
+          if (name.includes('chromium') || name.includes('chrome')) {
+            browserName = 'chromium';
+          } else if (name.includes('firefox')) {
+            browserName = 'firefox';
+          } else if (name.includes('webkit') || name.includes('safari')) {
+            browserName = 'webkit';
+          }
+        }
+      }
+    } catch (err) {
+      // Project info not available - only log unexpected errors in debug scenarios
+      // This is expected to fail for some test setups where project() is not available
+      if (process.env.DEBUG) {
+        console.warn('Could not extract browser info:', err);
+      }
+    }
+
+    // Extract all annotations (not just tags) - captures @slow, @fixme, @skip, custom annotations
+    const annotations: { type: string; description?: string }[] = [];
+    for (const a of test.annotations) {
+      // Skip tags (already captured above) - only capture other annotation types
+      if (a.type !== 'tag' && !a.type.startsWith('@')) {
+        annotations.push({
+          type: a.type,
+          description: a.description || undefined,
+        });
+      }
+    }
 
     // Get test outcome and expected status for proper handling of:
     // - Flaky tests (passed on retry)
@@ -244,6 +287,11 @@ class SmartReporter implements Reporter {
       tags: tags.length > 0 ? tags : undefined,
       suite,
       suites: suites.length > 0 ? suites : undefined,
+      // Browser/project info for multi-browser setups
+      browser: browserName,
+      project: projectName,
+      // All annotations (not just tags) - @slow, @fixme, @skip reason, custom
+      annotations: annotations.length > 0 ? annotations : undefined,
       // Track outcome and expected status for proper counting
       outcome,
       expectedStatus,

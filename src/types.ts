@@ -141,6 +141,12 @@ export interface StepData {
   isSlowest?: boolean;
 }
 
+// Test annotation (beyond tags) - captures @slow, @fixme, custom annotations
+export interface TestAnnotation {
+  type: string;              // e.g., 'slow', 'fixme', 'skip', 'issue', custom types
+  description?: string;      // Optional description/reason
+}
+
 export interface TestResultData {
   testId: string;
   title: string;
@@ -169,6 +175,13 @@ export interface TestResultData {
   tags?: string[];           // Tags from annotations (e.g., '@smoke', '@critical')
   suite?: string;            // Direct parent suite name
   suites?: string[];         // Full suite hierarchy (e.g., ['Auth', 'Login'])
+
+  // Browser/Project info (for multi-browser/multi-project setups)
+  browser?: string;          // Browser name (e.g., 'chromium', 'firefox', 'webkit')
+  project?: string;          // Playwright project name (e.g., 'Desktop Chrome', 'Mobile Safari')
+
+  // Annotations beyond tags (e.g., @slow, @fixme, custom annotations)
+  annotations?: TestAnnotation[];
 
   // NEW: Enhanced data
   retryInfo?: RetryInfo;
