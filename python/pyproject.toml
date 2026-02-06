@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "playwright-smart-reporter-python"
-version = "0.1.0"
+version = "1.0.7"
 description = "Python bridge for Playwright Smart Reporter - AI-powered test analysis and reporting"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
-    { name = "Gary Parker", email = "gary@example.com" }
+    { name = "Gary Parker" }
 ]
 keywords = [
     "playwright",
@@ -25,12 +25,12 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: Pytest",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
 ]
 
@@ -54,8 +54,14 @@ Issues = "https://github.com/qa-gary-parker/playwright-smart-reporter/issues"
 [project.entry-points.pytest11]
 playwright_smart_reporter = "playwright_smart_reporter_python.plugin"
 
-[tool.setuptools]
-packages = ["playwright_smart_reporter_python"]
+[tool.setuptools.packages.find]
+include = ["playwright_smart_reporter_python*"]
+
+[tool.setuptools.package-data]
+playwright_smart_reporter_python = [
+    "py.typed",
+    "_bundled_dist/**/*.js",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q"

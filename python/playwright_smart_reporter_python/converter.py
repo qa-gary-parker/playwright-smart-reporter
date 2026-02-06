@@ -1,13 +1,13 @@
 """
-JSON converter: pytest-json-report format → Playwright Smart Reporter format
+JSON converter: pytest-json-report format -> Playwright Smart Reporter format
 """
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
-def _to_ms(seconds: float | int | None) -> int:
+def _to_ms(seconds: Optional[Union[float, int]]) -> int:
     """Convert seconds to milliseconds."""
     if seconds is None:
         return 0
@@ -42,13 +42,22 @@ def _status_from_outcome(outcome: Optional[str]) -> str:
     return "failed"
 
 
+def _playwright_outcome(outcome: Optional[str]) -> str:
+    """Map pytest outcome to Playwright outcome enum."""
+    if outcome == "passed":
+        return "expected"
+    if outcome == "skipped":
+        return "skipped"
+    return "unexpected"
+
+
 def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
     """
     Convert pytest JSON report to Playwright Smart Reporter data format.
-    
+
     Args:
         pytest_json_path: Path to pytest-json-report output file
-        
+
     Returns:
         Dictionary in Smart Reporter HtmlGeneratorData format
     """
@@ -57,10 +66,10 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
     tests: List[Dict[str, Any]] = data.get("tests", [])
 
     results: List[Dict[str, Any]] = []
-    
+
     for test in tests:
         nodeid = test.get("nodeid", "unknown::test")
-        
+
         # Parse test file and name from nodeid
         if "::" in nodeid:
             parts = nodeid.split("::")
@@ -75,8 +84,7 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
 
         # Extract additional metadata
         keywords = test.get("keywords", [])
-        markers = test.get("markers", {})
-        
+
         results.append(
             {
                 "testId": nodeid,
@@ -86,6 +94,8 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
                 "duration": _to_ms(duration),
                 "error": error,
                 "retry": 0,
+                "outcome": _playwright_outcome(outcome),
+                "expectedStatus": "passed",
                 "steps": [],
                 "history": [],
                 "tags": keywords if isinstance(keywords, list) else [],
@@ -97,12 +107,6 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
                 },
             }
         )
-
-    # Calculate summary stats
-    total = len(results)
-    passed = sum(1 for r in results if r["status"] == "passed")
-    failed = sum(1 for r in results if r["status"] == "failed")
-    skipped = sum(1 for r in results if r["status"] == "skipped")
 
     html_data: Dict[str, Any] = {
         "results": results,
@@ -116,7 +120,7 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
             # Feature flags - enable what makes sense for pytest
             "enableTraceViewer": False,
             "enableNetworkLogs": False,
-            "enableGalleryView": True,
+            "enableGalleryView": False,
             "enableComparison": False,
             "enableHistoryDrilldown": False,
             "enableAIRecommendations": True,

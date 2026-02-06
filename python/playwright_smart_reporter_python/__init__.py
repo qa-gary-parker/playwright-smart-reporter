@@ -1,12 +1,14 @@
 """
 Playwright Smart Reporter - Python Bridge
 
-This package provides Python/pytest integration for the Playwright Smart Reporter.
-It converts pytest test results to the Smart Reporter format and generates 
-beautiful HTML reports with AI-powered analysis.
+Python/pytest integration for the Playwright Smart Reporter.
+Converts pytest results to Smart Reporter format and generates
+HTML reports with AI-powered analysis.
+
+Requires Node.js 18+ at runtime (no npm install needed).
 """
 
 from .bridge import SmartReporterBridge
 
-__version__ = "0.1.0"
+__version__ = "1.0.7"
 __all__ = ["SmartReporterBridge"]

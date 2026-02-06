@@ -6,18 +6,17 @@ Python integration for [Playwright Smart Reporter](https://github.com/qa-gary-pa
 
 All the features from the main Playwright Smart Reporter, now available for Python/pytest:
 
-- 🤖 **AI Failure Analysis** - Claude/OpenAI/Gemini powered suggestions
-- 📊 **Smart Analytics** - Flakiness detection, performance regression alerts
-- 📈 **Trend Charts** - Visual history of test health over time  
-- 🎯 **Stability Scoring** - A+ to F grades for test reliability
-- 🔍 **Failure Clustering** - Group similar errors automatically
-- 🎨 **Modern Dashboard** - Interactive sidebar navigation, light/dark themes
+- **AI Failure Analysis** - Claude/OpenAI/Gemini powered suggestions
+- **Smart Analytics** - Flakiness detection, performance regression alerts
+- **Trend Charts** - Visual history of test health over time
+- **Stability Scoring** - A+ to F grades for test reliability
+- **Failure Clustering** - Group similar errors automatically
+- **Modern Dashboard** - Interactive sidebar navigation, light/dark themes
 
 ## Prerequisites
 
 - Python 3.9+
-- Node.js 18+ (required for the HTML generator)
-- pytest
+- Node.js 18+ (runtime only - no `npm install` needed)
 
 ## Installation
 
@@ -25,25 +24,19 @@ All the features from the main Playwright Smart Reporter, now available for Pyth
 pip install playwright-smart-reporter-python
 ```
 
-**Note**: This package automatically installs the Node.js dependencies on first use.
+The package is self-contained. The compiled JavaScript report generator is bundled in the wheel - Node.js is only needed at runtime to execute it.
 
 ## Quick Start
 
-### Option 1: Automatic (Pytest Plugin)
+### Option 1: Pytest Plugin (Automatic)
 
-Add to your `conftest.py`:
-
-```python
-pytest_plugins = ["playwright_smart_reporter"]
-```
-
-Then run your tests:
+Run your tests with the `--smart-reporter` flag:
 
 ```bash
-pytest
+pytest --json-report --smart-reporter
 ```
 
-Report automatically generated at `smart-report.html` ✨
+Report automatically generated at `smart-report.html`.
 
 ### Option 2: Manual Generation
 
@@ -59,27 +52,15 @@ bridge.generate_report(
 
 ## Configuration
 
-### Basic pytest.ini
+### pytest.ini / pyproject.toml
 
 ```ini
 [pytest]
-addopts = 
+addopts =
     --json-report
     --json-report-file=.pytest-report.json
     --smart-reporter
-```
-
-### Advanced Configuration
-
-Create a `.smart-reporter.json` in your project root:
-
-```json
-{
-  "enableAI": true,
-  "aiProvider": "anthropic",
-  "maxHistoryRuns": 50,
-  "outputFile": "test-reports/smart-report.html"
-}
+    --smart-reporter-output=test-reports/smart-report.html
 ```
 
 ### Environment Variables
@@ -91,9 +72,7 @@ export OPENAI_API_KEY="sk-..."
 export GEMINI_API_KEY="..."
 ```
 
-## Usage with pytest-playwright
-
-For Playwright Python tests, this works seamlessly:
+## Usage with Playwright for Python
 
 ```python
 # test_example.py
@@ -104,72 +83,50 @@ def test_homepage(page: Page):
     assert page.title() == "Fast and reliable end-to-end testing"
 ```
 
-Run with:
-
 ```bash
 pytest --headed --smart-reporter
 ```
 
+## How It Works
+
+1. **pytest** runs your tests with JSON reporting enabled
+2. **Converter** transforms pytest JSON to Playwright Smart Reporter format
+3. **Node.js bridge** calls the bundled HTML generator
+4. **Output** interactive HTML report
+
 ## Development
 
-This is part of a monorepo. The Python package lives in `python/` and depends on the main npm package in the root.
-
-### Local Development Setup
+This is part of a monorepo. The Python package lives in `python/` and can use either the bundled JS dist (PyPI install) or the monorepo `dist/` (local development).
 
 ```bash
 # From repository root
+npm run build                      # Compile TypeScript
 cd python
-pip install -e ".[dev]"
-
-# Run example
-cd examples/basic_usage
-python run_example.py
+python scripts/bundle_dist.py      # Bundle JS into package
+pip install -e ".[dev]"            # Editable install
+pytest tests/ -v                   # Run tests
 ```
-
-## How It Works
-
-1. **pytest runs** your tests with JSON reporting enabled
-2. **Converter** transforms pytest JSON → Playwright Smart Reporter format
-3. **Node.js bridge** calls the main reporter to generate HTML
-4. **Output** beautiful interactive HTML report
-
-The bridge approach gives you 100% feature parity with the Node.js version while maintaining a clean Python API.
 
 ## Troubleshooting
 
 ### Node.js not found
 
-```bash
-# Install Node.js (required for HTML generation)
-# Windows: https://nodejs.org
-# macOS: brew install node
-# Linux: sudo apt install nodejs
-```
-
-### npm install fails
-
-The package will auto-install Node dependencies on first run. If this fails:
+The package needs Node.js at runtime to execute the report generator:
 
 ```bash
-cd ~/.local/share/playwright-smart-reporter-python/node_modules
-npm install playwright-smart-reporter
+# macOS
+brew install node
+
+# Linux
+sudo apt install nodejs
+
+# Windows
+# Download from https://nodejs.org
 ```
-
-## Examples
-
-See `examples/` directory for:
-- Basic usage
-- pytest-playwright integration
-- Custom configuration
-- CI/CD integration
 
 ## License
 
-MIT - See LICENSE file in repository root.
-
-## Contributing
-
-This is part of the main Playwright Smart Reporter monorepo. See root README for contribution guidelines.
+MIT - See [LICENSE](LICENSE).
 
 ## Related
 
