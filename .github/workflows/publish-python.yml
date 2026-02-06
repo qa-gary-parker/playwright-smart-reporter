@@ -1,0 +1,116 @@
+name: Publish Python Package
+
+on:
+  push:
+    tags:
+      - "python-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build Node.js dist
+        run: npm ci && npm run build
+
+      - name: Bundle dist into Python package
+        run: python python/scripts/bundle_dist.py
+
+      - name: Install Python package
+        run: pip install -e "python/[dev]"
+
+      - name: Run tests
+        run: pytest python/tests/ -v
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build Node.js dist
+        run: npm ci && npm run build
+
+      - name: Bundle dist into Python package
+        run: python python/scripts/bundle_dist.py
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build python/
+
+      - name: Verify wheel contains JS files
+        run: |
+          python -c "
+          import zipfile, sys
+          whl = list(__import__('pathlib').Path('python/dist').glob('*.whl'))[0]
+          with zipfile.ZipFile(whl) as z:
+              js_files = [n for n in z.namelist() if n.endswith('.js')]
+              print(f'JS files in wheel: {len(js_files)}')
+              for f in js_files:
+                  print(f'  {f}')
+              if len(js_files) < 11:
+                  print('ERROR: Expected at least 11 JS files')
+                  sys.exit(1)
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: python/dist/
+
+  publish-testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: testpypi
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/python-v')
+    environment: pypi
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

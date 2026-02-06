@@ -1,0 +1,61 @@
+{
+  "created": 1700000000.0,
+  "duration": 12.345,
+  "exitcode": 1,
+  "root": "/home/user/project",
+  "environment": {
+    "Python": "3.12.0",
+    "Platform": "Linux-6.1.0-x86_64"
+  },
+  "summary": {
+    "passed": 2,
+    "failed": 1,
+    "skipped": 1,
+    "total": 4,
+    "collected": 4
+  },
+  "tests": [
+    {
+      "nodeid": "tests/test_login.py::TestLogin::test_valid_credentials",
+      "outcome": "passed",
+      "duration": 1.234,
+      "keywords": ["login", "smoke"],
+      "setup": { "outcome": "passed", "duration": 0.01 },
+      "call": { "outcome": "passed", "duration": 1.2 },
+      "teardown": { "outcome": "passed", "duration": 0.01 }
+    },
+    {
+      "nodeid": "tests/test_login.py::TestLogin::test_invalid_password",
+      "outcome": "failed",
+      "duration": 2.5,
+      "keywords": ["login", "negative"],
+      "setup": { "outcome": "passed", "duration": 0.01 },
+      "call": {
+        "outcome": "failed",
+        "duration": 2.4,
+        "longrepr": "AssertionError: Expected 'Invalid password' but got 'Login successful'\n\ntests/test_login.py:42: AssertionError"
+      },
+      "teardown": { "outcome": "passed", "duration": 0.01 }
+    },
+    {
+      "nodeid": "tests/test_dashboard.py::test_widget_count",
+      "outcome": "passed",
+      "duration": 0.567,
+      "keywords": ["dashboard"],
+      "setup": { "outcome": "passed", "duration": 0.005 },
+      "call": { "outcome": "passed", "duration": 0.55 },
+      "teardown": { "outcome": "passed", "duration": 0.005 }
+    },
+    {
+      "nodeid": "tests/test_dashboard.py::test_export_csv",
+      "outcome": "skipped",
+      "duration": 0.001,
+      "keywords": ["dashboard", "export"],
+      "setup": {
+        "outcome": "skipped",
+        "duration": 0.001,
+        "longrepr": "Skipped: CSV export not implemented yet"
+      }
+    }
+  ]
+}
