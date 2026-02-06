@@ -4,6 +4,27 @@ import type { TestCase, TestResult } from '@playwright/test/reporter';
 // Configuration
 // ============================================================================
 
+export interface ThresholdConfig {
+  // Flakiness thresholds (0-1 scale, where 0 = never fails, 1 = always fails)
+  flakinessStable?: number;        // Default: 0.1 (below this = stable)
+  flakinessUnstable?: number;      // Default: 0.3 (below this = unstable, above = flaky)
+
+  // Performance threshold (fraction, e.g., 0.2 = 20% slower triggers regression)
+  performanceRegression?: number;  // Default: 0.2
+
+  // Stability score weights (must sum to 1.0)
+  stabilityWeightFlakiness?: number;   // Default: 0.4
+  stabilityWeightPerformance?: number; // Default: 0.3
+  stabilityWeightReliability?: number; // Default: 0.3
+
+  // Grade thresholds
+  gradeA?: number;                 // Default: 90
+  gradeB?: number;                 // Default: 80
+  gradeC?: number;                 // Default: 70
+  gradeD?: number;                 // Default: 60
+
+}
+
 export interface SmartReporterOptions {
   // Core options
   outputFile?: string;
@@ -27,6 +48,9 @@ export interface SmartReporterOptions {
   // NEW: Thresholds
   stabilityThreshold?: number;     // Default: 70 (warn below this)
   retryFailureThreshold?: number;  // Default: 3 (warn if needs >3 retries)
+
+  // Configurable thresholds for all analyzers
+  thresholds?: ThresholdConfig;
 
   // NEW: Comparison
   baselineRunId?: string;          // Compare against specific run
@@ -53,12 +77,18 @@ export interface SmartReporterOptions {
   // Supports {project} placeholder in historyFile path
   projectName?: string;            // e.g., 'api-tests' or 'ui-regression'
 
+  // Report size optimization
+  maxEmbeddedSize?: number;        // Max bytes for inline base64 (default: 5MB). Traces larger are file-referenced.
+
   // Cloud upload options (for StageWright cloud service)
   apiKey?: string;                 // API key for cloud service
   projectId?: string;              // Project ID in cloud service
   uploadToCloud?: boolean;         // Enable cloud upload (default: false)
   cloudEndpoint?: string;          // Custom cloud endpoint URL
   uploadArtifacts?: boolean;       // Upload attachments to cloud (default: true)
+
+  // Issue #26: External run ID for consistent IDs across CI shards
+  runId?: string;                  // Unique identifier for this test run (e.g. GITHUB_RUN_ID)
 }
 
 // ============================================================================

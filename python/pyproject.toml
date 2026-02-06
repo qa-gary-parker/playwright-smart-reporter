@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "playwright-smart-reporter-python"
-version = "1.0.7"
+version = "1.0.8"
 description = "Python bridge for Playwright Smart Reporter - AI-powered test analysis and reporting"
 readme = "README.md"
 requires-python = ">=3.9"

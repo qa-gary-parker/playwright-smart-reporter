@@ -1718,6 +1718,12 @@ export function generateTraceViewerScript(): string {
         };
       }
 
+      // file:// protocol cannot use fetch for local files due to browser security
+      if (window.location.protocol === 'file:') {
+        showTraceError('Cannot load traces via file://. Run: npx playwright-smart-reporter-serve to view with full trace support, or use "Load from file" below.');
+        return;
+      }
+
       try {
         console.log('[TraceViewer] Loading JSZip...');
         await loadJSZip();

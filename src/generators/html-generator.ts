@@ -5,7 +5,7 @@
  * REDESIGNED: Modern app-shell layout with sidebar, top bar, and master-detail view
  */
 
-import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster } from '../types';
+import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo } from '../types';
 import { formatDuration, escapeHtml, sanitizeId } from '../utils';
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
@@ -22,6 +22,7 @@ export interface HtmlGeneratorData {
   comparison?: RunComparison;
   historyRunSnapshots?: Record<string, RunSnapshotFile>;
   failureClusters?: FailureCluster[];
+  ciInfo?: CIInfo;
 }
 
 /**
@@ -387,7 +388,7 @@ function generateOverviewContent(
  * Generate complete HTML report with new app-shell layout
  */
 export function generateHtml(data: HtmlGeneratorData): string {
-  const { results, history, startTime, options, comparison, historyRunSnapshots, failureClusters } = data;
+  const { results, history, startTime, options, comparison, historyRunSnapshots, failureClusters, ciInfo } = data;
 
   const totalDuration = Date.now() - startTime;
 
@@ -603,6 +604,9 @@ ${generateStyles(passRate, cspSafe)}
             <button class="export-menu-item" onclick="exportCSV()" role="menuitem">
               <span>📊</span> CSV
             </button>
+            <button class="export-menu-item" onclick="showSummaryExport()" role="menuitem">
+              <span>📋</span> Summary Card
+            </button>
           </div>
         </div>
         <div class="theme-dropdown" id="themeDropdown">
@@ -625,6 +629,16 @@ ${generateStyles(passRate, cspSafe)}
         <div class="timestamp">${new Date().toLocaleString()}</div>
       </div>
     </header>
+
+    ${ciInfo ? `
+    <!-- CI Environment Info Bar -->
+    <div class="ci-info-bar">
+      <span class="ci-provider">${escapeHtml(ciInfo.provider.toUpperCase())}</span>
+      ${ciInfo.branch ? `<span class="ci-item"><span class="ci-label">Branch:</span> ${escapeHtml(ciInfo.branch)}</span>` : ''}
+      ${ciInfo.commit ? `<span class="ci-item"><span class="ci-label">Commit:</span> <code>${escapeHtml(ciInfo.commit)}</code></span>` : ''}
+      ${ciInfo.buildId ? `<span class="ci-item"><span class="ci-label">Build:</span> #${escapeHtml(ciInfo.buildId)}</span>` : ''}
+    </div>
+    ` : ''}
 
     <!-- Mobile sidebar overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
@@ -1289,6 +1303,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       flex-direction: column;
       background: var(--bg-sidebar);
       border-right: 1px solid var(--border-subtle);
+      min-height: 0; /* Allow grid cell to shrink below content height */
       overflow-y: auto;
       overflow-x: hidden;
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
@@ -1303,6 +1318,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       padding: 1.25rem;
       text-align: center;
       border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
     }
 
     .progress-ring-container {
@@ -1367,6 +1383,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       gap: 0.5rem;
       padding: 0.75rem;
       border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
     }
 
     .mini-stat {
@@ -1406,6 +1423,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     .sidebar-nav {
       padding: 0.75rem;
       border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
     }
 
     .sidebar-nav [role="tablist"] {
@@ -1489,6 +1507,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     .sidebar-filters {
       padding: 0.75rem;
       border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
     }
 
     .filter-group {
@@ -1589,9 +1608,8 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     }
 
     .sidebar-files {
-      flex: 1;
       padding: 0.75rem;
-      overflow-y: auto;
+      flex-shrink: 0;
     }
 
     .file-tree {
@@ -1650,6 +1668,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
     .sidebar-footer {
       padding: 0.75rem;
       border-top: 1px solid var(--border-subtle);
+      flex-shrink: 0;
     }
 
     .run-duration {
@@ -5695,6 +5714,329 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       color: var(--text-primary);
     }
 
+    /* ============================================
+       CI INFO BAR
+    ============================================ */
+    .ci-info-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 6px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-family: ${monoFont};
+    }
+    .ci-provider {
+      background: var(--accent-blue);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.65rem;
+      letter-spacing: 0.5px;
+    }
+    .ci-item { display: flex; align-items: center; gap: 4px; }
+    .ci-label { color: var(--text-muted); }
+    .ci-info-bar code {
+      background: var(--bg-card);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: ${monoFont};
+    }
+
+    /* ============================================
+       STEP TIMELINE / FLAMECHART
+    ============================================ */
+    .step-timeline {
+      position: relative;
+      width: 100%;
+      height: 40px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 8px 0;
+      cursor: default;
+    }
+    .step-timeline-bar {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: var(--text-primary);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      padding: 0 4px;
+      transition: opacity 0.15s;
+      cursor: pointer;
+      border-right: 1px solid var(--bg-primary);
+    }
+    .step-timeline-bar:hover {
+      opacity: 0.85;
+      z-index: 1;
+      outline: 2px solid var(--text-primary);
+    }
+    .step-timeline-bar.cat-navigation { background: #3b82f6; }
+    .step-timeline-bar.cat-assertion { background: #22c55e; }
+    .step-timeline-bar.cat-action { background: #a855f7; }
+    .step-timeline-bar.cat-api { background: #f59e0b; }
+    .step-timeline-bar.cat-wait { background: #6b7280; }
+    .step-timeline-bar.cat-other { background: #64748b; }
+    .step-timeline-legend {
+      display: flex;
+      gap: 12px;
+      margin-top: 4px;
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+    .step-timeline-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .step-timeline-legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+
+    /* ============================================
+       ENHANCED TREND CHARTS
+    ============================================ */
+    .trend-moving-avg {
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .chart-anomaly-marker {
+      stroke: var(--accent-red);
+      stroke-width: 2;
+      fill: none;
+    }
+    .chart-bar-anomaly {
+      stroke: var(--accent-red) !important;
+      stroke-width: 2 !important;
+      stroke-dasharray: 4 2;
+    }
+    .trend-avg-label {
+      font-size: 9px;
+      fill: var(--accent-yellow);
+      font-style: italic;
+    }
+
+    /* ============================================
+       FAILURE DIFF VIEW
+    ============================================ */
+    .diff-container {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 8px 0;
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      border: 1px solid var(--border-subtle);
+    }
+    .diff-header {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .diff-line {
+      padding: 2px 12px;
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .diff-line.diff-expected {
+      background: rgba(255, 68, 102, 0.1);
+      color: var(--accent-red);
+    }
+    .diff-line.diff-expected::before {
+      content: "- ";
+      opacity: 0.5;
+    }
+    .diff-line.diff-actual {
+      background: rgba(0, 255, 136, 0.1);
+      color: var(--accent-green);
+    }
+    .diff-line.diff-actual::before {
+      content: "+ ";
+      opacity: 0.5;
+    }
+    .diff-line.diff-same {
+      color: var(--text-muted);
+    }
+    .diff-line.diff-same::before {
+      content: "  ";
+      opacity: 0.5;
+    }
+
+    /* ============================================
+       KEYBOARD SHORTCUTS
+    ============================================ */
+    .keyboard-hints {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      max-width: 320px;
+    }
+    .keyboard-hints.visible { display: block; }
+    .keyboard-hints h4 {
+      margin: 0 0 8px;
+      color: var(--text-primary);
+      font-size: 0.8rem;
+    }
+    .keyboard-hint-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+    }
+    .keyboard-hint-row kbd {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    /* ============================================
+       VIRTUAL SCROLLING
+    ============================================ */
+    .virtual-scroll-container {
+      height: calc(100vh - 200px);
+      overflow-y: auto;
+      position: relative;
+    }
+    .virtual-scroll-spacer {
+      width: 100%;
+    }
+    .virtual-scroll-viewport {
+      position: absolute;
+      width: 100%;
+    }
+    .test-list-item-count {
+      padding: 8px 16px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    /* ============================================
+       EXPORTABLE SUMMARY CARD
+    ============================================ */
+    .summary-export-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .summary-export-modal.visible { display: flex; }
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 16px 64px rgba(0,0,0,0.4);
+    }
+    .summary-card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .summary-card-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+    .summary-card-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .summary-stat {
+      text-align: center;
+    }
+    .summary-stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: ${monoFont};
+    }
+    .summary-stat-value.passed { color: var(--accent-green); }
+    .summary-stat-value.failed { color: var(--accent-red); }
+    .summary-stat-value.rate { color: var(--accent-blue); }
+    .summary-stat-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .summary-card-bar {
+      height: 8px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .summary-card-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .summary-card-footer {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+    .summary-card-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: ${primaryFont};
+    }
+    .summary-card-btn:hover { background: var(--bg-card-hover); }
+    .summary-card-btn.primary {
+      background: var(--accent-blue);
+      color: #fff;
+      border-color: var(--accent-blue);
+    }
+
     /* Issue #13: Inline Trace Viewer Styles */
     ${generateTraceViewerStyles(monoFont)}
 `;
@@ -6993,38 +7335,6 @@ function generateScripts(
       }
     });
 
-    function viewTraceFromEl(el) {
-      const tracePath = el?.dataset?.trace;
-      return viewTrace(tracePath);
-    }
-
-    function viewTrace(tracePath) {
-      if (!tracePath) return false;
-
-      if (!traceViewerEnabled) {
-        alert('Trace Viewer is disabled by reporter configuration (enableTraceViewer: false).');
-        return false;
-      }
-
-      if (window.location.protocol === 'file:') {
-        const reportFilePath = decodeURIComponent(window.location.pathname || '').replace(/\\+/g, '/');
-        const reportDirPath = reportFilePath.substring(0, reportFilePath.lastIndexOf('/')) || '.';
-        const cmd =
-          'npx playwright-smart-reporter-view-trace ' +
-          JSON.stringify(tracePath) +
-          ' --dir ' +
-          JSON.stringify(reportDirPath);
-        window.prompt('To view this trace, run:', cmd);
-        return false;
-      }
-
-      window.prompt(
-        'To view this trace, run from the report folder:',
-        'npx playwright-smart-reporter-view-trace ' + JSON.stringify(tracePath)
-      );
-      return false;
-    }
-
 ${includeGallery ? `    // Gallery functions\n${generateGalleryScript()}` : ''}
 
 ${includeComparison ? `    // Comparison functions\n${generateComparisonScript()}` : ''}
@@ -7054,5 +7364,215 @@ ${includeComparison ? `    // Comparison functions\n${generateComparisonScript()
         });
       });
     })();
+
+    /* ============================================
+       VIRTUAL SCROLLING / PAGINATION
+    ============================================ */
+    (function initVirtualScroll() {
+      const PAGE_SIZE = 50;
+      const listContainer = document.querySelector('#tab-all [role="list"]');
+      if (!listContainer) return;
+
+      const allItems = Array.from(listContainer.children);
+      if (allItems.length <= PAGE_SIZE) return;
+
+      let visibleCount = PAGE_SIZE;
+
+      // Initially hide items beyond page size
+      allItems.forEach((item, i) => {
+        if (i >= PAGE_SIZE) item.style.display = 'none';
+      });
+
+      // Add count indicator
+      const countDiv = document.createElement('div');
+      countDiv.className = 'test-list-item-count';
+      countDiv.textContent = 'Showing ' + PAGE_SIZE + ' of ' + allItems.length + ' tests';
+      listContainer.parentNode.insertBefore(countDiv, listContainer);
+
+      // Add load more button
+      const loadMoreBtn = document.createElement('button');
+      loadMoreBtn.textContent = 'Load more tests...';
+      loadMoreBtn.className = 'summary-card-btn';
+      loadMoreBtn.style.cssText = 'margin: 12px auto; display: block;';
+      loadMoreBtn.onclick = function() {
+        const newCount = Math.min(visibleCount + PAGE_SIZE, allItems.length);
+        for (let i = visibleCount; i < newCount; i++) {
+          allItems[i].style.display = '';
+        }
+        visibleCount = newCount;
+        countDiv.textContent = 'Showing ' + visibleCount + ' of ' + allItems.length + ' tests';
+        if (visibleCount >= allItems.length) {
+          loadMoreBtn.style.display = 'none';
+          countDiv.textContent = 'Showing all ' + allItems.length + ' tests';
+        }
+      };
+      listContainer.parentNode.appendChild(loadMoreBtn);
+
+      // Listen for filter changes to reset pagination
+      const observer = new MutationObserver(() => {
+        const visibleItems = allItems.filter(item => !item.classList.contains('filter-hidden'));
+        countDiv.textContent = 'Showing ' + visibleItems.length + ' of ' + allItems.length + ' tests';
+      });
+      observer.observe(listContainer, { childList: false, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    })();
+
+    /* ============================================
+       KEYBOARD-DRIVEN NAVIGATION
+    ============================================ */
+    (function initKeyboardNav() {
+      // Create keyboard hints panel
+      const hints = document.createElement('div');
+      hints.className = 'keyboard-hints';
+      hints.innerHTML = '<h4>Keyboard Shortcuts</h4>' +
+        '<div class="keyboard-hint-row"><span>Navigate tests</span><kbd>j</kbd> <kbd>k</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Next failure</span><kbd>f</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Next flaky</span><kbd>n</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Search</span><kbd>⌘K</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Toggle sidebar</span><kbd>⌘B</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Views (1-5)</span><kbd>1</kbd>-<kbd>5</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Show/hide hints</span><kbd>?</kbd></div>' +
+        '<div class="keyboard-hint-row"><span>Export summary</span><kbd>e</kbd></div>';
+      document.body.appendChild(hints);
+
+      function getVisibleTestItems() {
+        return Array.from(document.querySelectorAll('.test-list-item')).filter(
+          el => el.offsetParent !== null && el.style.display !== 'none'
+        );
+      }
+
+      function getCurrentIndex(items) {
+        return items.findIndex(el => el.classList.contains('selected'));
+      }
+
+      function selectByIndex(items, idx) {
+        if (idx >= 0 && idx < items.length) {
+          const testId = items[idx].id.replace('list-item-', '');
+          selectTest(testId);
+          items[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+
+      document.addEventListener('keydown', function(e) {
+        // Don't handle keys when typing in input fields
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        const items = getVisibleTestItems();
+        const currentIdx = getCurrentIndex(items);
+
+        switch(e.key) {
+          case 'j': // Next test
+            e.preventDefault();
+            if (currentView !== 'tests') switchView('tests');
+            selectByIndex(items, currentIdx < 0 ? 0 : currentIdx + 1);
+            break;
+          case 'k': // Previous test
+            e.preventDefault();
+            if (currentView !== 'tests') switchView('tests');
+            selectByIndex(items, currentIdx < 0 ? 0 : currentIdx - 1);
+            break;
+          case 'f': // Next failure
+            e.preventDefault();
+            if (currentView !== 'tests') switchView('tests');
+            for (let i = (currentIdx + 1); i < items.length; i++) {
+              if (items[i].classList.contains('failed')) {
+                selectByIndex(items, i);
+                break;
+              }
+            }
+            break;
+          case 'n': // Next flaky
+            e.preventDefault();
+            if (currentView !== 'tests') switchView('tests');
+            for (let i = (currentIdx + 1); i < items.length; i++) {
+              if (items[i].dataset.flaky === 'true') {
+                selectByIndex(items, i);
+                break;
+              }
+            }
+            break;
+          case '?': // Toggle hints
+            e.preventDefault();
+            hints.classList.toggle('visible');
+            break;
+          case 'e': // Export summary
+            e.preventDefault();
+            if (typeof showSummaryExport === 'function') showSummaryExport();
+            break;
+          case '1': switchView('overview'); break;
+          case '2': switchView('tests'); break;
+          case '3': switchView('trends'); break;
+          case '4':
+            if (document.getElementById('view-comparison')) switchView('comparison');
+            break;
+          case '5':
+            if (document.getElementById('view-gallery')) switchView('gallery');
+            break;
+          case 'Escape':
+            hints.classList.remove('visible');
+            break;
+        }
+      });
+    })();
+
+    /* ============================================
+       EXPORTABLE SUMMARY CARD
+    ============================================ */
+    function showSummaryExport() {
+      let modal = document.getElementById('summary-export-modal');
+      if (modal) {
+        modal.classList.add('visible');
+        return;
+      }
+
+      const passRate = stats.total > 0 ? Math.round((stats.passed / stats.total) * 100) : 0;
+      const barColor = passRate >= 90 ? 'var(--accent-green)' : passRate >= 70 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+      const timestamp = new Date().toLocaleString();
+
+      modal = document.createElement('div');
+      modal.id = 'summary-export-modal';
+      modal.className = 'summary-export-modal visible';
+      modal.innerHTML =
+        '<div class="summary-card">' +
+          '<div class="summary-card-title">Test Run Summary</div>' +
+          '<div class="summary-card-subtitle">' + timestamp + '</div>' +
+          '<div class="summary-card-stats">' +
+            '<div class="summary-stat"><div class="summary-stat-value passed">' + stats.passed + '</div><div class="summary-stat-label">Passed</div></div>' +
+            '<div class="summary-stat"><div class="summary-stat-value failed">' + stats.failed + '</div><div class="summary-stat-label">Failed</div></div>' +
+            '<div class="summary-stat"><div class="summary-stat-value rate">' + passRate + '%</div><div class="summary-stat-label">Pass Rate</div></div>' +
+          '</div>' +
+          '<div class="summary-card-bar"><div class="summary-card-bar-fill" style="width: ' + passRate + '%; background: ' + barColor + ';"></div></div>' +
+          '<div style="font-size: 0.75rem; color: var(--text-muted);">' +
+            stats.total + ' total &bull; ' + stats.flaky + ' flaky &bull; ' + stats.slow + ' slow &bull; ' + stats.skipped + ' skipped' +
+          '</div>' +
+          '<div class="summary-card-footer">' +
+            '<button class="summary-card-btn" onclick="closeSummaryExport()">Close</button>' +
+            '<button class="summary-card-btn primary" onclick="copySummaryToClipboard()">Copy to Clipboard</button>' +
+          '</div>' +
+        '</div>';
+      modal.addEventListener('click', function(e) { if (e.target === modal) closeSummaryExport(); });
+      document.body.appendChild(modal);
+    }
+
+    function closeSummaryExport() {
+      const modal = document.getElementById('summary-export-modal');
+      if (modal) modal.classList.remove('visible');
+    }
+
+    function copySummaryToClipboard() {
+      const passRate = stats.total > 0 ? Math.round((stats.passed / stats.total) * 100) : 0;
+      const text = 'Test Run Summary\\n' +
+        '═══════════════════\\n' +
+        'Passed: ' + stats.passed + '/' + stats.total + ' (' + passRate + '%)\\n' +
+        'Failed: ' + stats.failed + '\\n' +
+        'Flaky: ' + stats.flaky + '\\n' +
+        'Slow: ' + stats.slow + '\\n' +
+        'Duration: ' + document.querySelector('.duration-value')?.textContent + '\\n' +
+        'Date: ' + new Date().toLocaleString();
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Summary copied to clipboard!', 'success');
+      }).catch(() => {
+        showToast('Failed to copy', 'error');
+      });
+    }
 `;
 }

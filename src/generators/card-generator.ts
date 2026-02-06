@@ -222,13 +222,47 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
     `;
   }
 
-  // Step timings - show first as it's most useful for performance analysis
+  // Step timings - show flamechart timeline first, then step bars
   if (test.steps.length > 0) {
     const maxDuration = Math.max(...test.steps.map((s) => s.duration));
+    const totalStepDuration = test.steps.reduce((sum, s) => sum + s.duration, 0);
+
+    // Categorize steps by type for flamechart coloring
+    function categorizeStep(title: string): string {
+      const t = title.toLowerCase();
+      if (t.includes('goto') || t.includes('navigate') || t.includes('page.goto')) return 'navigation';
+      if (t.includes('expect') || t.includes('assert') || t.includes('toHave') || t.includes('toBe')) return 'assertion';
+      if (t.includes('click') || t.includes('fill') || t.includes('type') || t.includes('press') || t.includes('check') || t.includes('select')) return 'action';
+      if (t.includes('wait') || t.includes('timeout')) return 'wait';
+      if (t.includes('request') || t.includes('api') || t.includes('fetch') || t.includes('route')) return 'api';
+      return 'other';
+    }
+
+    // Generate flamechart timeline
+    let timelineOffset = 0;
+    const usedCategories = new Set<string>();
+    const timelineBars = test.steps.map(step => {
+      const widthPct = totalStepDuration > 0 ? ((step.duration / totalStepDuration) * 100) : 0;
+      const leftPct = totalStepDuration > 0 ? ((timelineOffset / totalStepDuration) * 100) : 0;
+      timelineOffset += step.duration;
+      const cat = categorizeStep(step.title);
+      usedCategories.add(cat);
+      const label = widthPct > 8 ? escapeHtml(step.title.length > 20 ? step.title.slice(0, 18) + '..' : step.title) : '';
+      return `<div class="step-timeline-bar cat-${cat}" style="left: ${leftPct.toFixed(1)}%; width: ${Math.max(widthPct, 0.5).toFixed(1)}%;" title="${escapeHtml(step.title)} (${formatDuration(step.duration)})">${label}</div>`;
+    }).join('');
+
+    const catColors: Record<string, string> = { navigation: '#3b82f6', assertion: '#22c55e', action: '#a855f7', api: '#f59e0b', wait: '#6b7280', other: '#64748b' };
+    const catLabels: Record<string, string> = { navigation: 'Navigation', assertion: 'Assertion', action: 'Action', api: 'API', wait: 'Wait', other: 'Other' };
+    const legendHtml = Array.from(usedCategories).map(cat =>
+      `<span class="step-timeline-legend-item"><span class="step-timeline-legend-dot" style="background: ${catColors[cat]}"></span>${catLabels[cat]}</span>`
+    ).join('');
+
     bodyDetails += `
       <div class="detail-section">
-        <div class="detail-label"><span class="icon">⏱</span> Step Timings</div>
-        <div class="steps-container">
+        <div class="detail-label"><span class="icon">⏱</span> Step Timeline</div>
+        <div class="step-timeline">${timelineBars}</div>
+        <div class="step-timeline-legend">${legendHtml}</div>
+        <div class="steps-container" style="margin-top: 8px;">
           ${test.steps
             .map(
               (step) => `
@@ -254,9 +288,26 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   }
 
   if (test.error) {
+    // Try to extract expected/actual values from assertion errors for diff view
+    let diffHtml = '';
+    const expectedMatch = test.error.match(/Expected\s*(?:string|value|pattern)?:?\s*(.+)/i);
+    const receivedMatch = test.error.match(/Received\s*(?:string|value)?:?\s*(.+)/i);
+    if (expectedMatch && receivedMatch) {
+      const expected = expectedMatch[1].trim().replace(/^["']|["']$/g, '');
+      const received = receivedMatch[1].trim().replace(/^["']|["']$/g, '');
+      diffHtml = `
+        <div class="diff-container">
+          <div class="diff-header"><span>Expected vs Received</span></div>
+          <div class="diff-line diff-expected">${escapeHtml(expected)}</div>
+          <div class="diff-line diff-actual">${escapeHtml(received)}</div>
+        </div>
+      `;
+    }
+
     bodyDetails += `
       <div class="detail-section">
         <div class="detail-label"><span class="icon">⚠</span> Error</div>
+        ${diffHtml}
         <div class="error-box">${escapeHtml(test.error)}</div>
       </div>
     `;

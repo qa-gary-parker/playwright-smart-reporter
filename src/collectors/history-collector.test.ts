@@ -67,6 +67,13 @@ describe('HistoryCollector', () => {
       expect(collector1.getCurrentRun().runId).toMatch(/^run-\d+$/);
       expect(collector2.getCurrentRun().runId).toMatch(/^run-\d+$/);
     });
+
+    it('uses a pre-provided run ID if supplied', () => {
+      const collector1 = new HistoryCollector({ runId: '123' }, outputDir);
+      const collector2 = new HistoryCollector({ runId: '123' }, outputDir);
+      expect(collector1.getCurrentRun().runId).toEqual('run-123');
+      expect(collector1.getCurrentRun().runId).toEqual(collector2.getCurrentRun().runId);
+    });
   });
 
   describe('loadHistory', () => {

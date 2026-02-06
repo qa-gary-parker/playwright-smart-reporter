@@ -61,6 +61,72 @@ import { buildComparison } from './generators/comparison-generator';
 import { SlackNotifier, TeamsNotifier } from './notifiers';
 import { formatDuration, stripAnsiCodes, sanitizeFilename } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
+import type { CIInfo } from './types';
+
+/**
+ * Auto-detect CI environment and capture metadata
+ */
+function detectCIInfo(): CIInfo | undefined {
+  const env = process.env;
+
+  if (env.GITHUB_ACTIONS) {
+    return {
+      provider: 'github',
+      branch: env.GITHUB_HEAD_REF || env.GITHUB_REF_NAME || env.GITHUB_REF?.replace('refs/heads/', ''),
+      commit: env.GITHUB_SHA?.slice(0, 8),
+      buildId: env.GITHUB_RUN_ID,
+    };
+  }
+  if (env.GITLAB_CI) {
+    return {
+      provider: 'gitlab',
+      branch: env.CI_COMMIT_REF_NAME,
+      commit: env.CI_COMMIT_SHORT_SHA || env.CI_COMMIT_SHA?.slice(0, 8),
+      buildId: env.CI_PIPELINE_ID,
+    };
+  }
+  if (env.CIRCLECI) {
+    return {
+      provider: 'circleci',
+      branch: env.CIRCLE_BRANCH,
+      commit: env.CIRCLE_SHA1?.slice(0, 8),
+      buildId: env.CIRCLE_BUILD_NUM,
+    };
+  }
+  if (env.JENKINS_URL) {
+    return {
+      provider: 'jenkins',
+      branch: env.GIT_BRANCH || env.BRANCH_NAME,
+      commit: env.GIT_COMMIT?.slice(0, 8),
+      buildId: env.BUILD_NUMBER,
+    };
+  }
+  if (env.TF_BUILD) {
+    return {
+      provider: 'azure',
+      branch: env.BUILD_SOURCEBRANCH?.replace('refs/heads/', ''),
+      commit: env.BUILD_SOURCEVERSION?.slice(0, 8),
+      buildId: env.BUILD_BUILDID,
+    };
+  }
+  if (env.BUILDKITE) {
+    return {
+      provider: 'buildkite',
+      branch: env.BUILDKITE_BRANCH,
+      commit: env.BUILDKITE_COMMIT?.slice(0, 8),
+      buildId: env.BUILDKITE_BUILD_NUMBER,
+    };
+  }
+  if (env.CI) {
+    return {
+      provider: 'unknown',
+      branch: env.CI_BRANCH || env.BRANCH,
+      commit: env.CI_COMMIT || env.COMMIT,
+      buildId: env.CI_BUILD_ID || env.BUILD_ID,
+    };
+  }
+  return undefined;
+}
 
 // ============================================================================
 // Smart Reporter
@@ -102,6 +168,7 @@ class SmartReporter implements Reporter {
   private startTime: number = 0;
   private fullConfig: FullConfig | null = null;
   private runnerErrors: string[] = [];
+  private ciInfo?: CIInfo;
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -138,6 +205,9 @@ class SmartReporter implements Reporter {
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
     this.fullConfig = config;
 
+    // Auto-detect CI environment
+    this.ciInfo = detectCIInfo();
+
     // Initialize HistoryCollector and load history
     this.historyCollector = new HistoryCollector(this.options, this.outputDir);
     this.historyCollector.loadHistory();
@@ -151,14 +221,15 @@ class SmartReporter implements Reporter {
     });
 
     // Initialize all analyzers with thresholds from options
-    const performanceThreshold = this.options.performanceThreshold ?? 0.2;
+    const thresholds = this.options.thresholds;
+    const performanceThreshold = thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2;
     const retryFailureThreshold = this.options.retryFailureThreshold ?? 3;
     const stabilityThreshold = this.options.stabilityThreshold ?? 70;
 
-    this.flakinessAnalyzer = new FlakinessAnalyzer();
+    this.flakinessAnalyzer = new FlakinessAnalyzer(thresholds);
     this.performanceAnalyzer = new PerformanceAnalyzer(performanceThreshold);
     this.retryAnalyzer = new RetryAnalyzer(retryFailureThreshold);
-    this.stabilityScorer = new StabilityScorer(stabilityThreshold);
+    this.stabilityScorer = new StabilityScorer(stabilityThreshold, thresholds);
 
     // Initialize notifiers
     this.slackNotifier = new SlackNotifier(this.options.slackWebhook);
@@ -342,10 +413,15 @@ class SmartReporter implements Reporter {
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
       // Embed trace as base64 for one-click viewing (skip in CSP-safe mode)
+      // Respect maxEmbeddedSize to prevent huge HTML files (default: 5MB)
+      const maxEmbeddedSize = this.options.maxEmbeddedSize ?? 5 * 1024 * 1024;
       if (!this.options.cspSafe) {
         try {
-          const traceBuffer = fs.readFileSync(traceAttachment.path);
-          testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
+          const stats = fs.statSync(traceAttachment.path);
+          if (stats.size <= maxEmbeddedSize) {
+            const traceBuffer = fs.readFileSync(traceAttachment.path);
+            testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
+          }
         } catch {
           // If we can't read the trace, just use the path
         }
@@ -560,6 +636,7 @@ class SmartReporter implements Reporter {
 	      comparison,
 	      historyRunSnapshots,
 	      failureClusters,
+	      ciInfo: this.ciInfo,
 	    };
 
     // Generate and save HTML report
@@ -568,7 +645,7 @@ class SmartReporter implements Reporter {
 
     // Issue #15: Better console output with command to open report
     console.log(`\n📊 Smart Report: ${outputPath}`);
-    console.log(`   View report: npx playwright show-report ${path.dirname(outputPath)} --reporter=html`);
+    console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
     console.log(`   Or open directly: open "${outputPath}"`);
 
     // Update history
@@ -590,18 +667,23 @@ class SmartReporter implements Reporter {
   // ============================================================================
 
   /**
-   * Create a unique test ID from test file and title
+   * Create a unique test ID from test file, title, and project name
+   * Issue #26: Include project name for parameterized projects
    * @param test - Playwright TestCase
-   * @returns Test ID string (e.g., "src/tests/login.spec.ts::Login Test")
+   * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login Test")
    */
   private getTestId(test: TestCase): string {
     const file = path.relative(this.outputDir, test.location.file);
-    return `${file}::${test.title}`;
+    const project = test.parent?.project?.()?.name;
+    const prefix = project?.trim() ? `[${project}] ` : '';
+    return `${prefix}${file}::${test.title}`;
   }
 
   private getFlakinessIndicator(score: number): string {
-    if (score < 0.1) return '🟢 Stable';
-    if (score < 0.3) return '🟡 Unstable';
+    const stableThreshold = this.options.thresholds?.flakinessStable ?? 0.1;
+    const unstableThreshold = this.options.thresholds?.flakinessUnstable ?? 0.3;
+    if (score < stableThreshold) return '🟢 Stable';
+    if (score < unstableThreshold) return '🟡 Unstable';
     return '🔴 Flaky';
   }
 

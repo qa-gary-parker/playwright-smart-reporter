@@ -1,13 +1,27 @@
-import type { TestResultData, StabilityScore, SuiteStats } from '../types';
+import type { TestResultData, StabilityScore, SuiteStats, ThresholdConfig } from '../types';
 
 /**
  * Calculates comprehensive stability scores for tests and test suites
  */
 export class StabilityScorer {
   private stabilityThreshold: number;
+  private weightFlakiness: number;
+  private weightPerformance: number;
+  private weightReliability: number;
+  private gradeA: number;
+  private gradeB: number;
+  private gradeC: number;
+  private gradeD: number;
 
-  constructor(stabilityThreshold: number = 70) {
+  constructor(stabilityThreshold: number = 70, thresholds?: ThresholdConfig) {
     this.stabilityThreshold = stabilityThreshold;
+    this.weightFlakiness = thresholds?.stabilityWeightFlakiness ?? 0.4;
+    this.weightPerformance = thresholds?.stabilityWeightPerformance ?? 0.3;
+    this.weightReliability = thresholds?.stabilityWeightReliability ?? 0.3;
+    this.gradeA = thresholds?.gradeA ?? 90;
+    this.gradeB = thresholds?.gradeB ?? 80;
+    this.gradeC = thresholds?.gradeC ?? 70;
+    this.gradeD = thresholds?.gradeD ?? 60;
   }
 
   /**
@@ -21,9 +35,9 @@ export class StabilityScorer {
 
     // Overall score is weighted average
     const overall = Math.round(
-      flakiness * 0.4 +    // Flakiness is most important
-      performance * 0.3 +   // Performance is second
-      reliability * 0.3     // Reliability is third
+      flakiness * this.weightFlakiness +
+      performance * this.weightPerformance +
+      reliability * this.weightReliability
     );
 
     const grade = this.getGrade(overall);
@@ -104,10 +118,10 @@ export class StabilityScorer {
    * Convert numeric score to letter grade
    */
   private getGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
-    if (score >= 90) return 'A';
-    if (score >= 80) return 'B';
-    if (score >= 70) return 'C';
-    if (score >= 60) return 'D';
+    if (score >= this.gradeA) return 'A';
+    if (score >= this.gradeB) return 'B';
+    if (score >= this.gradeC) return 'C';
+    if (score >= this.gradeD) return 'D';
     return 'F';
   }
 

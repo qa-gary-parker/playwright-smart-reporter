@@ -2,14 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
 import { renderMarkdownLite } from '../utils';
+import { sanitizeFilename } from '../utils/sanitizers';
 
 /**
  * Manages test history persistence and retrieval
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -65,10 +66,12 @@ export class HistoryCollector {
       filterPwApiSteps: options.filterPwApiSteps ?? false,
       // Issue #20: Path resolution
       relativeToCwd: options.relativeToCwd ?? false,
+      // Issue #26: External run ID (sanitized for safe use in filenames and HTML)
+      runId: options.runId ? sanitizeFilename(options.runId.trim(), 100) : undefined,
     };
     this.outputDir = outputDir;
     this.currentRun = {
-      runId: `run-${Date.now()}`,
+      runId: `run-${this.options.runId ?? Date.now()}`,
       timestamp: new Date().toISOString(),
     };
     this.startTime = Date.now();

@@ -15,7 +15,7 @@ export class AIAnalyzer {
   }
 
   /**
-   * Add AI suggestions to failed tests
+   * Add AI suggestions to failed tests (batched for performance)
    */
   async analyzeFailed(results: TestResultData[]): Promise<void> {
     const failedTests = results.filter(
@@ -31,14 +31,27 @@ export class AIAnalyzer {
 
     console.log(`\n🤖 Analyzing ${failedTests.length} failure(s) with AI...`);
 
-    for (const test of failedTests) {
-      try {
-        const prompt = test.aiPrompt ?? this.buildFailurePrompt(test);
-        test.aiSuggestion = await this.callAI(prompt);
-      } catch (err) {
-        console.error(`Failed to get AI suggestion for "${test.title}":`, err);
-      }
+    // Process in batches of 3 concurrent requests for better performance
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < failedTests.length; i += BATCH_SIZE) {
+      const batch = failedTests.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(failedTests.length / BATCH_SIZE);
+      console.log(`   Batch ${batchNum}/${totalBatches} (${batch.length} tests)...`);
+
+      const promises = batch.map(async (test) => {
+        try {
+          const prompt = test.aiPrompt ?? this.buildFailurePrompt(test);
+          test.aiSuggestion = await this.callAI(prompt);
+        } catch (err) {
+          console.error(`Failed to get AI suggestion for "${test.title}":`, err);
+        }
+      });
+
+      await Promise.all(promises);
     }
+
+    console.log(`   ✅ AI analysis complete`);
   }
 
   /**

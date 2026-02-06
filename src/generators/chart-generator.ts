@@ -4,6 +4,7 @@
 
 import type { TestResultData, TestHistory, RunSummary } from '../types';
 import { formatDuration, formatShortDate } from '../utils';
+import { escapeHtml } from '../utils/sanitizers';
 
 export interface ChartData {
   results: TestResultData[];
@@ -68,17 +69,39 @@ export function generateTrendChart(data: ChartData): string {
   const maxFlaky = Math.max(...allSummaries.map((s) => s.flaky || 0), 1);
   const maxSlow = Math.max(...allSummaries.map((s) => s.slow || 0), 1);
 
-  // Helper function to generate SVG bar chart
+  // Calculate 3-point moving average
+  const movingAverage = (values: number[], window: number = 3): (number | null)[] => {
+    return values.map((_, i) => {
+      if (i < window - 1) return null;
+      const slice = values.slice(i - window + 1, i + 1);
+      return slice.reduce((a, b) => a + b, 0) / slice.length;
+    });
+  };
+
+  // Detect anomalies (values > 2 standard deviations from mean)
+  const detectAnomalies = (values: number[]): boolean[] => {
+    if (values.length < 3) return values.map(() => false);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const stdDev = Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length);
+    return values.map(v => stdDev > 0 && Math.abs(v - mean) > 2 * stdDev);
+  };
+
+  // Helper function to generate SVG bar chart with moving average and anomaly detection
   const generateBarChart = (
     chartData: RunSummary[],
     getValue: (d: RunSummary) => number,
     maxValue: number,
     color: string,
     yAxisLabel: string,
-    formatValue?: (val: number) => string
+    formatValue?: (val: number) => string,
+    avgColor: string = '#ffcc00'
   ): string => {
     const barWidth = Math.min(40, plotWidth / chartData.length - 4);
     const spacing = plotWidth / chartData.length;
+
+    const values = chartData.map(d => getValue(d));
+    const avgValues = movingAverage(values);
+    const anomalies = detectAnomalies(values);
 
     // Generate y-axis grid lines and labels
     const yTicks = 5;
@@ -91,7 +114,7 @@ export function generateTrendChart(data: ChartData): string {
       `;
     }).join('');
 
-    // Generate bars with tooltips
+    // Generate bars with tooltips and anomaly markers
     const bars = chartData.map((d, i) => {
       const value = getValue(d);
       const x = (padding.left + i * spacing + (spacing - barWidth) / 2).toFixed(1);
@@ -101,10 +124,12 @@ export function generateTrendChart(data: ChartData): string {
       const isCurrent = i === chartData.length - 1;
       const displayValue = formatValue ? formatValue(value) : value.toString();
       const runId = d.runId || '';
+      const safeRunId = escapeHtml(runId).replace(/'/g, "\\'");
       const clickable = !isCurrent && runId;
+      const isAnomaly = anomalies[i];
 
       return `
-        <g class="bar-group${clickable ? ' clickable' : ''}" data-tooltip="${label}: ${displayValue}" ${clickable ? `data-runid="${runId}" onclick="loadHistoricalRun('${runId}', '${label}')"` : ''}>
+        <g class="bar-group${clickable ? ' clickable' : ''}" data-tooltip="${label}: ${displayValue}${isAnomaly ? ' ⚠ Anomaly' : ''}" ${clickable ? `data-runid="${escapeHtml(runId)}" onclick="loadHistoricalRun('${safeRunId}', '${label}')"` : ''}>
           <rect
             x="${x}"
             y="${y}"
@@ -112,15 +137,29 @@ export function generateTrendChart(data: ChartData): string {
             height="${barHeight}"
             fill="${color}"
             opacity="${isCurrent ? '1' : '0.85'}"
-            stroke="${isCurrent ? 'var(--text-primary)' : 'none'}"
-            stroke-width="${isCurrent ? '2' : '0'}"
+            stroke="${isAnomaly ? 'var(--accent-red)' : isCurrent ? 'var(--text-primary)' : 'none'}"
+            stroke-width="${isAnomaly || isCurrent ? '2' : '0'}"
+            ${isAnomaly ? 'stroke-dasharray="4 2"' : ''}
             rx="3"
-            class="chart-bar${clickable ? ' chart-bar-clickable' : ''}"
+            class="chart-bar${clickable ? ' chart-bar-clickable' : ''}${isAnomaly ? ' chart-bar-anomaly' : ''}"
             style="${clickable ? 'cursor: pointer;' : ''}"
           />
+          ${isAnomaly ? `<circle cx="${(parseFloat(x) + barWidth / 2).toFixed(1)}" cy="${(parseFloat(y) - 6).toFixed(1)}" r="4" class="chart-anomaly-marker" fill="var(--accent-red)"/>` : ''}
         </g>
       `;
     }).join('');
+
+    // Generate moving average line
+    const avgPoints = avgValues.map((val, i) => {
+      if (val === null) return null;
+      const x = (padding.left + i * spacing + spacing / 2).toFixed(1);
+      const y = (padding.top + plotHeight - (val / maxValue) * plotHeight).toFixed(1);
+      return `${x},${y}`;
+    }).filter(Boolean);
+
+    const avgLine = avgPoints.length >= 2
+      ? `<polyline points="${avgPoints.join(' ')}" class="trend-moving-avg" stroke="${avgColor}" /><text class="trend-avg-label" x="${padding.left + plotWidth - 5}" y="${padding.top + 10}" text-anchor="end">3-run avg</text>`
+      : '';
 
     // Generate x-axis labels
     const xLabels = chartData.map((d, i) => {
@@ -140,6 +179,9 @@ export function generateTrendChart(data: ChartData): string {
 
         <!-- Bars -->
         ${bars}
+
+        <!-- Moving average line -->
+        ${avgLine}
 
         <!-- X-axis labels -->
         ${xLabels}

@@ -1,9 +1,17 @@
-import type { TestResultData, TestHistoryEntry } from '../types';
+import type { TestResultData, TestHistoryEntry, ThresholdConfig } from '../types';
 
 /**
  * Analyzes test flakiness based on historical pass/fail patterns
  */
 export class FlakinessAnalyzer {
+  private stableThreshold: number;
+  private unstableThreshold: number;
+
+  constructor(thresholds?: ThresholdConfig) {
+    this.stableThreshold = thresholds?.flakinessStable ?? 0.1;
+    this.unstableThreshold = thresholds?.flakinessUnstable ?? 0.3;
+  }
+
   /**
    * Calculate flakiness score and indicator for a test
    * @param test - The test result to analyze
@@ -41,8 +49,8 @@ export class FlakinessAnalyzer {
    * Get human-readable flakiness indicator
    */
   private getFlakinessIndicator(score: number): string {
-    if (score < 0.1) return '🟢 Stable';
-    if (score < 0.3) return '🟡 Unstable';
+    if (score < this.stableThreshold) return '🟢 Stable';
+    if (score < this.unstableThreshold) return '🟡 Unstable';
     return '🔴 Flaky';
   }
 
@@ -51,8 +59,8 @@ export class FlakinessAnalyzer {
    */
   getStatus(score?: number): 'stable' | 'unstable' | 'flaky' | 'new' {
     if (score === undefined) return 'new';
-    if (score < 0.1) return 'stable';
-    if (score < 0.3) return 'unstable';
+    if (score < this.stableThreshold) return 'stable';
+    if (score < this.unstableThreshold) return 'unstable';
     return 'flaky';
   }
 }
