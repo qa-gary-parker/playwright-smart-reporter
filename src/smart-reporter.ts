@@ -590,13 +590,20 @@ class SmartReporter implements Reporter {
   // ============================================================================
 
   /**
-   * Create a unique test ID from test file and title
+   * Create a unique test ID from test file, title, and project name
    * @param test - Playwright TestCase
-   * @returns Test ID string (e.g., "src/tests/login.spec.ts::Login Test")
+   * @returns Test ID string (e.g., "src/tests/login.spec.ts::Login Test" or "[alice] src/tests/login.spec.ts::Login Test")
    */
   private getTestId(test: TestCase): string {
     const file = path.relative(this.outputDir, test.location.file);
-    return `${file}::${test.title}`;
+
+    // Include project name in test ID for parameterized projects
+    // This ensures tests running in different projects get unique IDs
+    const project = test.parent?.project?.()?.name; 
+    const projectName = project ? `[${project}] ` : '';
+
+    // Format: [projectName] file::title or file::title (if no project)
+    return `${projectName}${file}::${test.title}`;
   }
 
   private getFlakinessIndicator(score: number): string {
