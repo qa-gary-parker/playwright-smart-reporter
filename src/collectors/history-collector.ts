@@ -65,10 +65,11 @@ export class HistoryCollector {
       filterPwApiSteps: options.filterPwApiSteps ?? false,
       // Issue #20: Path resolution
       relativeToCwd: options.relativeToCwd ?? false,
+      runId: options.runId ?? Date.now().toString(),
     };
     this.outputDir = outputDir;
     this.currentRun = {
-      runId: `run-${Date.now()}`,
+      runId: `run-${this.options.runId}`,
       timestamp: new Date().toISOString(),
     };
     this.startTime = Date.now();

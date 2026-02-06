@@ -59,6 +59,9 @@ export interface SmartReporterOptions {
   uploadToCloud?: boolean;         // Enable cloud upload (default: false)
   cloudEndpoint?: string;          // Custom cloud endpoint URL
   uploadArtifacts?: boolean;       // Upload attachments to cloud (default: true)
+
+  // NEW: pre-provided Run ID to allow providing an ID from CI (e.g. from GITHUB_RUN_ID)
+  runId?: string;                  // Unique identifier for this test run
 }
 
 // ============================================================================
