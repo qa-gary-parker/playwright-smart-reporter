@@ -9,8 +9,8 @@ import { sanitizeFilename } from '../utils/sanitizers';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'theme' | 'notifications' | 'ai' | 'branding'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'theme' | 'notifications' | 'ai' | 'branding'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -68,6 +68,15 @@ export class HistoryCollector {
       relativeToCwd: options.relativeToCwd ?? false,
       // Issue #26: External run ID (sanitized for safe use in filenames and HTML)
       runId: options.runId ? sanitizeFilename(options.runId.trim(), 100) : undefined,
+      // Premium options (pass through for reference)
+      licenseKey: options.licenseKey,
+      exportJson: options.exportJson,
+      exportPdf: options.exportPdf,
+      exportJunit: options.exportJunit,
+      theme: options.theme,
+      notifications: options.notifications,
+      ai: options.ai,
+      branding: options.branding,
     };
     this.outputDir = outputDir;
     this.currentRun = {

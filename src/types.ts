@@ -1,6 +1,64 @@
 import type { TestCase, TestResult } from '@playwright/test/reporter';
 
 // ============================================================================
+// Licensing
+// ============================================================================
+
+export type LicenseTier = 'community' | 'pro' | 'team';
+
+export interface LicenseInfo {
+  tier: LicenseTier;
+  valid: boolean;
+  org?: string;
+  expiry?: string;
+  error?: string;
+}
+
+// ============================================================================
+// Premium Configuration
+// ============================================================================
+
+export interface ThemeConfig {
+  preset?: 'default' | 'dark' | 'light' | 'high-contrast';
+  primary?: string;
+  background?: string;
+  surface?: string;
+  text?: string;
+  accent?: string;
+  success?: string;
+  error?: string;
+  warning?: string;
+}
+
+export interface BrandingConfig {
+  logo?: string;
+  title?: string;
+  footer?: string;
+  hidePoweredBy?: boolean;
+}
+
+export interface NotificationCondition {
+  minFailures?: number;
+  maxPassRate?: number;
+  tags?: string[];
+  stabilityGradeDrop?: boolean;
+}
+
+export interface NotificationConfig {
+  channel: 'slack' | 'teams' | 'pagerduty' | 'email' | 'webhook';
+  config: Record<string, string>;
+  conditions?: NotificationCondition;
+  template?: string;
+}
+
+export interface AIConfig {
+  model?: string;
+  systemPrompt?: string;
+  promptTemplate?: string;
+  maxTokens?: number;
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -89,6 +147,26 @@ export interface SmartReporterOptions {
 
   // Issue #26: External run ID for consistent IDs across CI shards
   runId?: string;                  // Unique identifier for this test run (e.g. GITHUB_RUN_ID)
+
+  // Premium: License key (also from SMART_REPORTER_LICENSE_KEY env var)
+  licenseKey?: string;
+
+  // Premium: Export options (Pro tier)
+  exportJson?: boolean;            // Write smart-report-data.json alongside HTML
+  exportPdf?: boolean;             // Generate PDF executive summary
+  exportJunit?: boolean;           // Generate JUnit XML output
+
+  // Premium: Custom themes (Pro tier)
+  theme?: ThemeConfig;
+
+  // Premium: Advanced notifications (Pro tier)
+  notifications?: NotificationConfig[];
+
+  // Premium: AI configuration (Pro tier for model selection)
+  ai?: AIConfig;
+
+  // Premium: Report branding (Team tier)
+  branding?: BrandingConfig;
 }
 
 // ============================================================================
