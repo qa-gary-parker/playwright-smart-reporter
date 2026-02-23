@@ -66,6 +66,7 @@ function gradeFromPassRate(passRate: number): number {
 }
 
 function evaluateConditions(conditions: NotificationCondition, ctx: NotificationContext, results: TestResultData[], comparison?: RunComparison): boolean {
+  if (results.length === 0) return false;
   if (conditions.minFailures !== undefined && ctx.failed < conditions.minFailures) return false;
   if (conditions.maxPassRate !== undefined && ctx.passRate > conditions.maxPassRate) return false;
   if (conditions.tags && conditions.tags.length > 0) {

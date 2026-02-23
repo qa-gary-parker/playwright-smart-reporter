@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,11 +6,11 @@ import { LicenseValidator } from './index';
 import { generateLicense } from './generate-license';
 import type { LicenseInfo } from '../types';
 
-// Load the real key pair for testing
+// Paths to the real key pair for testing
 const KEYS_DIR = path.join(__dirname, '../../keys');
 const PRIVATE_KEY_PATH = path.join(KEYS_DIR, 'private.pem');
-const PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, 'utf-8');
-const PUBLIC_KEY = fs.readFileSync(path.join(KEYS_DIR, 'public.pem'), 'utf-8');
+let PRIVATE_KEY: string;
+let PUBLIC_KEY: string;
 
 function base64UrlEncode(data: Buffer): string {
   return data.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -31,6 +31,11 @@ function signJwt(payload: Record<string, unknown>, privateKey: string): string {
 
 describe('LicenseValidator', () => {
   let originalEnv: NodeJS.ProcessEnv;
+
+  beforeAll(() => {
+    PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, 'utf-8');
+    PUBLIC_KEY = fs.readFileSync(path.join(KEYS_DIR, 'public.pem'), 'utf-8');
+  });
 
   beforeEach(() => {
     originalEnv = { ...process.env };

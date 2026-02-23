@@ -986,12 +986,12 @@ function generateThemeOverrides(theme?: ThemeConfig): string {
   if (!theme) return '';
 
   const mappings: Array<[keyof ThemeConfig, string[]]> = [
-    ['primary', ['--accent-primary', '--accent-primary-dim']],
+    ['primary', ['--accent-blue', '--accent-blue-dim']],
     ['background', ['--bg-primary']],
     ['surface', ['--bg-card', '--bg-secondary', '--bg-sidebar']],
     ['text', ['--text-primary']],
     ['accent', ['--accent-blue', '--accent-blue-dim']],
-    ['success', ['--color-success', '--color-success-dim']],
+    ['success', ['--accent-green', '--accent-green-dim']],
     ['error', ['--accent-red', '--accent-red-dim']],
     ['warning', ['--accent-yellow', '--accent-yellow-dim']],
   ];

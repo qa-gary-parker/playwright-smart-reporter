@@ -165,7 +165,7 @@ export interface SmartReporterOptions {
   // Premium: AI configuration (Pro tier for model selection)
   ai?: AIConfig;
 
-  // Premium: Report branding (Team tier)
+  // Premium: Report branding (Pro tier)
   branding?: BrandingConfig;
 }
 

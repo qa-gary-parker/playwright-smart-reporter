@@ -81,7 +81,7 @@ function parseArgs(args: string[]): LicenseOptions {
   return { tier: tier as 'pro' | 'team', org, expiry };
 }
 
-// Only run CLI when executed directly (not imported)
+// CJS guard — works because tsconfig targets CommonJS
 if (require.main === module) {
   const args = process.argv.slice(2);
   const options = parseArgs(args);

@@ -284,20 +284,14 @@ describe('Notification boundary conditions', () => {
       expect(SlackNotifier).not.toHaveBeenCalled();
     });
 
-    it('does not notify on empty results when maxPassRate: 80 (pass rate is 0% for empty array)', async () => {
-      // buildContext returns passRate=0 when results.length === 0
-      // 0 is NOT > 80, so condition would pass — but there are no failures to report
-      // The spec says: empty results — should not notify
-      // The actual behaviour depends on the condition: with only maxPassRate, 0 <= 80 so it WOULD notify
-      // This test documents the actual behaviour of the implementation
+    it('does not notify on empty results when maxPassRate: 80', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const manager = new NotificationManager([slackConfig({ maxPassRate: 80 })]);
 
       await manager.notify([], Date.now());
 
-      // passRate=0, which is NOT > 80, so the condition passes → notification IS sent
-      // This is the current implementation behaviour — documenting it as a known finding
-      expect(SlackNotifier).toHaveBeenCalled();
+      // Empty results should never fire notifications regardless of conditions
+      expect(SlackNotifier).not.toHaveBeenCalled();
     });
 
     it('does not notify on empty results when no conditions are set', async () => {

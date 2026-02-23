@@ -77,20 +77,20 @@ describe('theme-branding', () => {
   });
 
   describe('custom theme colors', () => {
-    it('primary maps to --accent-primary CSS variable', () => {
+    it('primary maps to --accent-blue CSS variable', () => {
       const html = generateHtml(buildHtmlData({
         options: { theme: { primary: '#ff0000' } },
       }));
 
-      expect(html).toContain('--accent-primary: #ff0000');
+      expect(html).toContain('--accent-blue: #ff0000');
     });
 
-    it('success maps to --color-success CSS variable', () => {
+    it('success maps to --accent-green CSS variable', () => {
       const html = generateHtml(buildHtmlData({
         options: { theme: { success: '#00ff00' } },
       }));
 
-      expect(html).toContain('--color-success: #00ff00');
+      expect(html).toContain('--accent-green: #00ff00');
     });
 
     it('primary and success map to different CSS variables', () => {
@@ -98,11 +98,8 @@ describe('theme-branding', () => {
         options: { theme: { primary: '#ff0000', success: '#00ff00' } },
       }));
 
-      expect(html).toContain('--accent-primary: #ff0000');
-      expect(html).toContain('--color-success: #00ff00');
-      // Neither primary nor success should leak into --accent-green
-      expect(html).not.toMatch(/--accent-green: #ff0000/);
-      expect(html).not.toMatch(/--accent-green: #00ff00/);
+      expect(html).toContain('--accent-blue: #ff0000');
+      expect(html).toContain('--accent-green: #00ff00');
     });
 
     it('background maps to --bg-primary', () => {
