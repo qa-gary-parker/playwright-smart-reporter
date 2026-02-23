@@ -7,7 +7,8 @@
   "bin": {
     "playwright-smart-reporter-merge-history": "./dist/bin/merge-history.js",
     "playwright-smart-reporter-view-trace": "./dist/bin/view-trace.js",
-    "playwright-smart-reporter-serve": "./dist/bin/serve.js"
+    "playwright-smart-reporter-serve": "./dist/bin/serve.js",
+    "playwright-smart-reporter-generate-license": "./dist/license/generate-license.js"
   },
   "files": [
     "dist"
@@ -55,7 +56,13 @@
     "url": "https://github.com/gary-parker/playwright-smart-reporter/issues"
   },
   "peerDependencies": {
-    "@playwright/test": ">=1.40.0"
+    "@playwright/test": ">=1.40.0",
+    "playwright-core": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

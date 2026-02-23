@@ -20,3 +20,6 @@ example/parallel/smart-report.html
 example/parallel/test-history.json
 example/history-runs/
 example/traces/
+
+# License keys
+keys/private.pem
