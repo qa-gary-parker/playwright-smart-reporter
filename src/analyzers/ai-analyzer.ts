@@ -1,4 +1,16 @@
-import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats } from '../types';
+import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, AIConfig, LicenseTier } from '../types';
+
+export interface AIAnalyzerConfig {
+  ai?: AIConfig;
+  tier?: LicenseTier;
+}
+
+// Free-tier model defaults
+const FREE_MODELS = {
+  anthropic: 'claude-3-haiku-20240307',
+  openai: 'gpt-3.5-turbo',
+  gemini: 'gemini-2.5-flash',
+} as const;
 
 /**
  * AI-powered analysis for test failures and recommendations
@@ -7,11 +19,39 @@ export class AIAnalyzer {
   private anthropicKey?: string;
   private openaiKey?: string;
   private geminiKey?: string;
+  private aiConfig?: AIConfig;
+  private tier: LicenseTier;
 
-  constructor() {
+  constructor(config?: AIAnalyzerConfig) {
     this.anthropicKey = process.env.ANTHROPIC_API_KEY;
     this.openaiKey = process.env.OPENAI_API_KEY;
     this.geminiKey = process.env.GEMINI_API_KEY;
+    this.aiConfig = config?.ai;
+    this.tier = config?.tier ?? 'community';
+  }
+
+  private getModel(provider: 'anthropic' | 'openai' | 'gemini'): string {
+    if (this.aiConfig?.model && (this.tier === 'pro' || this.tier === 'team')) {
+      return this.aiConfig.model;
+    }
+    if (this.aiConfig?.model && this.tier === 'community') {
+      console.warn('Smart Reporter: Custom AI model requires a Pro license. Using default model.');
+    }
+    return FREE_MODELS[provider];
+  }
+
+  private getMaxTokens(defaultTokens: number): number {
+    if (this.aiConfig?.maxTokens && (this.tier === 'pro' || this.tier === 'team')) {
+      return this.aiConfig.maxTokens;
+    }
+    return defaultTokens;
+  }
+
+  private getSystemPrompt(): string | undefined {
+    if (this.aiConfig?.systemPrompt && (this.tier === 'pro' || this.tier === 'team')) {
+      return this.aiConfig.systemPrompt;
+    }
+    return undefined;
   }
 
   /**
@@ -154,6 +194,15 @@ export class AIAnalyzer {
    * Build prompt for individual test failure
    */
   private buildFailurePrompt(test: TestResultData): string {
+    // Use custom template if available (Pro/Team tier)
+    if (this.aiConfig?.promptTemplate && (this.tier === 'pro' || this.tier === 'team')) {
+      return this.aiConfig.promptTemplate
+        .replace(/\{\{title\}\}/g, test.title)
+        .replace(/\{\{file\}\}/g, test.file)
+        .replace(/\{\{error\}\}/g, test.error || 'Unknown error')
+        .replace(/\{\{framework\}\}/g, 'Playwright');
+    }
+
     return `Analyze this Playwright test failure and suggest a fix. Be concise (2-3 sentences max).
 
 Test: ${test.title}
@@ -202,6 +251,19 @@ Provide a brief, actionable suggestion to fix these failures.`;
    * Call Anthropic API
    */
   private async callAnthropic(prompt: string): Promise<string> {
+    const model = this.getModel('anthropic');
+    const maxTokens = this.getMaxTokens(256);
+    const systemPrompt = this.getSystemPrompt();
+
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    };
+    if (systemPrompt) {
+      body.system = systemPrompt;
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -209,11 +271,7 @@ Provide a brief, actionable suggestion to fix these failures.`;
         'x-api-key': this.anthropicKey!,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 256,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -230,17 +288,23 @@ Provide a brief, actionable suggestion to fix these failures.`;
    * Call OpenAI API
    */
   private async callOpenAI(prompt: string): Promise<string> {
+    const model = this.getModel('openai');
+    const maxTokens = this.getMaxTokens(256);
+    const systemPrompt = this.getSystemPrompt();
+
+    const messages: Array<{ role: string; content: string }> = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.openaiKey}`,
       },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        max_tokens: 256,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
     });
 
     if (!response.ok) {
@@ -257,7 +321,13 @@ Provide a brief, actionable suggestion to fix these failures.`;
    * Call Gemini API
    */
   private async callGemini(prompt: string): Promise<string> {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    const model = this.getModel('gemini');
+    const maxTokens = this.getMaxTokens(512);
+    const systemPrompt = this.getSystemPrompt();
+
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -265,10 +335,10 @@ Provide a brief, actionable suggestion to fix these failures.`;
       },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: prompt }],
+          parts: [{ text: fullPrompt }],
         }],
         generationConfig: {
-          maxOutputTokens: 512,
+          maxOutputTokens: maxTokens,
         },
       }),
     });

@@ -26,6 +26,7 @@ import type {
   TestHistoryEntry,
   RunSummary,
   RunSnapshotFile,
+  LicenseInfo,
 } from './types';
 
 // ============================================================================
@@ -58,7 +59,12 @@ import {
 
 import { generateHtml, type HtmlGeneratorData } from './generators/html-generator';
 import { buildComparison } from './generators/comparison-generator';
-import { SlackNotifier, TeamsNotifier } from './notifiers';
+import { exportJsonData } from './generators/json-exporter';
+import { exportJunitXml } from './generators/junit-exporter';
+import { exportPdfReport } from './generators/pdf-exporter';
+import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
+import { CloudUploader } from './cloud/uploader';
+import { LicenseValidator } from './license';
 import { formatDuration, stripAnsiCodes, sanitizeFilename } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import type { CIInfo } from './types';
@@ -160,6 +166,13 @@ class SmartReporter implements Reporter {
   private slackNotifier!: SlackNotifier;
   private teamsNotifier!: TeamsNotifier;
 
+  // Cloud
+  private cloudUploader: CloudUploader;
+
+  // License
+  private license: LicenseInfo;
+  private notificationManager?: NotificationManager;
+
   // State
   private options: SmartReporterOptions;
   private results: TestResultData[] = [];
@@ -172,6 +185,25 @@ class SmartReporter implements Reporter {
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
+
+    // Validate license
+    const validator = new LicenseValidator();
+    this.license = validator.validate(options.licenseKey);
+    if (this.license.error) {
+      console.warn(`⚠️  License: ${this.license.error}`);
+    }
+
+    // Gate theme behind Pro tier
+    if (options.theme && !LicenseValidator.hasFeature(this.license, 'pro')) {
+      console.warn('Smart Reporter: Custom themes require a Pro license. Using defaults.');
+      this.options = { ...this.options, theme: undefined };
+    }
+
+    // Gate branding behind Pro tier
+    if (options.branding && !LicenseValidator.hasFeature(this.license, 'pro')) {
+      console.warn('Smart Reporter: Custom branding requires a Pro license. Using defaults.');
+      this.options = { ...this.options, branding: undefined };
+    }
 
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     // Issue #22: Pass filterPwApiSteps option to StepCollector
@@ -189,7 +221,16 @@ class SmartReporter implements Reporter {
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
-    this.aiAnalyzer = new AIAnalyzer();
+    this.aiAnalyzer = new AIAnalyzer({
+      ai: options.ai,
+      tier: this.license.tier,
+    });
+    this.cloudUploader = new CloudUploader(options);
+
+    // Initialize advanced notification manager if configured (Pro feature)
+    if (options.notifications && LicenseValidator.hasFeature(this.license, 'pro')) {
+      this.notificationManager = new NotificationManager(options.notifications);
+    }
   }
 
   /**
@@ -637,6 +678,7 @@ class SmartReporter implements Reporter {
 	      historyRunSnapshots,
 	      failureClusters,
 	      ciInfo: this.ciInfo,
+	      licenseTier: this.license.tier,
 	    };
 
     // Generate and save HTML report
@@ -648,6 +690,53 @@ class SmartReporter implements Reporter {
     console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
     console.log(`   Or open directly: open "${outputPath}"`);
 
+    // Premium exports (Pro tier)
+    const hasPro = LicenseValidator.hasFeature(this.license, 'pro');
+    const exportDir = path.dirname(outputPath);
+
+    if (this.options.exportJson && hasPro) {
+      try {
+        const jsonPath = exportJsonData(
+          this.results,
+          this.historyCollector.getHistory(),
+          this.startTime,
+          this.options,
+          comparison,
+          failureClusters,
+          exportDir,
+        );
+        console.log(`   JSON data: ${jsonPath}`);
+      } catch (err) {
+        console.warn('⚠️  JSON export failed:', err);
+      }
+    } else if (this.options.exportJson && !hasPro) {
+      console.log('   JSON export requires a Pro license — see stagewright.dev/pricing');
+    }
+
+    if (this.options.exportJunit && hasPro) {
+      try {
+        const junitPath = exportJunitXml(this.results, this.options, exportDir);
+        console.log(`   JUnit XML: ${junitPath}`);
+      } catch (err) {
+        console.warn('⚠️  JUnit export failed:', err);
+      }
+    } else if (this.options.exportJunit && !hasPro) {
+      console.log('   JUnit export requires a Pro license — see stagewright.dev/pricing');
+    }
+
+    if (this.options.exportPdf && hasPro) {
+      try {
+        const pdfPath = await exportPdfReport(outputPath, this.options, exportDir);
+        if (pdfPath) {
+          console.log(`   PDF report: ${pdfPath}`);
+        }
+      } catch (err) {
+        console.warn('⚠️  PDF export failed:', err);
+      }
+    } else if (this.options.exportPdf && !hasPro) {
+      console.log('   PDF export requires a Pro license — see stagewright.dev/pricing');
+    }
+
     // Update history
     this.historyCollector.updateHistory(this.results);
 
@@ -656,9 +745,31 @@ class SmartReporter implements Reporter {
       r.outcome === 'unexpected' &&
       (r.status === 'failed' || r.status === 'timedOut')
     ).length;
-    if (failed > 0) {
-      await this.slackNotifier.notify(this.results);
-      await this.teamsNotifier.notify(this.results);
+
+    // Advanced notification manager (Pro feature) takes precedence
+    if (this.notificationManager) {
+      await this.notificationManager.notify(this.results, this.startTime, comparison);
+    } else {
+      // Legacy notification path (free tier)
+      if (failed > 0) {
+        await this.slackNotifier.notify(this.results);
+        await this.teamsNotifier.notify(this.results);
+      }
+    }
+
+    // Upload to StageWright Cloud if enabled
+    if (this.cloudUploader.isEnabled()) {
+      const uploadResult = await this.cloudUploader.upload(this.results, this.startTime);
+      if (uploadResult.success) {
+        console.log(`\n☁️  Cloud Report: ${uploadResult.url}`);
+      } else {
+        console.warn(`\n⚠️  Cloud upload failed: ${uploadResult.error}`);
+      }
+    }
+
+    // Gentle upsell for community tier
+    if (this.license.tier === 'community') {
+      console.log(`\n   Pro features available — see stagewright.dev/pricing`);
     }
   }
 

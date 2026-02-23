@@ -5,7 +5,7 @@
  * REDESIGNED: Modern app-shell layout with sidebar, top bar, and master-detail view
  */
 
-import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo } from '../types';
+import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo, LicenseTier, ThemeConfig, BrandingConfig } from '../types';
 import { formatDuration, escapeHtml, sanitizeId } from '../utils';
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
@@ -23,6 +23,7 @@ export interface HtmlGeneratorData {
   historyRunSnapshots?: Record<string, RunSnapshotFile>;
   failureClusters?: FailureCluster[];
   ciInfo?: CIInfo;
+  licenseTier?: LicenseTier;
 }
 
 /**
@@ -505,6 +506,10 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const showGallery = options.enableGalleryView !== false;
   const showComparison = (options.enableComparison !== false && !!comparison);
   const cspSafe = options.cspSafe === true;
+  const licenseTier = data.licenseTier ?? 'community';
+  const branding = options.branding;
+  const reportTitle = branding?.title ?? 'StageWright Local';
+  const reportSubtitle = branding?.title ? '' : 'Get your test stage right.';
   const enableTraceViewer = options.enableTraceViewer !== false;
   const showTraceSection = enableTraceViewer;
   const enableHistoryDrilldown = options.enableHistoryDrilldown === true;
@@ -553,13 +558,13 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const statsData = JSON.stringify({ passed, failed, skipped, flaky, slow, newTests, total, passRate, gradeA, gradeB, gradeC, gradeD, gradeF, totalDuration });
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en"${options.theme?.preset === 'light' ? ' data-theme="light"' : options.theme?.preset === 'dark' ? ' data-theme="dark"' : options.theme?.preset === 'high-contrast' ? ' data-theme="high-contrast"' : ''}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Test Report</title>${fontLinks}
   <style>
-${generateStyles(passRate, cspSafe)}
+${generateStyles(passRate, cspSafe, options.theme)}
   </style>
 </head>
 <body>
@@ -575,9 +580,10 @@ ${generateStyles(passRate, cspSafe)}
           <span class="hamburger-icon" aria-hidden="true">☰</span>
         </button>
         <div class="logo">
+${branding?.logo ? `          <img class="logo-image" src="${escapeHtml(branding.logo)}" alt="${escapeHtml(reportTitle)} logo" height="28" />` : ''}
           <div class="logo-text">
-            <span class="logo-title">StageWright Local</span>
-            <span class="logo-subtitle">Get your test stage right.</span>
+            <span class="logo-title">${escapeHtml(reportTitle)}</span>
+${reportSubtitle ? `            <span class="logo-subtitle">${escapeHtml(reportSubtitle)}</span>` : ''}
           </div>
         </div>
         <nav class="breadcrumbs">
@@ -607,6 +613,16 @@ ${generateStyles(passRate, cspSafe)}
             <button class="export-menu-item" onclick="showSummaryExport()" role="menuitem">
               <span>📋</span> Summary Card
             </button>
+${licenseTier === 'community' ? `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
+            <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
+              <span>📑</span> PDF Report <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+            </div>
+            <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
+              <span>📦</span> Full JSON Data <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+            </div>
+            <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
+              <span>🏷️</span> JUnit XML <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+            </div>` : ''}
           </div>
         </div>
         <div class="theme-dropdown" id="themeDropdown">
@@ -955,6 +971,10 @@ ${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, ena
 
 ${enableTraceViewer ? generateTraceViewerScript() : ''}
   </script>
+${branding?.footer || !branding?.hidePoweredBy ? `  <footer class="report-footer" style="text-align:center;padding:12px 16px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border-subtle);">
+${branding?.footer ? `    <div>${escapeHtml(branding.footer)}</div>` : ''}
+${!branding?.hidePoweredBy ? '    <div>Powered by <a href="https://github.com/gary-parker/playwright-smart-reporter" style="color:var(--accent-blue);text-decoration:none;">Smart Reporter</a></div>' : ''}
+  </footer>` : ''}
 </body>
 </html>`;
 }
@@ -962,7 +982,62 @@ ${enableTraceViewer ? generateTraceViewerScript() : ''}
 /**
  * Generate all CSS styles for the new app-shell layout
  */
-function generateStyles(passRate: number, cspSafe: boolean = false): string {
+function generateThemeOverrides(theme?: ThemeConfig): string {
+  if (!theme) return '';
+
+  const mappings: Array<[keyof ThemeConfig, string[]]> = [
+    ['primary', ['--accent-primary', '--accent-primary-dim']],
+    ['background', ['--bg-primary']],
+    ['surface', ['--bg-card', '--bg-secondary', '--bg-sidebar']],
+    ['text', ['--text-primary']],
+    ['accent', ['--accent-blue', '--accent-blue-dim']],
+    ['success', ['--color-success', '--color-success-dim']],
+    ['error', ['--accent-red', '--accent-red-dim']],
+    ['warning', ['--accent-yellow', '--accent-yellow-dim']],
+  ];
+
+  const overrides: string[] = [];
+  for (const [key, vars] of mappings) {
+    const value = theme[key];
+    if (typeof value === 'string' && value.startsWith('#')) {
+      for (const v of vars) {
+        overrides.push(`      ${v}: ${value};`);
+      }
+    }
+  }
+
+  if (overrides.length === 0) return '';
+  return `\n    :root {\n${overrides.join('\n')}\n    }\n`;
+}
+
+const HIGH_CONTRAST_THEME = `
+    :root {
+      --bg-primary: #000000;
+      --bg-secondary: #0a0a0a;
+      --bg-card: #111111;
+      --bg-card-hover: #1a1a1a;
+      --bg-sidebar: #050505;
+      --border-subtle: #666666;
+      --border-glow: #888888;
+      --text-primary: #ffffff;
+      --text-secondary: #cccccc;
+      --text-muted: #999999;
+      --accent-green: #00ff00;
+      --accent-green-dim: #00cc00;
+      --accent-red: #ff0000;
+      --accent-red-dim: #dd0000;
+      --accent-yellow: #ffff00;
+      --accent-yellow-dim: #dddd00;
+      --accent-blue: #4488ff;
+      --accent-blue-dim: #2266dd;
+      --accent-purple: #cc88ff;
+      --accent-orange: #ff9944;
+    }
+    a { text-decoration: underline !important; }
+    .card, .stat-card, .test-item { border-width: 2px !important; }
+`;
+
+function generateStyles(passRate: number, cspSafe: boolean = false, theme?: ThemeConfig): string {
   // Font families - use system fonts in CSP-safe mode
   const primaryFont = cspSafe
     ? "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
@@ -970,6 +1045,10 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
   const monoFont = cspSafe
     ? "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
     : "'JetBrains Mono', ui-monospace, monospace";
+
+  // High-contrast preset overrides everything
+  const highContrastOverride = theme?.preset === 'high-contrast' ? HIGH_CONTRAST_THEME : '';
+  const customOverrides = theme?.preset !== 'high-contrast' ? generateThemeOverrides(theme) : '';
 
   return `    :root {
       --bg-primary: #0a0a0f;
@@ -995,6 +1074,7 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       --sidebar-width: 260px;
       --topbar-height: 56px;
     }
+${highContrastOverride}${customOverrides}
 
     /* Light theme - respects system preference */
     @media (prefers-color-scheme: light) {
@@ -1186,6 +1266,13 @@ function generateStyles(passRate: number, cspSafe: boolean = false): string {
       width: 32px;
       height: 32px;
       object-fit: contain;
+    }
+
+    .logo-image {
+      height: 28px;
+      width: auto;
+      object-fit: contain;
+      margin-right: 8px;
     }
 
     .logo-text {
