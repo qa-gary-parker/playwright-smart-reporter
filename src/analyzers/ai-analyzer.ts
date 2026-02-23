@@ -279,8 +279,11 @@ Provide a brief, actionable suggestion to fix these failures.`;
     }
 
     const data = (await response.json()) as {
-      content: Array<{ type: string; text?: string }>;
+      content?: Array<{ type: string; text?: string }>;
     };
+    if (!data?.content || !Array.isArray(data.content)) {
+      return 'No suggestion available';
+    }
     return data.content[0]?.text || 'No suggestion available';
   }
 
@@ -312,8 +315,11 @@ Provide a brief, actionable suggestion to fix these failures.`;
     }
 
     const data = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>;
+      choices?: Array<{ message?: { content?: string } }>;
     };
+    if (!data?.choices || !Array.isArray(data.choices)) {
+      return 'No suggestion available';
+    }
     return data.choices[0]?.message?.content || 'No suggestion available';
   }
 
@@ -348,9 +354,12 @@ Provide a brief, actionable suggestion to fix these failures.`;
     }
 
     const data = (await response.json()) as {
-      candidates: Array<{ content: { parts: Array<{ text: string }> }; role: string }>;
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; role?: string }>;
     };
-    return data.candidates[0]?.content?.parts[0]?.text || 'No suggestion available';
+    if (!data?.candidates || !Array.isArray(data.candidates)) {
+      return 'No suggestion available';
+    }
+    return data.candidates[0]?.content?.parts?.[0]?.text || 'No suggestion available';
   }
 
   /**

@@ -181,7 +181,7 @@ describe('LicenseValidator', () => {
       expect(result.error).toBe('License key missing expiration');
     });
 
-    it('allows dev mode bypass with unsigned token', () => {
+    it('rejects unsigned tokens even when SMART_REPORTER_DEV_LICENSE is set', () => {
       process.env.SMART_REPORTER_DEV_LICENSE = 'true';
       const validator = new LicenseValidator(PUBLIC_KEY);
 
@@ -196,9 +196,9 @@ describe('LicenseValidator', () => {
 
       const result = validator.validate(token);
 
-      expect(result.tier).toBe('pro');
-      expect(result.valid).toBe(true);
-      expect(result.org).toBe('Dev Org');
+      expect(result.tier).toBe('community');
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('Invalid license key signature');
     });
   });
 

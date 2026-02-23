@@ -3,12 +3,12 @@
  *
  * Tests the SmartReporter constructor's license-gating logic:
  * - Community tier: theme/branding stripped, warnings emitted, no Pro features activated
- * - Pro tier (dev mode): theme/branding preserved, notifications wired, custom AI model accepted
+ * - Pro tier: theme/branding preserved, notifications wired, custom AI model accepted
  * - Team tier: all Pro features work (Team is a superset of Pro)
  *
  * Strategy: test the constructor and onEnd() in isolation by mocking fs, html-generator,
- * and the export functions. This lets us verify wiring contracts without running the full
- * Playwright reporter lifecycle.
+ * the license module, and the export functions. This lets us verify wiring contracts
+ * without running the full Playwright reporter lifecycle.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -103,22 +103,22 @@ vi.mock('./analyzers', () => ({
 vi.mock('dotenv', () => ({ config: vi.fn() }));
 
 // ---------------------------------------------------------------------------
-// Helpers to build a dev-mode JWT (no real signature — dev mode bypasses it)
+// Mock the license module so premium-integration tests control tier directly
+// without needing real JWT signatures (license validation is tested elsewhere)
 // ---------------------------------------------------------------------------
 
-function base64UrlEncode(data: Buffer): string {
-  return data.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+const mockValidate = vi.fn();
+const mockHasFeature = vi.fn();
 
-function makeDevJwt(tier: 'pro' | 'team'): string {
-  const header = base64UrlEncode(Buffer.from(JSON.stringify({ alg: 'ES256', typ: 'JWT' })));
-  const now = Math.floor(Date.now() / 1000);
-  const payload = base64UrlEncode(
-    Buffer.from(JSON.stringify({ tier, org: 'Test Org', iat: now, exp: now + 86400 }))
-  );
-  const sig = base64UrlEncode(Buffer.from('dev-fake-sig'));
-  return `${header}.${payload}.${sig}`;
-}
+vi.mock('./license', () => ({
+  LicenseValidator: vi.fn().mockImplementation(() => ({
+    validate: mockValidate,
+  })),
+}));
+
+// Attach hasFeature as a static method on the mocked constructor
+import { LicenseValidator as MockedLicenseValidatorType } from './license';
+(MockedLicenseValidatorType as any).hasFeature = mockHasFeature;
 
 // ---------------------------------------------------------------------------
 // Minimal fake Playwright lifecycle objects
@@ -173,7 +173,12 @@ describe('Premium Pipeline Integration', () => {
   beforeEach(() => {
     originalEnv = { ...process.env };
     delete process.env.SMART_REPORTER_LICENSE_KEY;
-    delete process.env.SMART_REPORTER_DEV_LICENSE;
+    // Default to community tier — overridden in pro/team describe blocks
+    mockValidate.mockReturnValue({ tier: 'community', valid: true });
+    mockHasFeature.mockImplementation((_license: any, requiredTier: string) => {
+      if (requiredTier === 'community') return true;
+      return false;
+    });
     // Clear call counts only — do NOT reset implementations set by vi.mock() factories
     vi.mocked(exportJsonData).mockClear();
     vi.mocked(exportJunitXml).mockClear();
@@ -318,19 +323,23 @@ describe('Premium Pipeline Integration', () => {
   });
 
   // =========================================================================
-  // Pro tier (dev JWT)
+  // Pro tier (mocked license)
   // =========================================================================
 
-  describe('pro tier (dev license)', () => {
+  describe('pro tier (mocked license)', () => {
     beforeEach(() => {
-      process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+      mockValidate.mockReturnValue({ tier: 'pro', valid: true, org: 'Test Org' });
+      mockHasFeature.mockImplementation((_license: any, requiredTier: string) => {
+        if (requiredTier === 'community') return true;
+        if (requiredTier === 'pro') return true;
+        return false;
+      });
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
     it('calls exportJsonData when exportJson: true', async () => {
-      const token = makeDevJwt('pro');
-      const reporter = new SmartReporter({ licenseKey: token, exportJson: true });
+      const reporter = new SmartReporter({ exportJson: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -338,8 +347,7 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('calls exportJunitXml when exportJunit: true', async () => {
-      const token = makeDevJwt('pro');
-      const reporter = new SmartReporter({ licenseKey: token, exportJunit: true });
+      const reporter = new SmartReporter({ exportJunit: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -347,8 +355,7 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('calls exportPdfReport when exportPdf: true', async () => {
-      const token = makeDevJwt('pro');
-      const reporter = new SmartReporter({ licenseKey: token, exportPdf: true });
+      const reporter = new SmartReporter({ exportPdf: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -356,9 +363,8 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('preserves theme config — passed through to generateHtml', async () => {
-      const token = makeDevJwt('pro');
       const theme = { preset: 'dark' as const, primary: '#336699' };
-      const reporter = new SmartReporter({ licenseKey: token, theme });
+      const reporter = new SmartReporter({ theme });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -367,9 +373,8 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('preserves branding config — passed through to generateHtml', async () => {
-      const token = makeDevJwt('pro');
       const branding = { title: 'My Co', footer: 'footer text' };
-      const reporter = new SmartReporter({ licenseKey: token, branding });
+      const reporter = new SmartReporter({ branding });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -378,9 +383,7 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('instantiates NotificationManager when notifications configured', () => {
-      const token = makeDevJwt('pro');
       new SmartReporter({
-        licenseKey: token,
         notifications: [{ channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/x' } }],
       });
 
@@ -388,8 +391,7 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('passes pro tier to AIAnalyzer', () => {
-      const token = makeDevJwt('pro');
-      new SmartReporter({ licenseKey: token, ai: { model: 'claude-3-opus-20240229' } });
+      new SmartReporter({ ai: { model: 'claude-3-opus-20240229' } });
 
       expect(AIAnalyzer).toHaveBeenCalledWith(
         expect.objectContaining({ tier: 'pro' })
@@ -399,8 +401,7 @@ describe('Premium Pipeline Integration', () => {
     it('does NOT emit upsell message for pro tier', async () => {
       const logSpy = vi.mocked(console.log);
 
-      const token = makeDevJwt('pro');
-      const reporter = new SmartReporter({ licenseKey: token });
+      const reporter = new SmartReporter({});
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -413,16 +414,21 @@ describe('Premium Pipeline Integration', () => {
   // Team tier (superset of Pro)
   // =========================================================================
 
-  describe('team tier (dev license)', () => {
+  describe('team tier (mocked license)', () => {
     beforeEach(() => {
-      process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+      mockValidate.mockReturnValue({ tier: 'team', valid: true, org: 'Team Org' });
+      mockHasFeature.mockImplementation((_license: any, requiredTier: string) => {
+        if (requiredTier === 'community') return true;
+        if (requiredTier === 'pro') return true;
+        if (requiredTier === 'team') return true;
+        return false;
+      });
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
     it('calls exportJsonData (Team includes Pro features)', async () => {
-      const token = makeDevJwt('team');
-      const reporter = new SmartReporter({ licenseKey: token, exportJson: true });
+      const reporter = new SmartReporter({ exportJson: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -430,8 +436,7 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('calls exportJunitXml (Team includes Pro features)', async () => {
-      const token = makeDevJwt('team');
-      const reporter = new SmartReporter({ licenseKey: token, exportJunit: true });
+      const reporter = new SmartReporter({ exportJunit: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -439,9 +444,8 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('preserves theme config for team tier', async () => {
-      const token = makeDevJwt('team');
       const theme = { preset: 'high-contrast' as const };
-      const reporter = new SmartReporter({ licenseKey: token, theme });
+      const reporter = new SmartReporter({ theme });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -450,9 +454,8 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('preserves branding config for team tier', async () => {
-      const token = makeDevJwt('team');
       const branding = { title: 'Enterprise Suite', hidePoweredBy: true };
-      const reporter = new SmartReporter({ licenseKey: token, branding });
+      const reporter = new SmartReporter({ branding });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
@@ -461,8 +464,7 @@ describe('Premium Pipeline Integration', () => {
     });
 
     it('passes team tier to AIAnalyzer', () => {
-      const token = makeDevJwt('team');
-      new SmartReporter({ licenseKey: token });
+      new SmartReporter({});
 
       expect(AIAnalyzer).toHaveBeenCalledWith(
         expect.objectContaining({ tier: 'team' })

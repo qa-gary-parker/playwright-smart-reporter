@@ -17,7 +17,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as crypto from 'crypto';
 import { LicenseValidator } from './index';
+
+// ---------------------------------------------------------------------------
+// Generate a test key pair for signing tokens in adversarial tests
+// ---------------------------------------------------------------------------
+
+const testKeyPair = crypto.generateKeyPairSync('ec', {
+  namedCurve: 'P-256',
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+});
+const TEST_PUBLIC_KEY = testKeyPair.publicKey as string;
+const TEST_PRIVATE_KEY = testKeyPair.privateKey as string;
 
 // ---------------------------------------------------------------------------
 // Helper: build a base64url-encoded string (no crypto signing)
@@ -32,6 +45,19 @@ function makeUnsignedToken(header: Record<string, unknown>, payload: Record<stri
   const p = b64u(Buffer.from(JSON.stringify(payload)));
   const sig = b64u(Buffer.from('fake-sig'));
   return `${h}.${p}.${sig}`;
+}
+
+function signJwt(payload: Record<string, unknown>, privateKey: string): string {
+  const header = { alg: 'ES256', typ: 'JWT' };
+  const headerB64 = b64u(Buffer.from(JSON.stringify(header)));
+  const payloadB64 = b64u(Buffer.from(JSON.stringify(payload)));
+  const signatureInput = `${headerB64}.${payloadB64}`;
+
+  const sign = crypto.createSign('SHA256');
+  sign.update(signatureInput);
+  const signature = sign.sign(privateKey);
+
+  return `${signatureInput}.${b64u(signature)}`;
 }
 
 function makeTokenWithRealHeader(payload: Record<string, unknown>): string {
@@ -84,13 +110,12 @@ describe('LicenseValidator adversarial inputs', () => {
   // Missing tier claim
   // =========================================================================
 
-  it('falls back to community when tier claim is absent (dev mode)', () => {
-    process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+  it('falls back to community when tier claim is absent', () => {
     const now = Math.floor(Date.now() / 1000);
     // No `tier` field — only exp
-    const token = makeTokenWithRealHeader({ exp: now + 86400 });
+    const token = signJwt({ exp: now + 86400 }, TEST_PRIVATE_KEY);
 
-    const validator = new LicenseValidator();
+    const validator = new LicenseValidator(TEST_PUBLIC_KEY);
     const result = validator.validate(token);
 
     // Valid JWT structure and not expired, but tier is undefined → community
@@ -102,17 +127,16 @@ describe('LicenseValidator adversarial inputs', () => {
   // Future iat, past exp (clock-skew attack)
   // =========================================================================
 
-  it('returns expired when iat is in the future but exp is in the past (dev mode)', () => {
-    process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+  it('returns expired when iat is in the future but exp is in the past', () => {
     const now = Math.floor(Date.now() / 1000);
-    const token = makeTokenWithRealHeader({
+    const token = signJwt({
       tier: 'pro',
       org: 'Attacker',
       iat: now + 365 * 24 * 60 * 60, // issued one year in the future
       exp: now - 86400,               // expired yesterday
-    });
+    }, TEST_PRIVATE_KEY);
 
-    const validator = new LicenseValidator();
+    const validator = new LicenseValidator(TEST_PUBLIC_KEY);
     const result = validator.validate(token);
 
     expect(result.valid).toBe(false);
@@ -220,17 +244,16 @@ describe('LicenseValidator adversarial inputs', () => {
   // Unknown tier value in payload (dev mode to bypass signature)
   // =========================================================================
 
-  it('maps an unknown tier value to community tier (dev mode)', () => {
-    process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+  it('maps an unknown tier value to community tier', () => {
     const now = Math.floor(Date.now() / 1000);
-    const token = makeTokenWithRealHeader({
+    const token = signJwt({
       tier: 'enterprise', // not in the valid set
       org: 'Unknown',
       iat: now,
       exp: now + 86400,
-    });
+    }, TEST_PRIVATE_KEY);
 
-    const validator = new LicenseValidator();
+    const validator = new LicenseValidator(TEST_PUBLIC_KEY);
     const result = validator.validate(token);
 
     // Unknown tier is mapped to community, but the token itself is valid
@@ -242,34 +265,32 @@ describe('LicenseValidator adversarial inputs', () => {
   // exp boundary: exactly now (should be expired since check is >)
   // =========================================================================
 
-  it('treats exp at exactly the current second as expired (dev mode)', () => {
-    process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+  it('treats exp at exactly the current second as expired', () => {
     const now = Math.floor(Date.now() / 1000);
-    const token = makeTokenWithRealHeader({
+    const token = signJwt({
       tier: 'pro',
       org: 'Boundary',
       iat: now - 100,
       exp: now - 1, // 1 second in the past — definitely expired
-    });
+    }, TEST_PRIVATE_KEY);
 
-    const validator = new LicenseValidator();
+    const validator = new LicenseValidator(TEST_PUBLIC_KEY);
     const result = validator.validate(token);
 
     expect(result.valid).toBe(false);
     expect(result.error).toBe('License key has expired');
   });
 
-  it('treats exp 1 second from now as valid (dev mode)', () => {
-    process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+  it('treats exp 1 second from now as valid', () => {
     const now = Math.floor(Date.now() / 1000);
-    const token = makeTokenWithRealHeader({
+    const token = signJwt({
       tier: 'pro',
       org: 'Boundary',
       iat: now - 100,
       exp: now + 1, // 1 second in the future
-    });
+    }, TEST_PRIVATE_KEY);
 
-    const validator = new LicenseValidator();
+    const validator = new LicenseValidator(TEST_PUBLIC_KEY);
     const result = validator.validate(token);
 
     expect(result.valid).toBe(true);
@@ -328,17 +349,16 @@ describe('LicenseValidator adversarial inputs', () => {
   // Payload with null values for fields the validator reads
   // =========================================================================
 
-  it('handles null tier gracefully in payload (dev mode)', () => {
-    process.env.SMART_REPORTER_DEV_LICENSE = 'true';
+  it('handles null tier gracefully in payload', () => {
     const now = Math.floor(Date.now() / 1000);
-    const token = makeTokenWithRealHeader({
+    const token = signJwt({
       tier: null,
       org: 'Null Tier',
       iat: now,
       exp: now + 86400,
-    });
+    }, TEST_PRIVATE_KEY);
 
-    const validator = new LicenseValidator();
+    const validator = new LicenseValidator(TEST_PUBLIC_KEY);
 
     expect(() => validator.validate(token)).not.toThrow();
     const result = validator.validate(token);

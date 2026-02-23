@@ -21,7 +21,7 @@ export async function exportPdfReport(
   outputDir?: string,
 ): Promise<string | null> {
   if (!fs.existsSync(htmlPath)) {
-    console.warn(`Smart Reporter: HTML report not found at ${htmlPath}. Skipping PDF generation.`);
+    console.warn('Smart Reporter: HTML report not found. Skipping PDF generation.');
     return null;
   }
 
@@ -52,7 +52,7 @@ export async function exportPdfReport(
     });
     return pdfPath;
   } catch (err) {
-    console.warn('Smart Reporter: PDF generation failed:', err);
+    console.warn('Smart Reporter: PDF generation failed:', err instanceof Error ? err.message : 'Unknown error');
     return null;
   } finally {
     if (browser) {

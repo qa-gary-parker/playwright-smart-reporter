@@ -70,13 +70,10 @@ export class LicenseValidator {
       return { tier: 'community', valid: false, error: 'Invalid license key algorithm' };
     }
 
-    // Verify signature (skip in dev mode for testing with unsigned tokens)
-    const isDev = process.env.SMART_REPORTER_DEV_LICENSE === 'true';
-    if (!isDev) {
-      const validSig = verifySignature(decoded.signatureInput, decoded.signature, this.publicKey);
-      if (!validSig) {
-        return { tier: 'community', valid: false, error: 'Invalid license key signature' };
-      }
+    // Verify signature
+    const validSig = verifySignature(decoded.signatureInput, decoded.signature, this.publicKey);
+    if (!validSig) {
+      return { tier: 'community', valid: false, error: 'Invalid license key signature' };
     }
 
     const { payload } = decoded;

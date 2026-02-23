@@ -149,12 +149,24 @@ export class NotificationManager {
             const payload = config.config.payloadTemplate
               ? renderTemplate(config.config.payloadTemplate, ctx)
               : JSON.stringify(ctx);
-            await notifier.send(payload, config.config.headers ? JSON.parse(config.config.headers) : undefined);
+            let parsedHeaders: Record<string, string> | undefined;
+            if (config.config.headers) {
+              try {
+                const h = JSON.parse(config.config.headers);
+                if (typeof h === 'object' && h !== null && !Array.isArray(h)) {
+                  parsedHeaders = h;
+                }
+              } catch {
+                console.warn('Smart Reporter: Invalid webhook headers JSON. Skipping headers.');
+              }
+            }
+            await notifier.send(payload, parsedHeaders);
             break;
           }
         }
       } catch (err) {
-        console.error(`Failed to send ${config.channel} notification:`, err);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Failed to send ${config.channel} notification: ${message}`);
       }
     }
   }

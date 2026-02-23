@@ -376,7 +376,6 @@ describe('NotificationManager', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to send slack notification'),
-        expect.any(Error)
       );
       expect(TeamsNotifier).toHaveBeenCalled();
     });

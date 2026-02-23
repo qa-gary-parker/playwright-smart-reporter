@@ -996,10 +996,11 @@ function generateThemeOverrides(theme?: ThemeConfig): string {
     ['warning', ['--accent-yellow', '--accent-yellow-dim']],
   ];
 
+  const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
   const overrides: string[] = [];
   for (const [key, vars] of mappings) {
     const value = theme[key];
-    if (typeof value === 'string' && value.startsWith('#')) {
+    if (typeof value === 'string' && HEX_COLOR.test(value)) {
       for (const v of vars) {
         overrides.push(`      ${v}: ${value};`);
       }

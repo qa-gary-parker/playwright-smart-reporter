@@ -98,7 +98,7 @@ describe('pdf-exporter', () => {
       expect(result).toBeNull();
       expect(warnSpy).toHaveBeenCalledWith(
         'Smart Reporter: PDF generation failed:',
-        expect.any(Error),
+        'net::ERR_FILE_NOT_FOUND',
       );
       expect(mockBrowser.close).toHaveBeenCalled();
 
