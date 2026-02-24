@@ -15,6 +15,10 @@ export class TeamsNotifier {
    */
   async notify(results: TestResultData[]): Promise<void> {
     if (!this.webhookUrl) return;
+    if (!this.webhookUrl.startsWith('https://')) {
+      console.warn('[smart-reporter] Webhook URL must use HTTPS');
+      return;
+    }
 
     const failed = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
     const passed = results.filter(r => r.status === 'passed').length;
@@ -63,6 +67,10 @@ export class TeamsNotifier {
    */
   async sendMessage(message: string): Promise<void> {
     if (!this.webhookUrl) return;
+    if (!this.webhookUrl.startsWith('https://')) {
+      console.warn('[smart-reporter] Webhook URL must use HTTPS');
+      return;
+    }
 
     try {
       await fetch(this.webhookUrl, {
@@ -90,6 +98,10 @@ export class TeamsNotifier {
     color?: string;
   }): Promise<void> {
     if (!this.webhookUrl) return;
+    if (!this.webhookUrl.startsWith('https://')) {
+      console.warn('[smart-reporter] Webhook URL must use HTTPS');
+      return;
+    }
 
     const {
       title,

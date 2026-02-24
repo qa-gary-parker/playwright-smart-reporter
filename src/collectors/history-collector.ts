@@ -9,8 +9,8 @@ import { sanitizeFilename } from '../utils/sanitizers';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'theme' | 'notifications' | 'ai' | 'branding'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'theme' | 'notifications' | 'ai' | 'branding'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'theme' | 'notifications' | 'ai' | 'branding' | 'qualityGates' | 'quarantine'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'theme' | 'notifications' | 'ai' | 'branding' | 'qualityGates' | 'quarantine'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -77,6 +77,9 @@ export class HistoryCollector {
       notifications: options.notifications,
       ai: options.ai,
       branding: options.branding,
+      qualityGates: options.qualityGates,
+      quarantine: options.quarantine,
+      exportPdfFull: options.exportPdfFull,
     };
     this.outputDir = outputDir;
     this.currentRun = {
@@ -133,7 +136,7 @@ export class HistoryCollector {
       }
 
       this.history.tests[result.testId].push({
-        passed: result.status === 'passed',
+        passed: result.status === 'passed' || result.outcome === 'expected' || result.outcome === 'flaky',
         duration: result.duration,
         timestamp,
         ...(this.options.enableHistoryDrilldown ? { runId } : {}),
@@ -150,10 +153,17 @@ export class HistoryCollector {
     }
 
     // Add run summary
-    const passed = results.filter(r => r.status === 'passed').length;
-    const failed = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+    const passed = results.filter(r =>
+      r.status === 'passed' ||
+      r.outcome === 'expected' ||
+      r.outcome === 'flaky'
+    ).length;
+    const failed = results.filter(r =>
+      (r.status === 'failed' || r.status === 'timedOut') &&
+      r.outcome !== 'expected' && r.outcome !== 'flaky'
+    ).length;
     const skipped = results.filter(r => r.status === 'skipped').length;
-    const flaky = results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3).length;
+    const flaky = results.filter(r => r.outcome === 'flaky').length;
     const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
     const total = results.length;
     const duration = Date.now() - this.startTime;

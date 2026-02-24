@@ -17,6 +17,22 @@ export function escapeHtml(str: string): string {
 }
 
 /**
+ * Escape a string for safe embedding in a JavaScript string context (e.g., onclick handlers).
+ * HTML entity escaping is NOT safe for JS string contexts; this function handles
+ * backslashes, quotes, newlines, and angle brackets via JS escapes.
+ */
+export function escapeJsString(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e');
+}
+
+/**
  * Generate a safe HTML ID from a string
  * @param str - String to convert to ID
  * @returns Safe ID string (alphanumeric + underscores only)

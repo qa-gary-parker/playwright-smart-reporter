@@ -15,13 +15,15 @@ export function exportJunitXml(
   results: TestResultData[],
   options: SmartReporterOptions,
   outputDir?: string,
+  basename?: string,
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
       ? path.dirname(path.resolve(options.outputFile))
       : process.cwd()
   );
-  const outputPath = path.resolve(baseDir, 'smart-report-junit.xml');
+  const filename = `${basename ?? 'smart-report'}-junit.xml`;
+  const outputPath = path.resolve(baseDir, filename);
 
   // Group tests by spec file
   const suites = new Map<string, TestResultData[]>();

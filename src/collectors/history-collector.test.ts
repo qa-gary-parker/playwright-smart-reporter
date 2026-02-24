@@ -247,7 +247,7 @@ describe('HistoryCollector', () => {
 
       const results = [
         createTestResult({ status: 'passed' }),
-        createTestResult({ status: 'passed', flakinessScore: 0.5 }),
+        createTestResult({ status: 'passed', outcome: 'flaky', flakinessScore: 0.5 }),
         createTestResult({ status: 'failed' }),
         createTestResult({ status: 'skipped' }),
         createTestResult({ status: 'passed', performanceTrend: '↑ 50% slower' }),

@@ -161,6 +161,13 @@ function main(): void {
     if (!fs.existsSync(filePath)) {
       // Try resolving from CWD (test-results/ is typically at project root)
       const cwdPath = path.join(process.cwd(), requestedFile);
+      const resolvedCwd = path.resolve(cwdPath);
+      const resolvedCwdDir = path.resolve(process.cwd());
+      if (!resolvedCwd.startsWith(resolvedCwdDir)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
       if (fs.existsSync(cwdPath) && fs.statSync(cwdPath).isFile()) {
         serveFile(cwdPath, res);
         return;

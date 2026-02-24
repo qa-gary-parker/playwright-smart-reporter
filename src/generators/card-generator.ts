@@ -49,7 +49,7 @@ function getAnnotationIcon(type: string): string {
 /**
  * Generate a single test card
  */
-export function generateTestCard(test: TestResultData, showTraceSection: boolean): string {
+export function generateTestCard(test: TestResultData, showTraceSection: boolean, quarantinedTestIds?: Set<string>): string {
   const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
@@ -117,11 +117,17 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
       }).join('')
     : '';
 
+  // Quarantine badge
+  const isQuarantined = quarantinedTestIds?.has(test.testId) ?? false;
+  const quarantineBadgeHtml = isQuarantined
+    ? '<span class="test-annotation-badge annotation-quarantine" title="Quarantined due to high flakiness">Quarantined</span>'
+    : '';
+
   // Combine all badges into a single badges row for cleaner layout
-  const hasBadges = browserHtml || projectHtml || annotationsHtml || tagsHtml;
+  const hasBadges = browserHtml || projectHtml || annotationsHtml || tagsHtml || quarantineBadgeHtml;
   const badgesHtml = hasBadges ? `
               <div class="test-badges-row">
-                ${browserHtml}${projectHtml}${annotationsHtml ? `<span class="badge-separator"></span>${annotationsHtml}` : ''}${tagsHtml ? `${annotationsHtml ? '' : '<span class="badge-separator"></span>'}${tagsHtml}` : ''}
+                ${quarantineBadgeHtml}${browserHtml}${projectHtml}${annotationsHtml ? `<span class="badge-separator"></span>${annotationsHtml}` : ''}${tagsHtml ? `${annotationsHtml ? '' : '<span class="badge-separator"></span>'}${tagsHtml}` : ''}
               </div>` : '';
 
   return `
@@ -131,7 +137,8 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
          data-unstable="${isUnstable}"
          data-slow="${isSlow}"
          data-new="${isNew}"
-         data-grade="${test.stabilityScore?.grade || ''}"${tagsAttr}${suiteAttr}${suitesAttr}${browserAttr}${projectAttr}>
+         data-grade="${test.stabilityScore?.grade || ''}"${tagsAttr}${suiteAttr}${suitesAttr}${browserAttr}${projectAttr}
+         data-quarantined="${isQuarantined}">
       <div class="test-card-header" ${hasDetails ? `onclick="toggleDetails('${cardId}', event)"` : ''}>
         <div class="test-card-left">
           <div class="status-indicator ${test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed'}"></div>
@@ -436,7 +443,7 @@ export interface AttentionSets {
 /**
  * Generate grouped tests by file - uses list items for selection behavior
  */
-export function generateGroupedTests(results: TestResultData[], showTraceSection: boolean, attention: AttentionSets = { newFailures: new Set(), regressions: new Set(), fixed: new Set() }): string {
+export function generateGroupedTests(results: TestResultData[], showTraceSection: boolean, attention: AttentionSets = { newFailures: new Set(), regressions: new Set(), fixed: new Set() }, quarantinedTestIds?: Set<string>): string {
   // Group tests by file
   const groups = new Map<string, TestResultData[]>();
   for (const test of results) {
@@ -464,7 +471,8 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
       const isNewFailure = attention.newFailures.has(test.testId);
       const isRegression = attention.regressions.has(test.testId);
       const isFixed = attention.fixed.has(test.testId);
-      
+      const isQuarantinedItem = quarantinedTestIds?.has(test.testId) ?? false;
+
       // Determine stability badge
       let stabilityBadge = '';
       if (test.stabilityScore) {
@@ -475,7 +483,7 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
       }
 
       return `
-        <div class="test-list-item ${statusClass}" 
+        <div class="test-list-item ${statusClass}"
              id="list-item-${cardId}"
              data-testid="${escapeHtml(test.testId)}"
              data-status="${test.status}"
@@ -487,6 +495,7 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
              data-fixed="${isFixed}"
              data-file="${escapeHtml(test.file)}"
              data-grade="${test.stabilityScore?.grade || ''}"
+             data-quarantined="${isQuarantinedItem}"
              onclick="selectTest('${cardId}')">
           <div class="test-item-status">
             <div class="status-dot ${statusClass}"></div>
@@ -495,6 +504,7 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
             <div class="test-item-title">${escapeHtml(test.title)}</div>
           </div>
           <div class="test-item-meta">
+            ${isQuarantinedItem ? '<span class="test-item-badge quarantined">Quarantined</span>' : ''}
             ${isNewFailure ? '<span class="test-item-badge new-failure">New Failure</span>' : ''}
             ${isRegression ? '<span class="test-item-badge regression">Regression</span>' : ''}
             ${isFixed ? '<span class="test-item-badge fixed">Fixed</span>' : ''}

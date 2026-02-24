@@ -8,10 +8,24 @@
     "playwright-smart-reporter-merge-history": "./dist/bin/merge-history.js",
     "playwright-smart-reporter-view-trace": "./dist/bin/view-trace.js",
     "playwright-smart-reporter-serve": "./dist/bin/serve.js",
-    "playwright-smart-reporter-generate-license": "./dist/license/generate-license.js"
+    "playwright-smart-reporter": "./dist/bin/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/smart-reporter.d.ts",
+      "default": "./dist/smart-reporter.js"
+    },
+    "./quarantine": {
+      "types": "./dist/quarantine/quarantine-helper.d.ts",
+      "default": "./dist/quarantine/quarantine-helper.js"
+    }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/**/*.test.js.map",
+    "!dist/license/generate-license.*"
   ],
   "scripts": {
     "build": "tsc",
@@ -67,6 +81,7 @@
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "@types/adm-zip": "^0.5.7",
+    "@types/pdfkit": "^0.13.8",
     "typescript": "^5.3.0",
     "vitest": "^2.1.0"
   },
@@ -76,6 +91,6 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "dotenv": "^17.2.3"
+    "pdfkit": "^0.16.0"
   }
 }

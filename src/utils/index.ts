@@ -5,3 +5,4 @@
 export * from './formatters';
 export * from './sanitizers';
 export * from './markdown-lite';
+export * from './ci-detector';

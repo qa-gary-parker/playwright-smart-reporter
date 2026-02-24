@@ -35,6 +35,14 @@ PUBLISHING.md
 .git/
 .github/
 
+# Test files in dist
+dist/**/*.test.js
+dist/**/*.test.d.ts
+dist/**/*.test.js.map
+
+# License generator
+dist/license/generate-license.*
+
 # Logs
 *.log
 npm-debug.log*

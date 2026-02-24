@@ -7,6 +7,10 @@ export class CustomWebhookNotifier {
 
   async send(payload: string, headers?: Record<string, string>): Promise<void> {
     if (!this.url) return;
+    if (!this.url.startsWith('https://')) {
+      console.warn('[smart-reporter] Webhook URL must use HTTPS');
+      return;
+    }
 
     try {
       await fetch(this.url, {

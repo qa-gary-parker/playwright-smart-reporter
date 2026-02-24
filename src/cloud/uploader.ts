@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { SmartReporterOptions, TestResultData, CIInfo } from '../types';
+import type { SmartReporterOptions, TestResultData } from '../types';
+import { detectCIInfo } from '../utils/ci-detector';
 
 const DEFAULT_ENDPOINT = 'https://app.stagewright.dev/api/v1';
 
@@ -62,63 +63,6 @@ interface CloudStep {
   title: string;
   duration: number;
   category: string;
-}
-
-/**
- * Detects CI environment information
- */
-function detectCIInfo(): CIInfo | undefined {
-  // GitHub Actions
-  if (process.env.GITHUB_ACTIONS) {
-    return {
-      provider: 'github',
-      branch: process.env.GITHUB_REF_NAME || process.env.GITHUB_HEAD_REF,
-      commit: process.env.GITHUB_SHA,
-      buildId: process.env.GITHUB_RUN_ID,
-    };
-  }
-
-  // GitLab CI
-  if (process.env.GITLAB_CI) {
-    return {
-      provider: 'gitlab',
-      branch: process.env.CI_COMMIT_REF_NAME,
-      commit: process.env.CI_COMMIT_SHA,
-      buildId: process.env.CI_PIPELINE_ID,
-    };
-  }
-
-  // CircleCI
-  if (process.env.CIRCLECI) {
-    return {
-      provider: 'circleci',
-      branch: process.env.CIRCLE_BRANCH,
-      commit: process.env.CIRCLE_SHA1,
-      buildId: process.env.CIRCLE_BUILD_NUM,
-    };
-  }
-
-  // Jenkins
-  if (process.env.JENKINS_URL) {
-    return {
-      provider: 'jenkins',
-      branch: process.env.GIT_BRANCH || process.env.BRANCH_NAME,
-      commit: process.env.GIT_COMMIT,
-      buildId: process.env.BUILD_NUMBER,
-    };
-  }
-
-  // Azure DevOps
-  if (process.env.TF_BUILD) {
-    return {
-      provider: 'azure',
-      branch: process.env.BUILD_SOURCEBRANCHNAME,
-      commit: process.env.BUILD_SOURCEVERSION,
-      buildId: process.env.BUILD_BUILDID,
-    };
-  }
-
-  return undefined;
 }
 
 /**

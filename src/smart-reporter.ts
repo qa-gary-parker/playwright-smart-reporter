@@ -8,10 +8,6 @@ import type {
 } from '@playwright/test/reporter';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as dotenv from 'dotenv';
-
-// Load environment variables from .env file
-dotenv.config();
 
 // ============================================================================
 // Imports: Types
@@ -27,6 +23,8 @@ import type {
   RunSummary,
   RunSnapshotFile,
   LicenseInfo,
+  QualityGateResult,
+  QuarantineFile,
 } from './types';
 
 // ============================================================================
@@ -65,74 +63,12 @@ import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { CloudUploader } from './cloud/uploader';
 import { LicenseValidator } from './license';
-import { formatDuration, stripAnsiCodes, sanitizeFilename } from './utils';
+import { QualityGateEvaluator, formatGateReport } from './gates';
+import { QuarantineGenerator } from './quarantine';
+import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import type { CIInfo } from './types';
-
-/**
- * Auto-detect CI environment and capture metadata
- */
-function detectCIInfo(): CIInfo | undefined {
-  const env = process.env;
-
-  if (env.GITHUB_ACTIONS) {
-    return {
-      provider: 'github',
-      branch: env.GITHUB_HEAD_REF || env.GITHUB_REF_NAME || env.GITHUB_REF?.replace('refs/heads/', ''),
-      commit: env.GITHUB_SHA?.slice(0, 8),
-      buildId: env.GITHUB_RUN_ID,
-    };
-  }
-  if (env.GITLAB_CI) {
-    return {
-      provider: 'gitlab',
-      branch: env.CI_COMMIT_REF_NAME,
-      commit: env.CI_COMMIT_SHORT_SHA || env.CI_COMMIT_SHA?.slice(0, 8),
-      buildId: env.CI_PIPELINE_ID,
-    };
-  }
-  if (env.CIRCLECI) {
-    return {
-      provider: 'circleci',
-      branch: env.CIRCLE_BRANCH,
-      commit: env.CIRCLE_SHA1?.slice(0, 8),
-      buildId: env.CIRCLE_BUILD_NUM,
-    };
-  }
-  if (env.JENKINS_URL) {
-    return {
-      provider: 'jenkins',
-      branch: env.GIT_BRANCH || env.BRANCH_NAME,
-      commit: env.GIT_COMMIT?.slice(0, 8),
-      buildId: env.BUILD_NUMBER,
-    };
-  }
-  if (env.TF_BUILD) {
-    return {
-      provider: 'azure',
-      branch: env.BUILD_SOURCEBRANCH?.replace('refs/heads/', ''),
-      commit: env.BUILD_SOURCEVERSION?.slice(0, 8),
-      buildId: env.BUILD_BUILDID,
-    };
-  }
-  if (env.BUILDKITE) {
-    return {
-      provider: 'buildkite',
-      branch: env.BUILDKITE_BRANCH,
-      commit: env.BUILDKITE_COMMIT?.slice(0, 8),
-      buildId: env.BUILDKITE_BUILD_NUMBER,
-    };
-  }
-  if (env.CI) {
-    return {
-      provider: 'unknown',
-      branch: env.CI_BRANCH || env.BRANCH,
-      commit: env.CI_COMMIT || env.COMMIT,
-      buildId: env.CI_BUILD_ID || env.BUILD_ID,
-    };
-  }
-  return undefined;
-}
 
 // ============================================================================
 // Smart Reporter
@@ -182,6 +118,7 @@ class SmartReporter implements Reporter {
   private fullConfig: FullConfig | null = null;
   private runnerErrors: string[] = [];
   private ciInfo?: CIInfo;
+  private resolvedPerformanceThreshold: number = 0.2;
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -264,6 +201,7 @@ class SmartReporter implements Reporter {
     // Initialize all analyzers with thresholds from options
     const thresholds = this.options.thresholds;
     const performanceThreshold = thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2;
+    this.resolvedPerformanceThreshold = performanceThreshold;
     const retryFailureThreshold = this.options.retryFailureThreshold ?? 3;
     const stabilityThreshold = this.options.stabilityThreshold ?? 70;
 
@@ -669,6 +607,36 @@ class SmartReporter implements Reporter {
 	      }
 	    }
 
+    // Premium feature flags (needed before HTML generation)
+    const hasPro = LicenseValidator.hasFeature(this.license, 'pro');
+    const exportDir = path.dirname(outputPath);
+
+    // Quality gates (Pro feature) - evaluate BEFORE HTML generation so results embed in report
+    let qualityGateResult: QualityGateResult | undefined;
+    if (this.options.qualityGates && hasPro) {
+      try {
+        const evaluator = new QualityGateEvaluator();
+        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison);
+      } catch (err) {
+        console.warn('⚠️  Quality gate evaluation failed:', err);
+      }
+    }
+
+    // Quarantine (Pro feature) - evaluate BEFORE HTML generation so badges/cards embed in report
+    let quarantineResult: QuarantineFile | null = null;
+    let quarantinedTestIds: Set<string> | undefined;
+    if (this.options.quarantine?.enabled && hasPro) {
+      try {
+        const generator = new QuarantineGenerator(this.options.quarantine);
+        quarantineResult = generator.generate(this.results, exportDir);
+        if (quarantineResult) {
+          quarantinedTestIds = new Set(quarantineResult.entries.map(e => e.testId));
+        }
+      } catch (err) {
+        console.warn('⚠️  Quarantine generation failed:', err);
+      }
+    }
+
 	    const htmlData: HtmlGeneratorData = {
 	      results: this.results,
 	      history: this.historyCollector.getHistory(),
@@ -679,6 +647,11 @@ class SmartReporter implements Reporter {
 	      failureClusters,
 	      ciInfo: this.ciInfo,
 	      licenseTier: this.license.tier,
+	      outputBasename: path.basename(outputPath, '.html'),
+	      qualityGateResult,
+	      quarantinedTestIds,
+	      quarantineEntries: quarantineResult?.entries,
+	      quarantineThreshold: this.options.quarantine?.threshold,
 	    };
 
     // Generate and save HTML report
@@ -690,9 +663,6 @@ class SmartReporter implements Reporter {
     console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
     console.log(`   Or open directly: open "${outputPath}"`);
 
-    // Premium exports (Pro tier)
-    const hasPro = LicenseValidator.hasFeature(this.license, 'pro');
-    const exportDir = path.dirname(outputPath);
 
     if (this.options.exportJson && hasPro) {
       try {
@@ -704,6 +674,7 @@ class SmartReporter implements Reporter {
           comparison,
           failureClusters,
           exportDir,
+          htmlData.outputBasename,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
@@ -715,7 +686,7 @@ class SmartReporter implements Reporter {
 
     if (this.options.exportJunit && hasPro) {
       try {
-        const junitPath = exportJunitXml(this.results, this.options, exportDir);
+        const junitPath = exportJunitXml(this.results, this.options, exportDir, htmlData.outputBasename);
         console.log(`   JUnit XML: ${junitPath}`);
       } catch (err) {
         console.warn('⚠️  JUnit export failed:', err);
@@ -726,9 +697,33 @@ class SmartReporter implements Reporter {
 
     if (this.options.exportPdf && hasPro) {
       try {
-        const pdfPath = await exportPdfReport(outputPath, this.options, exportDir);
-        if (pdfPath) {
-          console.log(`   PDF report: ${pdfPath}`);
+        if (this.options.exportPdfFull) {
+          // Legacy: full HTML-to-PDF dump via playwright-core
+          const pdfPath = await exportPdfReport(outputPath, this.options, exportDir);
+          if (pdfPath) {
+            console.log(`   PDF report (full): ${pdfPath}`);
+          }
+        } else {
+          // Default: executive summary PDFs via pdfkit (3 themed variants)
+          const pdfData = {
+            results: this.results,
+            history: this.historyCollector.getHistory(),
+            startTime: this.startTime,
+            ciInfo: this.ciInfo,
+            failureClusters,
+            projectName: this.options.projectName,
+            qualityGateResult,
+            quarantineEntries: quarantineResult?.entries,
+            quarantineThreshold: this.options.quarantine?.threshold,
+            branding: this.options.branding,
+          };
+          const pdfThemes: PdfThemeName[] = ['corporate', 'dark', 'minimal'];
+          for (const pdfTheme of pdfThemes) {
+            const pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+            if (pdfTheme === 'corporate') {
+              console.log(`   PDF executive summary: ${pdfPath}`);
+            }
+          }
         }
       } catch (err) {
         console.warn('⚠️  PDF export failed:', err);
@@ -755,6 +750,26 @@ class SmartReporter implements Reporter {
         await this.slackNotifier.notify(this.results);
         await this.teamsNotifier.notify(this.results);
       }
+    }
+
+    // Quality gates (Pro feature) - log results and set exitCode
+    if (qualityGateResult) {
+      console.log(formatGateReport(qualityGateResult));
+      if (!qualityGateResult.passed) {
+        process.exitCode = 1;
+      }
+    } else if (this.options.qualityGates && !hasPro) {
+      console.log('   Quality gates require a Pro license — see stagewright.dev/pricing');
+    }
+
+    // Quarantine (Pro feature) - log results (file already written above)
+    if (quarantineResult) {
+      const qPath = new QuarantineGenerator(this.options.quarantine!).getOutputPath(exportDir);
+      console.log(`   Quarantine: ${quarantineResult.entries.length} test(s) quarantined -> ${qPath}`);
+    } else if (this.options.quarantine?.enabled && hasPro) {
+      console.log('   Quarantine: no tests exceed flakiness threshold');
+    } else if (this.options.quarantine?.enabled && !hasPro) {
+      console.log('   Quarantine requires a Pro license — see stagewright.dev/pricing');
     }
 
     // Upload to StageWright Cloud if enabled
@@ -800,7 +815,7 @@ class SmartReporter implements Reporter {
 
   private getPerformanceTrend(current: number, average: number): string {
     const diff = (current - average) / average;
-    const threshold = this.options.performanceThreshold ?? 0.2;
+    const threshold = this.resolvedPerformanceThreshold;
     if (diff > threshold) {
       return `↑ ${Math.round(diff * 100)}% slower`;
     }

@@ -89,6 +89,11 @@ describe('NotificationManager', () => {
 
     it('minFailures: notifies when failures meet threshold', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+        sendMessage: mockSendMessage,
+      } as any));
+
       const config: NotificationConfig = {
         channel: 'slack',
         config: { webhookUrl: 'https://hooks.slack.com/test' },
@@ -103,6 +108,8 @@ describe('NotificationManager', () => {
       await manager.notify(results, Date.now());
 
       expect(SlackNotifier).toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(mockSendMessage).toHaveBeenCalledWith(expect.stringContaining('1 failures'));
     });
 
     it('maxPassRate: does not notify when pass rate above threshold', async () => {
@@ -126,6 +133,11 @@ describe('NotificationManager', () => {
 
     it('tags: only notifies when tagged tests fail', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+        sendMessage: mockSendMessage,
+      } as any));
+
       const config: NotificationConfig = {
         channel: 'slack',
         config: { webhookUrl: 'https://hooks.slack.com/test' },
@@ -144,6 +156,7 @@ describe('NotificationManager', () => {
       await manager.notify(results, Date.now());
 
       expect(SlackNotifier).toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledOnce();
     });
 
     it('tags: does not notify when only non-tagged tests fail', async () => {
@@ -172,6 +185,11 @@ describe('NotificationManager', () => {
   describe('stabilityGradeDrop', () => {
     it('notifies when stability grade has dropped', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+        sendMessage: mockSendMessage,
+      } as any));
+
       const config: NotificationConfig = {
         channel: 'slack',
         config: { webhookUrl: 'https://hooks.slack.com/test' },
@@ -194,6 +212,7 @@ describe('NotificationManager', () => {
       await manager.notify(results, Date.now(), comparison);
 
       expect(SlackNotifier).toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledOnce();
     });
 
     it('does not notify when stability grade has improved', async () => {
@@ -280,6 +299,11 @@ describe('NotificationManager', () => {
   describe('channel dispatch', () => {
     it('dispatches to slack', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+        sendMessage: mockSendMessage,
+      } as any));
+
       const config: NotificationConfig = {
         channel: 'slack',
         config: { webhookUrl: 'https://hooks.slack.com/test' },
@@ -288,6 +312,7 @@ describe('NotificationManager', () => {
       await manager.notify([createTestResult()], Date.now());
 
       expect(SlackNotifier).toHaveBeenCalledWith('https://hooks.slack.com/test');
+      expect(mockSendMessage).toHaveBeenCalledOnce();
     });
 
     it('dispatches to teams', async () => {

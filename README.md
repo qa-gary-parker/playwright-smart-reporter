@@ -199,9 +199,9 @@ Composite score (0-100) from three factors:
 
 | Factor | Weight | Description |
 |---|---|---|
-| Reliability | 40% | Pass rate from history |
-| Flakiness | 35% | Inverse of flakiness score |
-| Performance | 25% | Execution time consistency |
+| Flakiness | 40% | Inverse of flakiness score |
+| Performance | 30% | Execution time consistency |
+| Reliability | 30% | Pass rate from history |
 
 Grades: **A+** (95-100), **A** (90-94), **B** (80-89), **C** (70-79), **D** (60-69), **F** (<60). All weights and thresholds are configurable via `ThresholdConfig`.
 

@@ -46,6 +46,24 @@ vi.mock('./generators/pdf-exporter', () => ({
   exportPdfReport: vi.fn().mockResolvedValue('/tmp/report.pdf'),
 }));
 
+vi.mock('./generators/executive-pdf', () => ({
+  generateExecutivePdf: vi.fn().mockReturnValue('/tmp/executive.pdf'),
+}));
+
+vi.mock('./gates', () => ({
+  QualityGateEvaluator: vi.fn().mockImplementation(() => ({
+    evaluate: vi.fn().mockReturnValue({ passed: true, rules: [] }),
+  })),
+  formatGateReport: vi.fn().mockReturnValue(''),
+}));
+
+vi.mock('./quarantine', () => ({
+  QuarantineGenerator: vi.fn().mockImplementation(() => ({
+    generate: vi.fn().mockReturnValue(null),
+    getOutputPath: vi.fn().mockReturnValue('/tmp/.smart-quarantine.json'),
+  })),
+}));
+
 vi.mock('./cloud/uploader', () => ({
   CloudUploader: vi.fn().mockImplementation(() => ({
     isEnabled: vi.fn().mockReturnValue(false),
@@ -99,8 +117,6 @@ vi.mock('./analyzers', () => ({
     analyzeClusters: vi.fn().mockResolvedValue(undefined),
   })),
 }));
-
-vi.mock('dotenv', () => ({ config: vi.fn() }));
 
 // ---------------------------------------------------------------------------
 // Mock the license module so premium-integration tests control tier directly
@@ -159,6 +175,7 @@ import SmartReporter from './smart-reporter';
 import { exportJsonData } from './generators/json-exporter';
 import { exportJunitXml } from './generators/junit-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
+import { generateExecutivePdf } from './generators/executive-pdf';
 import { generateHtml } from './generators/html-generator';
 import { NotificationManager } from './notifiers';
 import { AIAnalyzer } from './analyzers';
@@ -183,6 +200,7 @@ describe('Premium Pipeline Integration', () => {
     vi.mocked(exportJsonData).mockClear();
     vi.mocked(exportJunitXml).mockClear();
     vi.mocked(exportPdfReport).mockClear();
+    vi.mocked(generateExecutivePdf).mockClear();
     vi.mocked(generateHtml).mockClear();
     vi.mocked(NotificationManager).mockClear();
     vi.mocked(AIAnalyzer).mockClear();
@@ -354,12 +372,22 @@ describe('Premium Pipeline Integration', () => {
       expect(exportJunitXml).toHaveBeenCalled();
     });
 
-    it('calls exportPdfReport when exportPdf: true', async () => {
+    it('calls generateExecutivePdf when exportPdf: true (default)', async () => {
       const reporter = new SmartReporter({ exportPdf: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
 
+      expect(generateExecutivePdf).toHaveBeenCalled();
+      expect(exportPdfReport).not.toHaveBeenCalled();
+    });
+
+    it('calls exportPdfReport when exportPdf: true and exportPdfFull: true', async () => {
+      const reporter = new SmartReporter({ exportPdf: true, exportPdfFull: true });
+      reporter.onBegin(fakeConfig, fakeSuite);
+      await reporter.onEnd(fakeFullResult);
+
       expect(exportPdfReport).toHaveBeenCalled();
+      expect(generateExecutivePdf).not.toHaveBeenCalled();
     });
 
     it('preserves theme config — passed through to generateHtml', async () => {

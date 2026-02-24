@@ -19,7 +19,7 @@ export interface LicenseInfo {
 // ============================================================================
 
 export interface ThemeConfig {
-  preset?: 'default' | 'dark' | 'light' | 'high-contrast';
+  preset?: 'default' | 'dark' | 'light' | 'high-contrast' | 'ocean' | 'sunset' | 'dracula' | 'cyberpunk' | 'forest' | 'rose';
   primary?: string;
   background?: string;
   surface?: string;
@@ -167,6 +167,15 @@ export interface SmartReporterOptions {
 
   // Premium: Report branding (Pro tier)
   branding?: BrandingConfig;
+
+  // Premium: Quality gates (Pro tier) - CI pipeline pass/fail rules
+  qualityGates?: QualityGateConfig;
+
+  // Premium: Flakiness quarantine (Pro tier) - auto-quarantine flaky tests
+  quarantine?: QuarantineConfig;
+
+  // Premium: Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
+  exportPdfFull?: boolean;
 }
 
 // ============================================================================
@@ -444,4 +453,66 @@ export interface SuiteStats {
   needsRetry: number;
   passRate: number;
   averageStability: number;
+}
+
+// ============================================================================
+// Quality Gates (Pro)
+// ============================================================================
+
+export interface QualityGateConfig {
+  maxFailures?: number;
+  minPassRate?: number;
+  maxFlakyRate?: number;
+  minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
+  noNewFailures?: boolean;
+}
+
+export interface QualityGateRuleResult {
+  rule: string;
+  passed: boolean;
+  actual: string;
+  threshold: string;
+  skipped?: boolean;
+}
+
+export interface QualityGateResult {
+  passed: boolean;
+  rules: QualityGateRuleResult[];
+}
+
+// ============================================================================
+// Quarantine (Pro)
+// ============================================================================
+
+export interface QuarantineConfig {
+  enabled: boolean;
+  threshold?: number;
+  maxQuarantined?: number;
+  outputFile?: string;
+}
+
+export interface QuarantineEntry {
+  testId: string;
+  title: string;
+  file: string;
+  flakinessScore: number;
+  quarantinedAt: string;
+}
+
+export interface QuarantineFile {
+  generatedAt: string;
+  threshold: number;
+  entries: QuarantineEntry[];
+}
+
+// ============================================================================
+// AI Health Digest
+// ============================================================================
+
+export interface DigestOptions {
+  period: 'daily' | 'weekly' | 'monthly';
+  historyFile: string;
+  output?: string;
+  ai?: boolean;
+  format?: 'markdown' | 'text';
 }

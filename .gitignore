@@ -20,6 +20,17 @@ example/parallel/smart-report.html
 example/parallel/test-history.json
 example/history-runs/
 example/traces/
+example/*.pdf
+example/*.xml
+example/*-data.json
+example/.smart-quarantine.json
+example/test-history-premium.json
+example/premium-report.html
+
+# Temp/generated files
+.generate-report.js
+.smart-reporter-data.json
+.playwright-mcp/
 
 # License keys
-keys/private.pem
+keys/

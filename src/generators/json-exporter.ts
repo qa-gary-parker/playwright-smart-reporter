@@ -82,13 +82,15 @@ export function exportJsonData(
   comparison?: RunComparison,
   failureClusters?: FailureCluster[],
   outputDir?: string,
+  basename?: string,
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
       ? path.dirname(path.resolve(options.outputFile))
       : process.cwd()
   );
-  const outputPath = path.resolve(baseDir, 'smart-report-data.json');
+  const filename = `${basename ?? 'smart-report'}-data.json`;
+  const outputPath = path.resolve(baseDir, filename);
 
   const passed = results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
   const failed = results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;

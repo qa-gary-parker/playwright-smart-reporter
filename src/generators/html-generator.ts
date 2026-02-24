@@ -5,8 +5,8 @@
  * REDESIGNED: Modern app-shell layout with sidebar, top bar, and master-detail view
  */
 
-import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo, LicenseTier, ThemeConfig, BrandingConfig } from '../types';
-import { formatDuration, escapeHtml, sanitizeId } from '../utils';
+import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo, LicenseTier, ThemeConfig, BrandingConfig, QualityGateResult, QualityGateRuleResult, QuarantineEntry } from '../types';
+import { formatDuration, escapeHtml, escapeJsString, sanitizeId } from '../utils';
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
 import { generateGallery, generateGalleryScript } from './gallery-generator';
@@ -24,6 +24,11 @@ export interface HtmlGeneratorData {
   failureClusters?: FailureCluster[];
   ciInfo?: CIInfo;
   licenseTier?: LicenseTier;
+  outputBasename?: string;
+  qualityGateResult?: QualityGateResult;
+  quarantinedTestIds?: Set<string>;
+  quarantineEntries?: QuarantineEntry[];
+  quarantineThreshold?: number;
 }
 
 /**
@@ -47,7 +52,7 @@ function generateFileTree(results: TestResultData[]): string {
     const statusClass = stats.failed > 0 ? 'has-failures' : 'all-passed';
     const fileName = file.split(/[\\/]/).pop() || file;
     return `
-      <div class="file-tree-item ${statusClass}" data-file="${escapeHtml(file)}" onclick="filterByFile('${escapeHtml(file)}')">
+      <div class="file-tree-item ${statusClass}" data-file="${escapeHtml(file)}" onclick="filterByFile('${escapeJsString(file)}')">
         <span class="file-tree-icon">📄</span>
         <span class="file-tree-name" title="${escapeHtml(file)}">${escapeHtml(fileName)}</span>
         <span class="file-tree-stats">
@@ -62,14 +67,15 @@ function generateFileTree(results: TestResultData[]): string {
 /**
  * Generate test list items for the main panel
  */
-function generateTestListItems(results: TestResultData[], showTraceSection: boolean, attention: AttentionSets = { newFailures: new Set(), regressions: new Set(), fixed: new Set() }): string {
+function generateTestListItems(results: TestResultData[], showTraceSection: boolean, attention: AttentionSets = { newFailures: new Set(), regressions: new Set(), fixed: new Set() }, quarantinedTestIds?: Set<string>): string {
   return results.map(test => {
     const cardId = sanitizeId(test.testId);
     const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
     const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
     const isSlow = test.performanceTrend?.startsWith('↑') || false;
     const isNew = test.flakinessIndicator?.includes('New') || false;
-    
+    const isQuarantined = quarantinedTestIds?.has(test.testId) ?? false;
+
     // Attention states from comparison
     const isNewFailure = attention.newFailures.has(test.testId);
     const isRegression = attention.regressions.has(test.testId);
@@ -103,6 +109,7 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
            data-tags="${test.tags?.join(',') || ''}"
            data-suite="${test.suite || ''}"
            data-suites="${test.suites?.join(',') || ''}"
+           data-quarantined="${isQuarantined}"
            onclick="selectTest('${cardId}')"
            tabindex="0"
            onkeydown="if(event.key==='Enter')selectTest('${cardId}')">
@@ -114,6 +121,7 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
           <div class="test-item-file">${escapeHtml(test.file)}</div>
         </div>
         <div class="test-item-meta">
+          ${isQuarantined ? '<span class="test-item-badge quarantined">Quarantined</span>' : ''}
           ${isNewFailure ? '<span class="test-item-badge new-failure">New Failure</span>' : ''}
           ${isRegression ? '<span class="test-item-badge regression">Regression</span>' : ''}
           ${isFixed ? '<span class="test-item-badge fixed">Fixed</span>' : ''}
@@ -144,7 +152,11 @@ function generateOverviewContent(
   total: number,
   passRate: number,
   totalDuration: number,
-  history: TestHistory
+  history: TestHistory,
+  qualityGateResult?: QualityGateResult,
+  quarantineEntries?: QuarantineEntry[],
+  quarantineThreshold?: number,
+  licenseTier?: LicenseTier,
 ): string {
   // Calculate deltas from comparison
   const prevPassed = comparison?.baselineRun.passed ?? passed;
@@ -254,6 +266,95 @@ function generateOverviewContent(
     </div>
   ` : '';
 
+  // Quality Gates card
+  const hasPro = licenseTier !== undefined && licenseTier !== 'community';
+  const ruleLabels: Record<string, string> = {
+    maxFailures: 'Max failures',
+    minPassRate: 'Min pass rate',
+    maxFlakyRate: 'Max flaky rate',
+    minStabilityGrade: 'Min stability grade',
+    noNewFailures: 'No new failures',
+  };
+
+  const qualityGatesHtml = qualityGateResult ? `
+    <div class="overview-section quality-gate-section">
+      <div class="quality-gate-card ${qualityGateResult.passed ? 'gate-passed' : 'gate-failed'}">
+        <div class="gate-header">
+          <div class="gate-title-row">
+            <span class="section-icon">&#x1F6A6;</span>
+            <span class="gate-title">Quality Gates</span>
+          </div>
+          <span class="gate-status ${qualityGateResult.passed ? 'gate-status-passed' : 'gate-status-failed'}">${qualityGateResult.passed ? 'PASSED' : 'FAILED'}</span>
+        </div>
+        <div class="gate-rules">
+          ${qualityGateResult.rules.map(rule => {
+            const icon = rule.skipped ? '&#x25CB;' : rule.passed ? '&#x2713;' : '&#x2717;';
+            const iconClass = rule.skipped ? 'gate-skipped' : rule.passed ? 'gate-pass' : 'gate-fail';
+            const label = ruleLabels[rule.rule] || rule.rule;
+            return `
+            <div class="gate-rule-row">
+              <span class="gate-rule-icon ${iconClass}">${icon}</span>
+              <span class="gate-rule-name">${escapeHtml(label)}</span>
+              <span class="gate-rule-values">${rule.skipped ? '(skipped)' : `${escapeHtml(rule.actual)} ${escapeHtml(rule.threshold)}`}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  ` : (!hasPro ? `
+    <div class="overview-section quality-gate-section">
+      <div class="quality-gate-card pro-feature-placeholder">
+        <div class="gate-header">
+          <div class="gate-title-row">
+            <span class="section-icon">&#x1F6A6;</span>
+            <span class="gate-title">Quality Gates</span>
+          </div>
+          <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Pro</span>
+        </div>
+        <div class="gate-placeholder-desc">Configure CI pass/fail rules for your test suite</div>
+      </div>
+    </div>
+  ` : '');
+
+  // Quarantine card
+  const quarantineCount = quarantineEntries?.length ?? 0;
+  const quarantineHtml = quarantineCount > 0 ? `
+    <div class="overview-section quarantine-section">
+      <div class="quarantine-card">
+        <div class="quarantine-header">
+          <div class="quarantine-title-row">
+            <span class="section-icon">&#x1F512;</span>
+            <span class="quarantine-title">Quarantine</span>
+          </div>
+          <span class="quarantine-count">${quarantineCount} test${quarantineCount !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="quarantine-threshold">threshold &ge; ${(quarantineThreshold ?? 0.3).toFixed(1)} flakiness</div>
+        <div class="quarantine-entries">
+          ${quarantineEntries!.slice(0, 3).map(e => `
+            <div class="quarantine-entry">
+              <span class="quarantine-entry-title">${escapeHtml(e.title)}</span>
+              <span class="quarantine-entry-score">${e.flakinessScore.toFixed(2)}</span>
+            </div>
+          `).join('')}
+          ${quarantineCount > 3 ? `<div class="quarantine-more" onclick="filterTests('quarantined'); switchView('tests');">+ ${quarantineCount - 3} more</div>` : ''}
+        </div>
+      </div>
+    </div>
+  ` : (!hasPro ? `
+    <div class="overview-section quarantine-section">
+      <div class="quarantine-card pro-feature-placeholder">
+        <div class="quarantine-header">
+          <div class="quarantine-title-row">
+            <span class="section-icon">&#x1F512;</span>
+            <span class="quarantine-title">Quarantine</span>
+          </div>
+          <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Pro</span>
+        </div>
+        <div class="quarantine-placeholder-desc">Auto-quarantine flaky tests above a threshold</div>
+      </div>
+    </div>
+  ` : '');
+
   return `
     <!-- Hero Stats Row -->
     <div class="hero-stats">
@@ -324,6 +425,10 @@ function generateOverviewContent(
         </div>
       </div>
     </div>
+
+    ${qualityGatesHtml}
+
+    ${quarantineHtml}
 
     ${attentionHtml}
 
@@ -507,6 +612,10 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const showComparison = (options.enableComparison !== false && !!comparison);
   const cspSafe = options.cspSafe === true;
   const licenseTier = data.licenseTier ?? 'community';
+  const hasPro = licenseTier !== 'community';
+  const quarantinedTestIds = data.quarantinedTestIds;
+  const quarantineCount = quarantinedTestIds?.size ?? 0;
+  const outputBasename = data.outputBasename ?? 'smart-report';
   const branding = options.branding;
   const reportTitle = branding?.title ?? 'StageWright Local';
   const reportSubtitle = branding?.title ? '' : 'Get your test stage right.';
@@ -558,7 +667,7 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const statsData = JSON.stringify({ passed, failed, skipped, flaky, slow, newTests, total, passRate, gradeA, gradeB, gradeC, gradeD, gradeF, totalDuration });
 
   return `<!DOCTYPE html>
-<html lang="en"${options.theme?.preset === 'light' ? ' data-theme="light"' : options.theme?.preset === 'dark' ? ' data-theme="dark"' : options.theme?.preset === 'high-contrast' ? ' data-theme="high-contrast"' : ''}>
+<html lang="en"${options.theme?.preset && options.theme.preset !== 'default' ? ` data-theme="${options.theme.preset}"` : ''}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -613,7 +722,16 @@ ${reportSubtitle ? `            <span class="logo-subtitle">${escapeHtml(reportS
             <button class="export-menu-item" onclick="showSummaryExport()" role="menuitem">
               <span>📋</span> Summary Card
             </button>
-${licenseTier === 'community' ? `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
+${hasPro ? `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
+${options.exportPdf ? `            <button class="export-menu-item" onclick="showPdfPicker()" role="menuitem">
+              <span>📑</span> PDF Report
+            </button>` : ''}
+${options.exportJson ? `            <a class="export-menu-item" href="${outputBasename}-data.json" download role="menuitem" style="text-decoration:none;color:inherit;">
+              <span>📦</span> Full JSON Data
+            </a>` : ''}
+${options.exportJunit ? `            <a class="export-menu-item" href="${outputBasename}-junit.xml" download role="menuitem" style="text-decoration:none;color:inherit;">
+              <span>🏷️</span> JUnit XML
+            </a>` : ''}` : `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
               <span>📑</span> PDF Report <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
             </div>
@@ -622,7 +740,7 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
             </div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
               <span>🏷️</span> JUnit XML <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
-            </div>` : ''}
+            </div>`}
           </div>
         </div>
         <div class="theme-dropdown" id="themeDropdown">
@@ -640,6 +758,27 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
             <button class="theme-menu-item" onclick="setTheme('dark')" role="menuitem" data-theme="dark">
               <span>🌙</span> Dark
             </button>
+${hasPro ? `            <div style="height:1px;background:var(--border-subtle);margin:4px 0;position:relative;">
+              <span style="position:absolute;right:4px;top:-8px;font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">PRO</span>
+            </div>
+            <button class="theme-menu-item" onclick="setTheme('ocean')" role="menuitem" data-theme="ocean">
+              <span>🌊</span> Ocean
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('sunset')" role="menuitem" data-theme="sunset">
+              <span>🌅</span> Sunset
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('dracula')" role="menuitem" data-theme="dracula">
+              <span>🧛</span> Dracula
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('cyberpunk')" role="menuitem" data-theme="cyberpunk">
+              <span>⚡</span> Cyberpunk
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('forest')" role="menuitem" data-theme="forest">
+              <span>🌲</span> Forest
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('rose')" role="menuitem" data-theme="rose">
+              <span>🌹</span> Rose
+            </button>` : ''}
           </div>
         </div>
         <div class="timestamp">${new Date().toLocaleString()}</div>
@@ -753,6 +892,7 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
             <button class="filter-chip" data-filter="flaky" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Flaky (${flaky})</button>
             <button class="filter-chip" data-filter="slow" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Slow (${slow})</button>
             <button class="filter-chip" data-filter="new" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">New (${newTests})</button>
+${quarantineCount > 0 ? `            <button class="filter-chip attention-quarantine" data-filter="quarantined" data-group="health" onclick="toggleFilter(this)" aria-pressed="false">Quarantined (${quarantineCount})</button>` : ''}
           </div>
         </div>
         <div class="filter-group" data-group="grade" role="group" aria-label="Grade filters">
@@ -812,7 +952,7 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
           <h2 class="view-title">Overview</h2>
         </div>
         <div class="overview-content">
-          ${generateOverviewContent(results, comparison, failureClusters, passed, failed, skipped, flaky, slow, newTests, total, passRate, totalDuration, history)}
+          ${generateOverviewContent(results, comparison, failureClusters, passed, failed, skipped, flaky, slow, newTests, total, passRate, totalDuration, history, data.qualityGateResult, data.quarantineEntries, data.quarantineThreshold, licenseTier)}
         </div>
       </section>
 
@@ -843,12 +983,12 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
               <!-- All Tests Tab -->
               <div class="test-tab-content active" id="tab-all" role="tabpanel" aria-labelledby="tab-all-label">
                 <div role="list" aria-label="All tests">
-                  ${generateTestListItems(sortedResults, showTraceSection, attentionSets)}
+                  ${generateTestListItems(sortedResults, showTraceSection, attentionSets, quarantinedTestIds)}
                 </div>
               </div>
               <!-- By Spec Tab -->
               <div class="test-tab-content" id="tab-by-file" role="tabpanel" aria-labelledby="tab-by-file-label">
-                ${generateGroupedTests(sortedResults, showTraceSection, attentionSets)}
+                ${generateGroupedTests(sortedResults, showTraceSection, attentionSets, quarantinedTestIds)}
               </div>
               <!-- By Status Tab -->
               <div class="test-tab-content" id="tab-by-status" role="tabpanel" aria-labelledby="tab-by-status-label">
@@ -857,21 +997,21 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
                     <span class="status-group-dot failed"></span>
                     <span class="status-group-title">Failed (${failed})</span>
                   </div>
-                  ${generateTestListItems(sortedResults.filter(r => r.status === 'failed' || r.status === 'timedOut'), showTraceSection, attentionSets)}
+                  ${generateTestListItems(sortedResults.filter(r => r.status === 'failed' || r.status === 'timedOut'), showTraceSection, attentionSets, quarantinedTestIds)}
                 </div>
                 <div class="status-group passed-group">
                   <div class="status-group-header">
                     <span class="status-group-dot passed"></span>
                     <span class="status-group-title">Passed (${passed})</span>
                   </div>
-                  ${generateTestListItems(sortedResults.filter(r => r.status === 'passed'), showTraceSection, attentionSets)}
+                  ${generateTestListItems(sortedResults.filter(r => r.status === 'passed'), showTraceSection, attentionSets, quarantinedTestIds)}
                 </div>
                 <div class="status-group skipped-group">
                   <div class="status-group-header">
                     <span class="status-group-dot skipped"></span>
                     <span class="status-group-title">Skipped (${skipped})</span>
                   </div>
-                  ${generateTestListItems(sortedResults.filter(r => r.status === 'skipped'), showTraceSection, attentionSets)}
+                  ${generateTestListItems(sortedResults.filter(r => r.status === 'skipped'), showTraceSection, attentionSets, quarantinedTestIds)}
                 </div>
               </div>
               <!-- By Stability Tab -->
@@ -885,7 +1025,7 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
                         <span class="stability-badge ${grade.toLowerCase()}">${grade}</span>
                         <span class="stability-group-title">Grade ${grade} (${gradeTests.length})</span>
                       </div>
-                      ${generateTestListItems(gradeTests, showTraceSection, attentionSets)}
+                      ${generateTestListItems(gradeTests, showTraceSection, attentionSets, quarantinedTestIds)}
                     </div>
                   `;
                 }).join('')}
@@ -960,14 +1100,14 @@ ${licenseTier === 'community' ? `            <div class="export-menu-divider" st
 
   <!-- Hidden data containers for detail rendering -->
   <div id="test-cards-data" style="display: none;">
-    ${results.map(test => generateTestCard(test, showTraceSection)).join('\n')}
+    ${results.map(test => generateTestCard(test, showTraceSection, quarantinedTestIds)).join('\n')}
   </div>
 
   <!-- Issue #13: JSZip library for trace extraction -->
   ${enableTraceViewer ? `<script>${generateJSZipScript()}</script>` : ''}
 
   <script>
-${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson, statsData)}
+${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson, statsData, outputBasename)}
 
 ${enableTraceViewer ? generateTraceViewerScript() : ''}
   </script>
@@ -1149,6 +1289,150 @@ ${highContrastOverride}${customOverrides}
       --accent-blue-dim: #005599;
       --accent-purple: #8844cc;
       --accent-orange: #dd6622;
+    }
+
+    /* Pro Theme: Ocean */
+    :root[data-theme="ocean"] {
+      --bg-primary: #0b1628;
+      --bg-secondary: #0f1f38;
+      --bg-card: #152847;
+      --bg-card-hover: #1a3358;
+      --bg-sidebar: #091320;
+      --border-subtle: #1e3a5f;
+      --border-glow: #2a4f7a;
+      --text-primary: #d4e5f7;
+      --text-secondary: #7ba3c9;
+      --text-muted: #4a7a9f;
+      --accent-green: #00d4aa;
+      --accent-green-dim: #00a886;
+      --accent-red: #ff6b8a;
+      --accent-red-dim: #d44a6a;
+      --accent-yellow: #ffd166;
+      --accent-yellow-dim: #ccaa44;
+      --accent-blue: #00b4d8;
+      --accent-blue-dim: #0090ad;
+      --accent-purple: #8ea4f2;
+      --accent-orange: #ff9e6d;
+    }
+
+    /* Pro Theme: Sunset */
+    :root[data-theme="sunset"] {
+      --bg-primary: #1a0f0a;
+      --bg-secondary: #241510;
+      --bg-card: #2e1c14;
+      --bg-card-hover: #3a241a;
+      --bg-sidebar: #140c08;
+      --border-subtle: #4a3028;
+      --border-glow: #5f3e32;
+      --text-primary: #f5e6dc;
+      --text-secondary: #c9a08a;
+      --text-muted: #8a6a55;
+      --accent-green: #7ecf8a;
+      --accent-green-dim: #5aad66;
+      --accent-red: #ff6b6b;
+      --accent-red-dim: #d44a4a;
+      --accent-yellow: #ffc857;
+      --accent-yellow-dim: #cca040;
+      --accent-blue: #6eb5ff;
+      --accent-blue-dim: #4a90d4;
+      --accent-purple: #c084fc;
+      --accent-orange: #ff8c42;
+    }
+
+    /* Pro Theme: Dracula */
+    :root[data-theme="dracula"] {
+      --bg-primary: #282a36;
+      --bg-secondary: #21222c;
+      --bg-card: #343746;
+      --bg-card-hover: #3e4155;
+      --bg-sidebar: #1e1f29;
+      --border-subtle: #44475a;
+      --border-glow: #555870;
+      --text-primary: #f8f8f2;
+      --text-secondary: #bfbfb0;
+      --text-muted: #6272a4;
+      --accent-green: #50fa7b;
+      --accent-green-dim: #3ad462;
+      --accent-red: #ff5555;
+      --accent-red-dim: #d43d3d;
+      --accent-yellow: #f1fa8c;
+      --accent-yellow-dim: #c9d46e;
+      --accent-blue: #8be9fd;
+      --accent-blue-dim: #62c4d8;
+      --accent-purple: #bd93f9;
+      --accent-orange: #ffb86c;
+    }
+
+    /* Pro Theme: Cyberpunk */
+    :root[data-theme="cyberpunk"] {
+      --bg-primary: #0a0014;
+      --bg-secondary: #110022;
+      --bg-card: #1a0033;
+      --bg-card-hover: #220044;
+      --bg-sidebar: #08000f;
+      --border-subtle: #2d0055;
+      --border-glow: #4400aa;
+      --text-primary: #e0d0ff;
+      --text-secondary: #a080cc;
+      --text-muted: #6644aa;
+      --accent-green: #00ff9f;
+      --accent-green-dim: #00cc7f;
+      --accent-red: #ff0055;
+      --accent-red-dim: #cc0044;
+      --accent-yellow: #ffee00;
+      --accent-yellow-dim: #ccbb00;
+      --accent-blue: #00ccff;
+      --accent-blue-dim: #00aadd;
+      --accent-purple: #cc00ff;
+      --accent-orange: #ff6600;
+    }
+
+    /* Pro Theme: Forest */
+    :root[data-theme="forest"] {
+      --bg-primary: #0c1a0e;
+      --bg-secondary: #112416;
+      --bg-card: #182e1c;
+      --bg-card-hover: #1e3a22;
+      --bg-sidebar: #091408;
+      --border-subtle: #254a2a;
+      --border-glow: #305a36;
+      --text-primary: #d4ecd8;
+      --text-secondary: #88b890;
+      --text-muted: #557a5c;
+      --accent-green: #4ade80;
+      --accent-green-dim: #38b866;
+      --accent-red: #f87171;
+      --accent-red-dim: #cc5555;
+      --accent-yellow: #fbbf24;
+      --accent-yellow-dim: #cc9a1a;
+      --accent-blue: #67c9e0;
+      --accent-blue-dim: #48a6bc;
+      --accent-purple: #a78bfa;
+      --accent-orange: #fb923c;
+    }
+
+    /* Pro Theme: Rose */
+    :root[data-theme="rose"] {
+      --bg-primary: #1a0a14;
+      --bg-secondary: #24101c;
+      --bg-card: #2e1626;
+      --bg-card-hover: #3a1c30;
+      --bg-sidebar: #140810;
+      --border-subtle: #4a2840;
+      --border-glow: #5f3452;
+      --text-primary: #f5dce8;
+      --text-secondary: #c990af;
+      --text-muted: #8a5a74;
+      --accent-green: #6ee7b7;
+      --accent-green-dim: #4fbc94;
+      --accent-red: #fb7185;
+      --accent-red-dim: #d45468;
+      --accent-yellow: #fcd34d;
+      --accent-yellow-dim: #ccaa3a;
+      --accent-blue: #93c5fd;
+      --accent-blue-dim: #6da0d8;
+      --accent-purple: #e879f9;
+      --accent-orange: #fdba74;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2544,6 +2828,7 @@ ${highContrastOverride}${customOverrides}
     .test-item-badge.flaky { background: rgba(255, 204, 0, 0.15); color: var(--accent-yellow); }
     .test-item-badge.slow { background: rgba(255, 136, 68, 0.15); color: var(--accent-orange); }
     .test-item-badge.new { background: rgba(0, 170, 255, 0.15); color: var(--accent-blue); }
+    .test-item-badge.quarantined { background: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); font-weight: 600; }
     
     /* Attention badges - more prominent */
     .test-item-badge.new-failure { 
@@ -3862,6 +4147,169 @@ ${highContrastOverride}${customOverrides}
       background: #ecfdf5;
       color: #059669;
       border: 1px solid #6ee7b7;
+    }
+
+    .test-annotation-badge.annotation-quarantine {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-yellow);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      font-weight: 500;
+    }
+
+    /* Quarantine filter chip */
+    .filter-chip.attention-quarantine { border-color: rgba(245, 158, 11, 0.4); }
+    .filter-chip.attention-quarantine:hover:not(.active) {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-yellow);
+      border-color: var(--accent-yellow);
+    }
+    .filter-chip.attention-quarantine.active {
+      background: var(--accent-yellow);
+      color: var(--bg-primary);
+      border-color: var(--accent-yellow);
+    }
+
+    /* ============================================
+       QUALITY GATE CARD
+    ============================================ */
+    .quality-gate-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      border-left: 4px solid var(--border-subtle);
+    }
+    .quality-gate-card.gate-passed { border-left-color: var(--accent-green); }
+    .quality-gate-card.gate-failed { border-left-color: var(--accent-red); }
+    .quality-gate-card.pro-feature-placeholder {
+      opacity: 0.4;
+      border-left-color: var(--accent-purple);
+    }
+
+    .gate-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .gate-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .gate-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+    }
+    .gate-status {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .gate-status-passed { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
+    .gate-status-failed { background: rgba(255, 68, 102, 0.15); color: var(--accent-red); }
+
+    .gate-rules { display: flex; flex-direction: column; gap: 0.35rem; }
+    .gate-rule-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+    .gate-rule-icon { font-size: 0.85rem; width: 1.2em; text-align: center; }
+    .gate-rule-icon.gate-pass { color: var(--accent-green); }
+    .gate-rule-icon.gate-fail { color: var(--accent-red); }
+    .gate-rule-icon.gate-skipped { color: var(--text-muted); }
+    .gate-rule-name { flex: 1; }
+    .gate-rule-values { color: var(--text-muted); white-space: nowrap; }
+
+    .gate-placeholder-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* ============================================
+       QUARANTINE CARD
+    ============================================ */
+    .quarantine-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      border-left: 4px solid rgba(245, 158, 11, 0.6);
+    }
+    .quarantine-card.pro-feature-placeholder {
+      opacity: 0.4;
+      border-left-color: var(--accent-purple);
+    }
+
+    .quarantine-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .quarantine-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .quarantine-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+    }
+    .quarantine-count {
+      font-family: ${monoFont};
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent-yellow);
+    }
+    .quarantine-threshold {
+      font-family: ${monoFont};
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .quarantine-entries { display: flex; flex-direction: column; gap: 0.25rem; }
+    .quarantine-entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      padding: 0.15rem 0;
+    }
+    .quarantine-entry-title {
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      margin-right: 0.5rem;
+    }
+    .quarantine-entry-score {
+      font-family: ${monoFont};
+      color: var(--accent-yellow);
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .quarantine-more {
+      font-size: 0.7rem;
+      color: var(--accent-blue);
+      cursor: pointer;
+      margin-top: 0.25rem;
+    }
+    .quarantine-more:hover { text-decoration: underline; }
+    .quarantine-placeholder-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
     }
 
     .suite-chips .filter-chip,
@@ -6125,6 +6573,97 @@ ${highContrastOverride}${customOverrides}
       border-color: var(--accent-blue);
     }
 
+    /* ============================================
+       PDF PICKER MODAL
+    ============================================ */
+    .pdf-picker-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .pdf-picker-modal.visible { display: flex; }
+    .pdf-picker-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 28px;
+      max-width: 540px;
+      width: 100%;
+      box-shadow: 0 16px 64px rgba(0,0,0,0.4);
+    }
+    .pdf-picker-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .pdf-picker-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    .pdf-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .pdf-picker-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-decoration: none;
+      padding: 16px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-secondary);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      cursor: pointer;
+    }
+    .pdf-picker-option:hover {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px var(--accent-blue-dim);
+    }
+    .pdf-picker-swatches {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .pdf-picker-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid var(--border-subtle);
+    }
+    .pdf-picker-option-name {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+    .pdf-picker-option-desc {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .pdf-picker-close {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      text-align: center;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      cursor: pointer;
+      background: none;
+    }
+    .pdf-picker-close:hover { background: var(--bg-card-hover); }
+
     /* Issue #13: Inline Trace Viewer Styles */
     ${generateTraceViewerStyles(monoFont)}
 `;
@@ -6140,9 +6679,11 @@ function generateScripts(
   enableTraceViewer: boolean,
   enableHistoryDrilldown: boolean,
   historyRunSnapshotsJson: string,
-  statsData: string
+  statsData: string,
+  outputBasename: string
 ): string {
   return `    const tests = ${testsJson};
+    const pdfBasename = ${JSON.stringify(outputBasename)};
     const stats = ${statsData};
     const traceViewerEnabled = ${enableTraceViewer ? 'true' : 'false'};
     const historyDrilldownEnabled = ${enableHistoryDrilldown ? 'true' : 'false'};
@@ -6668,6 +7209,7 @@ function generateScripts(
         const isFlaky = item.dataset.flaky === 'true';
         const isSlow = item.dataset.slow === 'true';
         const isNew = item.dataset.new === 'true';
+        const isQuarantined = item.dataset.quarantined === 'true';
         const isNewFailure = item.dataset.newFailure === 'true';
         const isRegression = item.dataset.regression === 'true';
         const isFixed = item.dataset.fixed === 'true';
@@ -6706,7 +7248,8 @@ function generateScripts(
           matchesHealth =
             (activeFilters.health.has('flaky') && isFlaky) ||
             (activeFilters.health.has('slow') && isSlow) ||
-            (activeFilters.health.has('new') && isNew);
+            (activeFilters.health.has('new') && isNew) ||
+            (activeFilters.health.has('quarantined') && isQuarantined);
         }
 
         // Grade group - OR logic
@@ -6734,6 +7277,7 @@ function generateScripts(
         const isFlaky = card.dataset.flaky === 'true';
         const isSlow = card.dataset.slow === 'true';
         const isNew = card.dataset.new === 'true';
+        const isQuarantined = card.dataset.quarantined === 'true';
         const isNewFailure = card.dataset.newFailure === 'true';
         const isRegression = card.dataset.regression === 'true';
         const isFixed = card.dataset.fixed === 'true';
@@ -6767,7 +7311,8 @@ function generateScripts(
           matchesHealth =
             (activeFilters.health.has('flaky') && isFlaky) ||
             (activeFilters.health.has('slow') && isSlow) ||
-            (activeFilters.health.has('new') && isNew);
+            (activeFilters.health.has('new') && isNew) ||
+            (activeFilters.health.has('quarantined') && isQuarantined);
         }
 
         if (hasGradeFilters) {
@@ -7061,7 +7606,7 @@ function generateScripts(
       toast.className = 'toast ' + type;
 
       const icons = { success: '✓', error: '✗', info: 'ℹ' };
-      toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span><span class="toast-message">' + message + '</span>';
+      toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span><span class="toast-message">' + escapeHtmlUnsafe(message) + '</span>';
 
       container.appendChild(toast);
 
@@ -7100,37 +7645,37 @@ function generateScripts(
       }
     });
 
+    const themeConfig = {
+      system:    { icon: '💻', label: 'System',    attr: null },
+      light:     { icon: '☀️', label: 'Light',     attr: 'light' },
+      dark:      { icon: '🌙', label: 'Dark',      attr: 'dark' },
+      ocean:     { icon: '🌊', label: 'Ocean',     attr: 'ocean' },
+      sunset:    { icon: '🌅', label: 'Sunset',    attr: 'sunset' },
+      dracula:   { icon: '🧛', label: 'Dracula',   attr: 'dracula' },
+      cyberpunk: { icon: '⚡', label: 'Cyberpunk', attr: 'cyberpunk' },
+      forest:    { icon: '🌲', label: 'Forest',    attr: 'forest' },
+      rose:      { icon: '🌹', label: 'Rose',      attr: 'rose' },
+    };
+
     function setTheme(theme) {
       const root = document.documentElement;
       const icon = document.getElementById('themeIcon');
       const label = document.getElementById('themeLabel');
+      const cfg = themeConfig[theme] || themeConfig.system;
 
-      // Update active state in menu
       document.querySelectorAll('.theme-menu-item').forEach(item => {
         item.classList.toggle('active', item.dataset.theme === theme);
       });
 
-      if (theme === 'light') {
-        root.setAttribute('data-theme', 'light');
-        icon.textContent = '☀️';
-        label.textContent = 'Light';
-        localStorage.setItem('theme', 'light');
-        showToast('Light theme', 'info');
-      } else if (theme === 'dark') {
-        root.setAttribute('data-theme', 'dark');
-        icon.textContent = '🌙';
-        label.textContent = 'Dark';
-        localStorage.setItem('theme', 'dark');
-        showToast('Dark theme', 'info');
+      if (cfg.attr) {
+        root.setAttribute('data-theme', cfg.attr);
       } else {
-        // System/auto
         root.removeAttribute('data-theme');
-        icon.textContent = '💻';
-        label.textContent = 'System';
-        localStorage.setItem('theme', 'system');
-        showToast('Using system theme', 'info');
       }
-
+      if (icon) icon.textContent = cfg.icon;
+      if (label) label.textContent = cfg.label;
+      localStorage.setItem('theme', theme);
+      showToast(cfg.attr ? cfg.label + ' theme' : 'Using system theme', 'info');
       closeThemeMenu();
     }
 
@@ -7139,25 +7684,17 @@ function generateScripts(
       const saved = localStorage.getItem('theme') || 'system';
       const icon = document.getElementById('themeIcon');
       const label = document.getElementById('themeLabel');
+      const cfg = themeConfig[saved] || themeConfig.system;
 
-      // Update active state in menu
       document.querySelectorAll('.theme-menu-item').forEach(item => {
         item.classList.toggle('active', item.dataset.theme === saved);
       });
 
-      if (saved === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-        if (icon) icon.textContent = '☀️';
-        if (label) label.textContent = 'Light';
-      } else if (saved === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
-        if (icon) icon.textContent = '🌙';
-        if (label) label.textContent = 'Dark';
-      } else {
-        // System - CSS handles via prefers-color-scheme
-        if (icon) icon.textContent = '💻';
-        if (label) label.textContent = 'System';
+      if (cfg.attr) {
+        document.documentElement.setAttribute('data-theme', cfg.attr);
       }
+      if (icon) icon.textContent = cfg.icon;
+      if (label) label.textContent = cfg.label;
     })();
 
     // Auto-scroll secondary charts to show most recent run
@@ -7601,6 +8138,65 @@ ${includeComparison ? `    // Comparison functions\n${generateComparisonScript()
         }
       });
     })();
+
+    /* ============================================
+       PDF PICKER MODAL
+    ============================================ */
+    function showPdfPicker() {
+      let modal = document.getElementById('pdf-picker-modal');
+      if (modal) {
+        modal.classList.add('visible');
+        closeExportMenu();
+        return;
+      }
+
+      modal = document.createElement('div');
+      modal.id = 'pdf-picker-modal';
+      modal.className = 'pdf-picker-modal visible';
+      modal.innerHTML =
+        '<div class="pdf-picker-card">' +
+          '<div class="pdf-picker-title">Download PDF Report</div>' +
+          '<div class="pdf-picker-subtitle">Choose a style for your executive summary</div>' +
+          '<div class="pdf-picker-grid">' +
+            '<a class="pdf-picker-option" href="' + pdfBasename + '.pdf" download>' +
+              '<div class="pdf-picker-swatches">' +
+                '<div class="pdf-picker-swatch" style="background:#2563eb"></div>' +
+                '<div class="pdf-picker-swatch" style="background:#0f172a"></div>' +
+                '<div class="pdf-picker-swatch" style="background:#f8fafc"></div>' +
+              '</div>' +
+              '<div class="pdf-picker-option-name">Corporate</div>' +
+              '<div class="pdf-picker-option-desc">Blue accent, white background</div>' +
+            '</a>' +
+            '<a class="pdf-picker-option" href="' + pdfBasename + '-dark.pdf" download>' +
+              '<div class="pdf-picker-swatches">' +
+                '<div class="pdf-picker-swatch" style="background:#6366f1"></div>' +
+                '<div class="pdf-picker-swatch" style="background:#0f172a"></div>' +
+                '<div class="pdf-picker-swatch" style="background:#1e293b"></div>' +
+              '</div>' +
+              '<div class="pdf-picker-option-name">Dark</div>' +
+              '<div class="pdf-picker-option-desc">Indigo accent, navy background</div>' +
+            '</a>' +
+            '<a class="pdf-picker-option" href="' + pdfBasename + '-minimal.pdf" download>' +
+              '<div class="pdf-picker-swatches">' +
+                '<div class="pdf-picker-swatch" style="background:#374151"></div>' +
+                '<div class="pdf-picker-swatch" style="background:#6b7280"></div>' +
+                '<div class="pdf-picker-swatch" style="background:#f9fafb"></div>' +
+              '</div>' +
+              '<div class="pdf-picker-option-name">Minimal</div>' +
+              '<div class="pdf-picker-option-desc">Grayscale, printer-friendly</div>' +
+            '</a>' +
+          '</div>' +
+          '<button class="pdf-picker-close" onclick="closePdfPicker()">Close</button>' +
+        '</div>';
+      modal.addEventListener('click', function(e) { if (e.target === modal) closePdfPicker(); });
+      document.body.appendChild(modal);
+      closeExportMenu();
+    }
+
+    function closePdfPicker() {
+      const modal = document.getElementById('pdf-picker-modal');
+      if (modal) modal.classList.remove('visible');
+    }
 
     /* ============================================
        EXPORTABLE SUMMARY CARD
