@@ -1,11 +1,9 @@
 # playwright-smart-reporter
 
-![Let's Build QA](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/lets-build-qa-banner.png)
-
 An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and a modern interactive dashboard. Free + Pro tiers — same npm package, Pro unlocks with a license key.
 
-![Report Overview](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/report-overview-v1.1.png)
-*Dashboard featuring: sidebar navigation, suite health grade, attention-based filtering, failure clusters, quick insights, and interactive trend charts*
+![Report Overview](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/report-overview-dark.png)
+*Dashboard with quality gates, quarantine, suite health grade, attention alerts, and failure clusters*
 
 ## Installation
 
@@ -96,8 +94,8 @@ reporter: [
 
 ### Test Details
 
-![Test Expanded](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/test-expanded.png)
-*Expanded test card with step timeline, error details, and AI suggestions*
+![Test Expanded](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/test-expanded-dark.png)
+*Expanded test card with step timeline, network logs, run history, and quarantine badge*
 
 - **Step Timing Breakdown** — Visual bars highlighting the slowest steps
 - **Flamechart Visualisation** — Colour-coded timeline bars (navigation, assertion, action, API, wait)
@@ -109,8 +107,8 @@ reporter: [
 
 ### Trend Analytics
 
-![Trend Charts](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/trend-chart-hover.png)
-*Interactive trend charts with moving averages and anomaly detection*
+![Trend Charts](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/trends-dark.png)
+*Interactive trend charts with pass rate, duration, flaky tests, and slow test tracking*
 
 - **Moving Averages** — Overlay on pass rate and duration trends
 - **Anomaly Detection** — 2-sigma outlier detection with visual markers
@@ -118,18 +116,18 @@ reporter: [
 
 ### Artifact Gallery
 
-![Gallery View](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/gallery-view.png)
+![Gallery View](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/gallery-dark.png)
 *Visual grid of screenshots, videos, and trace files*
 
 ### Trace Viewer
 
-![Trace Viewer](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/trace-viewer.png)
-*Built-in trace viewer with film strip, actions, network waterfall, and console*
+![Tests View](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/tests-view-dark.png)
+*Test list with status badges, stability grades, quarantine indicators, and filtering*
 
 ### Flakiness Detection
 
-![Flaky Tests](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/flaky-test-details.png)
-*Historical flakiness tracking with stability indicators*
+![Comparison View](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/comparison-dark.png)
+*Run comparison showing new failures, performance changes, and baseline diffs*
 
 Smart Reporter tracks flakiness **across runs**, not within a single run:
 
