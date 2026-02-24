@@ -47,7 +47,11 @@
     "test-stability",
     "retry-analysis",
     "failure-clustering",
-    "trace-viewer"
+    "trace-viewer",
+    "quality-gates",
+    "pdf-export",
+    "test-quarantine",
+    "ci-cd"
   ],
   "author": "Gary Parker",
   "contributors": [
