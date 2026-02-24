@@ -664,7 +664,10 @@ export function generateHtml(data: HtmlGeneratorData): string {
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">`;
 
   // Stats data for JavaScript
-  const statsData = JSON.stringify({ passed, failed, skipped, flaky, slow, newTests, total, passRate, gradeA, gradeB, gradeC, gradeD, gradeF, totalDuration });
+  const statsData = JSON.stringify({ passed, failed, skipped, flaky, slow, newTests, total, passRate, gradeA, gradeB, gradeC, gradeD, gradeF, totalDuration })
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
 
   return `<!DOCTYPE html>
 <html lang="en"${options.theme?.preset && options.theme.preset !== 'default' ? ` data-theme="${options.theme.preset}"` : ''}>

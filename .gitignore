@@ -27,6 +27,9 @@ example/.smart-quarantine.json
 example/test-history-premium.json
 example/premium-report.html
 
+# Pack archives
+*.tgz
+
 # Temp/generated files
 .generate-report.js
 .smart-reporter-data.json

@@ -26,7 +26,7 @@ export class EmailNotifier {
 
     try {
       const subject = `Test Report: ${context.passed}/${context.total} passed (${context.passRate}%)`;
-      await fetch('https://api.sendgrid.com/v3/mail/send', {
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -39,6 +39,11 @@ export class EmailNotifier {
           content: [{ type: 'text/plain', value: message }],
         }),
       });
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.warn(`Email notification failed: ${response.status} ${errorBody}`);
+        return;
+      }
       console.log('📤 Email notification sent via SendGrid');
     } catch (err) {
       console.error('Failed to send email notification:', err);

@@ -169,7 +169,7 @@ function main(): void {
         return;
       }
       if (fs.existsSync(cwdPath) && fs.statSync(cwdPath).isFile()) {
-        serveFile(cwdPath, res);
+        serveFile(cwdPath, res, req);
         return;
       }
 
@@ -185,21 +185,26 @@ function main(): void {
       return;
     }
 
-    serveFile(filePath, res);
+    serveFile(filePath, res, req);
   });
 
-  function serveFile(filePath: string, res: http.ServerResponse): void {
+  function serveFile(filePath: string, res: http.ServerResponse, req: http.IncomingMessage): void {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-    const stat = fs.statSync(filePath);
-    res.writeHead(200, {
-      'Content-Type': contentType,
-      'Content-Length': stat.size,
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-    });
+    const origin = req.headers.origin || '';
+    const corsHeader = /^https?:\/\/localhost(:\d+)?$/.test(origin) ? origin : '';
 
+    const headers: Record<string, string | number> = {
+      'Content-Type': contentType,
+      'Content-Length': fs.statSync(filePath).size,
+      'Cache-Control': 'no-cache',
+    };
+    if (corsHeader) {
+      headers['Access-Control-Allow-Origin'] = corsHeader;
+    }
+
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   }
 

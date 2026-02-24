@@ -11,7 +11,7 @@ export class PagerDutyNotifier {
     const severity = failures > total * 0.5 ? 'critical' : failures > total * 0.2 ? 'error' : 'warning';
 
     try {
-      await fetch('https://events.pagerduty.com/v2/enqueue', {
+      const response = await fetch('https://events.pagerduty.com/v2/enqueue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -26,6 +26,11 @@ export class PagerDutyNotifier {
           },
         }),
       });
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.warn(`PagerDuty alert failed: ${response.status} ${errorBody}`);
+        return;
+      }
       console.log('📤 PagerDuty alert sent');
     } catch (err) {
       console.error('Failed to send PagerDuty alert:', err);

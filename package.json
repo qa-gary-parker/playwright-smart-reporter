@@ -86,12 +86,9 @@
     "@playwright/test": "^1.49.0",
     "@types/adm-zip": "^0.5.7",
     "@types/pdfkit": "^0.13.8",
+    "@vitest/coverage-v8": "^2.1.9",
     "typescript": "^5.3.0",
     "vitest": "^2.1.0"
-  },
-  "optionalDependencies": {
-    "@anthropic-ai/sdk": "^0.32.0",
-    "openai": "^4.70.0"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

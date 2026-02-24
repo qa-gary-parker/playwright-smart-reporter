@@ -2,6 +2,73 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-02-24
+
+### Changed
+
+- Updated README with Pro features documentation, screenshots, and pricing info
+- Added dark theme screenshots
+- Improved npm keywords for discoverability
+
+## [1.1.0] - 2026-02-24
+
+### Added
+
+- **Pro Tier** — premium features behind ES256 JWT license validation
+- **Quality Gates**: configurable thresholds (min pass rate, max flaky rate, min stability grade) with CI exit codes via `npx playwright-smart-reporter gate`
+- **Flaky Test Quarantine**: auto-detection and JSON-based tracking with `getQuarantinedPattern()` helper for `test.skip()`
+- **Executive PDF Export**: three themed variants (Corporate, Minimal, Dark) via pdfkit with PDF style picker modal in HTML report
+- **6 Pro Themes**: Ocean, Sunset, Dracula, Cyberpunk, Forest, Rose
+- **Custom Branding**: configurable report title, footer text, accent colours, and logo
+- **AI Health Digest**: weekly/daily/monthly trend summaries from history data via `npx playwright-smart-reporter digest`
+- **Notification System**: Slack, Microsoft Teams, email (SendGrid), and PagerDuty integrations with configurable rules
+- **Cloud Upload**: StageWright Cloud integration with presigned artifact uploads
+- **CLI Tools**: `gate` (quality gate evaluation), `serve` (local HTTP server with trace viewer CORS), `view-trace`, `merge-history`
+- 36 new tests for collectors, notifiers, exporters, gates, quarantine, and digest
+
+### Security
+
+- XSS escaping for JS contexts in HTML generator
+- Path traversal prevention in serve CLI
+- Webhook URL validation for notification endpoints
+- `.npmignore` hardening to exclude keys, tests, and examples from published package
+
+## [1.0.8] - 2026-02-06
+
+### Added
+
+- **Step Timeline**: flamechart visualisation with colour-coded categories (navigation, assertion, action, API, wait) for step-level timing analysis
+- **Enhanced Trend Charts**: moving averages and 2-sigma anomaly detection for pass rate, duration, flaky count, and slow test trends
+- **CI Environment Detection**: auto-detect GitHub Actions, GitLab CI, CircleCI, Jenkins, Azure DevOps, and Buildkite; display CI badge in report header
+- **Configurable Thresholds**: `ThresholdConfig` for flakiness, performance regression percentages, stability weights, and grade boundaries
+- **AI Analysis Batching**: concurrent batched requests (3 at a time) for large test suites
+- **Virtual Scroll Pagination**: smooth rendering for test lists with 500+ tests
+- **Keyboard Navigation**: `1-5` switch views, `j/k` navigate tests, `f` focus search, `e` export summary
+- **Exportable Summary Card**: one-click export of test run summary
+- **Python/pytest Integration**: monorepo bridge approach with PyPI-publishable package (#28)
+
+### Security
+
+- Sanitise `runId` in HTML attributes and filenames to prevent XSS and path traversal
+- Guard empty project names in test IDs
+
+## [1.0.7] - 2026-02-03
+
+### Added
+
+- **Browser/Project Badges**: display browser badges (chromium, firefox, webkit) and project names for multi-browser/multi-project setups ([#23](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/23))
+- **Full Annotations Support**: capture and display all test annotations (`@slow`, `@fixme`, `@skip`, custom) with icons and coloured badges
+- **Step Filtering**: `filterPwApiSteps` option to hide verbose `pw:api` steps and show only custom `test.step()` entries ([#22](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/22))
+- **Path Resolution**: `relativeToCwd` option to resolve `outputFile` and `historyFile` relative to CWD instead of Playwright's rootDir ([#20](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/20))
+- **Project History Isolation**: `projectName` option with `{project}` placeholder in `historyFile` path for per-project history ([#21](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/21))
+- Cucumber integration documentation (playwright-bdd and cucumber-playwright)
+
+### Fixed
+
+- **RangeError with Large Test Suites** ([#19](https://github.com/qa-gary-parker/playwright-smart-reporter/issues/19)): prevent crash when processing suites with many tests
+- Improved badge layout with dedicated row, visual separators, and consistent spacing
+- Project name extraction uses Playwright project config directly
+
 ## [1.0.5] - 2026-01-26
 
 ### Fixed
