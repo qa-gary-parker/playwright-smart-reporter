@@ -159,7 +159,7 @@ class SmartReporter implements Reporter {
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
     this.aiAnalyzer = new AIAnalyzer({
-      ai: options.ai,
+      licenseKey: options.licenseKey || process.env.SMART_REPORTER_LICENSE_KEY,
       tier: this.license.tier,
     });
     this.cloudUploader = new CloudUploader(options);
@@ -479,12 +479,18 @@ class SmartReporter implements Reporter {
     // Get failure clusters
     const failureClusters = this.failureClusterer.clusterFailures(this.results);
 
-    // Run AI analysis on failures and clusters if enabled
+    // Run AI analysis on failures and clusters if enabled (Pro feature)
     const options = this.historyCollector.getOptions();
-    if (options.enableAIRecommendations !== false) {
+    const hasProForAI = LicenseValidator.hasFeature(this.license, 'pro');
+    if (hasProForAI && options.enableAIRecommendations !== false) {
       await this.aiAnalyzer.analyzeFailed(this.results);
       if (failureClusters.length > 0) {
         await this.aiAnalyzer.analyzeClusters(failureClusters);
+      }
+    } else if (!hasProForAI && options.enableAIRecommendations !== false) {
+      const failedCount = this.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+      if (failedCount > 0) {
+        console.log('\n   AI analysis requires Pro — see stagewright.dev/pricing');
       }
     }
 

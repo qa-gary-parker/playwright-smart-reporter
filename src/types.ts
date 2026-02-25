@@ -51,13 +51,6 @@ export interface NotificationConfig {
   template?: string;
 }
 
-export interface AIConfig {
-  model?: string;
-  systemPrompt?: string;
-  promptTemplate?: string;
-  maxTokens?: number;
-}
-
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -161,9 +154,6 @@ export interface SmartReporterOptions {
 
   // Premium: Advanced notifications (Pro tier)
   notifications?: NotificationConfig[];
-
-  // Premium: AI configuration (Pro tier for model selection)
-  ai?: AIConfig;
 
   // Premium: Report branding (Pro tier)
   branding?: BrandingConfig;

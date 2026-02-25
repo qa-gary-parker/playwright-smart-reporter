@@ -1,62 +1,28 @@
-import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, AIConfig, LicenseTier } from '../types';
+import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, LicenseTier } from '../types';
 
 export interface AIAnalyzerConfig {
-  ai?: AIConfig;
+  licenseKey?: string;
   tier?: LicenseTier;
+  proxyUrl?: string;
 }
 
-// Free-tier model defaults
-const FREE_MODELS = {
-  anthropic: 'claude-3-haiku-20240307',
-  openai: 'gpt-3.5-turbo',
-  gemini: 'gemini-2.5-flash',
-} as const;
-
-/**
- * AI-powered analysis for test failures and recommendations
- */
 export class AIAnalyzer {
-  private anthropicKey?: string;
-  private openaiKey?: string;
-  private geminiKey?: string;
-  private aiConfig?: AIConfig;
+  private licenseKey?: string;
   private tier: LicenseTier;
+  private proxyUrl: string;
+  private quotaLogged = false;
+  private rateLimited = false;
 
   constructor(config?: AIAnalyzerConfig) {
-    this.anthropicKey = process.env.ANTHROPIC_API_KEY;
-    this.openaiKey = process.env.OPENAI_API_KEY;
-    this.geminiKey = process.env.GEMINI_API_KEY;
-    this.aiConfig = config?.ai;
+    this.licenseKey = config?.licenseKey;
     this.tier = config?.tier ?? 'community';
+    this.proxyUrl = config?.proxyUrl ?? 'https://stagewright.dev/api/v1/ai/analyze';
   }
 
-  private getModel(provider: 'anthropic' | 'openai' | 'gemini'): string {
-    if (this.aiConfig?.model && (this.tier === 'pro' || this.tier === 'team')) {
-      return this.aiConfig.model;
-    }
-    if (this.aiConfig?.model && this.tier === 'community') {
-      console.warn('Smart Reporter: Custom AI model requires a Pro license. Using default model.');
-    }
-    return FREE_MODELS[provider];
+  isAvailable(): boolean {
+    return !!this.licenseKey && (this.tier === 'pro' || this.tier === 'team');
   }
 
-  private getMaxTokens(defaultTokens: number): number {
-    if (this.aiConfig?.maxTokens && (this.tier === 'pro' || this.tier === 'team')) {
-      return this.aiConfig.maxTokens;
-    }
-    return defaultTokens;
-  }
-
-  private getSystemPrompt(): string | undefined {
-    if (this.aiConfig?.systemPrompt && (this.tier === 'pro' || this.tier === 'team')) {
-      return this.aiConfig.systemPrompt;
-    }
-    return undefined;
-  }
-
-  /**
-   * Add AI suggestions to failed tests (batched for performance)
-   */
   async analyzeFailed(results: TestResultData[]): Promise<void> {
     const failedTests = results.filter(
       r => r.status === 'failed' || r.status === 'timedOut'
@@ -64,58 +30,75 @@ export class AIAnalyzer {
 
     if (failedTests.length === 0) return;
 
-    if (!this.anthropicKey && !this.openaiKey && !this.geminiKey) {
-      console.log('💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis');
+    if (!this.isAvailable()) {
+      if (this.tier === 'community' && failedTests.length > 0) {
+        console.log('\n   AI analysis requires Pro — see stagewright.dev/pricing');
+      }
       return;
     }
 
-    console.log(`\n🤖 Analyzing ${failedTests.length} failure(s) with AI...`);
+    console.log(`\n   Analyzing ${failedTests.length} failure(s) with AI...`);
 
-    // Process in batches of 3 concurrent requests for better performance
     const BATCH_SIZE = 3;
     for (let i = 0; i < failedTests.length; i += BATCH_SIZE) {
+      if (this.rateLimited) break;
+
       const batch = failedTests.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(failedTests.length / BATCH_SIZE);
       console.log(`   Batch ${batchNum}/${totalBatches} (${batch.length} tests)...`);
 
       const promises = batch.map(async (test) => {
+        if (this.rateLimited) return;
         try {
           const prompt = test.aiPrompt ?? this.buildFailurePrompt(test);
-          test.aiSuggestion = await this.callAI(prompt);
+          const result = await this.callProxy(prompt, 'failure');
+          test.aiSuggestion = result.suggestion;
+
+          if (!this.quotaLogged) {
+            this.quotaLogged = true;
+            console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt * 1000).toISOString()})`);
+          }
         } catch (err) {
-          console.error(`Failed to get AI suggestion for "${test.title}":`, err);
+          if (!this.rateLimited) {
+            console.error(`Failed to get AI suggestion for "${test.title}":`, err);
+          }
         }
       });
 
       await Promise.all(promises);
     }
 
-    console.log(`   ✅ AI analysis complete`);
+    if (!this.rateLimited) {
+      console.log(`   AI analysis complete`);
+    }
   }
 
-  /**
-   * Add AI suggestions to failure clusters
-   */
   async analyzeClusters(clusters: FailureCluster[]): Promise<void> {
     if (clusters.length === 0) return;
-    if (!this.anthropicKey && !this.openaiKey && !this.geminiKey) return;
+    if (!this.isAvailable() || this.rateLimited) return;
 
-    console.log(`\n🤖 Analyzing ${clusters.length} failure cluster(s) with AI...`);
+    console.log(`\n   Analyzing ${clusters.length} failure cluster(s) with AI...`);
 
     for (const cluster of clusters) {
+      if (this.rateLimited) break;
       try {
         const prompt = this.buildClusterPrompt(cluster);
-        cluster.aiSuggestion = await this.callAI(prompt);
+        const result = await this.callProxy(prompt, 'cluster');
+        cluster.aiSuggestion = result.suggestion;
+
+        if (!this.quotaLogged) {
+          this.quotaLogged = true;
+          console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt * 1000).toISOString()})`);
+        }
       } catch (err) {
-        console.error(`Failed to get AI suggestion for cluster "${cluster.errorType}":`, err);
+        if (!this.rateLimited) {
+          console.error(`Failed to get AI suggestion for cluster "${cluster.errorType}":`, err);
+        }
       }
     }
   }
 
-  /**
-   * Generate comprehensive test recommendations
-   */
   generateRecommendations(results: TestResultData[], stats: SuiteStats): TestRecommendation[] {
     const recommendations: TestRecommendation[] = [];
 
@@ -190,19 +173,35 @@ export class AIAnalyzer {
     return recommendations.sort((a, b) => b.priority - a.priority);
   }
 
-  /**
-   * Build prompt for individual test failure
-   */
-  private buildFailurePrompt(test: TestResultData): string {
-    // Use custom template if available (Pro/Team tier)
-    if (this.aiConfig?.promptTemplate && (this.tier === 'pro' || this.tier === 'team')) {
-      return this.aiConfig.promptTemplate
-        .replace(/\{\{title\}\}/g, test.title)
-        .replace(/\{\{file\}\}/g, test.file)
-        .replace(/\{\{error\}\}/g, test.error || 'Unknown error')
-        .replace(/\{\{framework\}\}/g, 'Playwright');
+  private async callProxy(prompt: string, type: 'failure' | 'cluster'): Promise<{ suggestion: string; remaining: number; resetAt: number }> {
+    const response = await fetch(this.proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.licenseKey}`,
+      },
+      body: JSON.stringify({ prompt, type }),
+    });
+
+    if (response.status === 429) {
+      this.rateLimited = true;
+      const data = await response.json() as { resetAt: number };
+      console.warn(`AI analysis rate limit reached. Resets at ${new Date(data.resetAt * 1000).toISOString()}`);
+      throw new Error('Rate limit exceeded');
     }
 
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`AI proxy auth error: ${response.status}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(`AI proxy error: ${response.status}`);
+    }
+
+    return response.json() as Promise<{ suggestion: string; remaining: number; resetAt: number }>;
+  }
+
+  private buildFailurePrompt(test: TestResultData): string {
     return `Analyze this Playwright test failure and suggest a fix. Be concise (2-3 sentences max).
 
 Test: ${test.title}
@@ -213,9 +212,6 @@ ${test.error || 'Unknown error'}
 Provide a brief, actionable suggestion to fix this failure.`;
   }
 
-  /**
-   * Build prompt for failure cluster
-   */
   private buildClusterPrompt(cluster: FailureCluster): string {
     const testTitles = cluster.tests.slice(0, 5).map(t => t.title).join('\n- ');
     const moreTests = cluster.count > 5 ? `\n... and ${cluster.count - 5} more` : '';
@@ -231,141 +227,5 @@ Example Error:
 ${cluster.tests[0].error || 'Unknown error'}
 
 Provide a brief, actionable suggestion to fix these failures.`;
-  }
-
-  /**
-   * Call AI API (Anthropic, OpenAI, or Gemini)
-   */
-  private async callAI(prompt: string): Promise<string> {
-    if (this.anthropicKey) {
-      return this.callAnthropic(prompt);
-    } else if (this.openaiKey) {
-      return this.callOpenAI(prompt);
-    } else if (this.geminiKey) {
-      return this.callGemini(prompt);
-    }
-    return 'AI analysis not available';
-  }
-
-  /**
-   * Call Anthropic API
-   */
-  private async callAnthropic(prompt: string): Promise<string> {
-    const model = this.getModel('anthropic');
-    const maxTokens = this.getMaxTokens(256);
-    const systemPrompt = this.getSystemPrompt();
-
-    const body: Record<string, unknown> = {
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    };
-    if (systemPrompt) {
-      body.system = systemPrompt;
-    }
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.anthropicKey!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.status}`);
-    }
-
-    const data = (await response.json()) as {
-      content?: Array<{ type: string; text?: string }>;
-    };
-    if (!data?.content || !Array.isArray(data.content)) {
-      return 'No suggestion available';
-    }
-    return data.content[0]?.text || 'No suggestion available';
-  }
-
-  /**
-   * Call OpenAI API
-   */
-  private async callOpenAI(prompt: string): Promise<string> {
-    const model = this.getModel('openai');
-    const maxTokens = this.getMaxTokens(256);
-    const systemPrompt = this.getSystemPrompt();
-
-    const messages: Array<{ role: string; content: string }> = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
-    messages.push({ role: 'user', content: prompt });
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.openaiKey}`,
-      },
-      body: JSON.stringify({ model, max_tokens: maxTokens, messages }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    if (!data?.choices || !Array.isArray(data.choices)) {
-      return 'No suggestion available';
-    }
-    return data.choices[0]?.message?.content || 'No suggestion available';
-  }
-
-  /**
-   * Call Gemini API
-   */
-  private async callGemini(prompt: string): Promise<string> {
-    const model = this.getModel('gemini');
-    const maxTokens = this.getMaxTokens(512);
-    const systemPrompt = this.getSystemPrompt();
-
-    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': this.geminiKey!,
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: fullPrompt }],
-        }],
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-
-    const data = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; role?: string }>;
-    };
-    if (!data?.candidates || !Array.isArray(data.candidates)) {
-      return 'No suggestion available';
-    }
-    return data.candidates[0]?.content?.parts?.[0]?.text || 'No suggestion available';
-  }
-
-  /**
-   * Check if AI analysis is available
-   */
-  isAvailable(): boolean {
-    return !!(this.anthropicKey || this.openaiKey || this.geminiKey);
   }
 }

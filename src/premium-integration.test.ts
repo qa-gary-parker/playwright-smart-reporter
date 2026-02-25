@@ -418,11 +418,11 @@ describe('Premium Pipeline Integration', () => {
       expect(NotificationManager).toHaveBeenCalled();
     });
 
-    it('passes pro tier to AIAnalyzer', () => {
-      new SmartReporter({ ai: { model: 'claude-3-opus-20240229' } });
+    it('passes pro tier and licenseKey to AIAnalyzer', () => {
+      new SmartReporter({ licenseKey: 'test-key' });
 
       expect(AIAnalyzer).toHaveBeenCalledWith(
-        expect.objectContaining({ tier: 'pro' })
+        expect.objectContaining({ tier: 'pro', licenseKey: 'test-key' })
       );
     });
 
