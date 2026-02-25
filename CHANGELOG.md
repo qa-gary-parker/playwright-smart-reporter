@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-02-25
+
+### Breaking Changes
+
+- **AI analysis is now a managed service** — BYOK provider keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) are no longer used. AI is powered by GPT-4o-mini via the StageWright proxy and requires a Starter or Pro license.
+
+### Added
+
+- **Managed AI Proxy**: failure analysis calls `stagewright.dev/api/ai/analyze` with automatic license validation and rate limiting
+- **Starter Tier** (£5/mo, ~$6): 2,000 AI analyses/month, 6 extra themes, PDF/JSON/JUnit export, quality gates, quarantine, custom branding
+- **Pro Tier** (£9/mo, ~$12): 5,000 AI analyses/month, fully custom theme colours, 3 PDF styles, priority email support
+- AI quota tracking with remaining count and reset date logged after first analysis
+
+### Changed
+
+- `AIAnalyzer` rewritten to call StageWright proxy instead of direct provider APIs
+- AI gated behind Starter/Pro license — community tier shows upsell message
+- `NetworkLogEntry.requestBody` and `responseBody` types changed from `any` to `unknown`
+
+### Removed
+
+- BYOK AI provider support (Anthropic, OpenAI, Gemini direct API calls)
+- `AIConfig` interface (`model`, `systemPrompt`, `promptTemplate`, `maxTokens` options)
+- `ai-analyzer-config.test.ts` (obsolete BYOK tests)
+
+### Fixed
+
+- AI proxy URL corrected (`/api/ai/analyze`, not `/api/v1/ai/analyze`)
+- `resetAt` type mismatch between server (ISO string) and client (expected number)
+- Duplicate upsell console.log removed from `AIAnalyzer.analyzeFailed()`
+- `tryParseJson` return type changed from `any` to `unknown`
+
+### Security
+
+- 20KB prompt size limit on AI proxy
+- Explicit tier allowlist for AI access
+- Module-scope rate limiter (not re-created per request)
+- Rate limit key normalized to prevent bypasses
+- Payment status verified before license issuance
+
 ## [1.1.1] - 2026-02-24
 
 ### Changed
