@@ -3,7 +3,7 @@
  * Compare current run vs baseline to show new failures, fixed tests, regressions, improvements
  */
 
-import type { RunComparison, TestResultData, ComparisonChanges } from '../types';
+import type { RunComparison, RunSummary, TestResultData, ComparisonChanges } from '../types';
 import { formatDuration, escapeHtml, sanitizeId } from '../utils';
 
 /**
@@ -200,8 +200,8 @@ export function generateComparisonScript(): string {
  */
 export function buildComparison(
   currentTests: TestResultData[],
-  currentSummary: any,
-  baselineSummary: any,
+  currentSummary: RunSummary,
+  baselineSummary: RunSummary,
   baselineTests: Map<string, TestResultData>
 ): RunComparison {
   const changes: ComparisonChanges = {

@@ -4,7 +4,7 @@ import type { TestCase, TestResult } from '@playwright/test/reporter';
 // Licensing
 // ============================================================================
 
-export type LicenseTier = 'community' | 'pro' | 'team';
+export type LicenseTier = 'community' | 'starter' | 'pro' | 'team';
 
 export interface LicenseInfo {
   tier: LicenseTier;

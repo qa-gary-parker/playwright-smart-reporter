@@ -2,7 +2,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestResultData, QualityGateConfig, StabilityScore } from '../types';
+import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison } from '../types';
 import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
 
@@ -182,7 +182,7 @@ function main(): void {
     process.exit(1);
   }
 
-  let reportData: any;
+  let reportData: unknown;
   try {
     reportData = JSON.parse(fs.readFileSync(options.inputPath, 'utf-8'));
   } catch (err) {
@@ -190,9 +190,10 @@ function main(): void {
     process.exit(1);
   }
 
-  const tests: JsonTestEntry[] = reportData.tests || [];
+  const report = reportData as Record<string, unknown>;
+  const tests: JsonTestEntry[] = (report.tests as JsonTestEntry[]) || [];
   const results = tests.map(toTestResultData);
-  const comparison = reportData.comparison;
+  const comparison = report.comparison as RunComparison | undefined;
 
   const evaluator = new QualityGateEvaluator();
   const gateResult = evaluator.evaluate(config, results, comparison);

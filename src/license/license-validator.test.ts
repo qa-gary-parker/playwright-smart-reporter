@@ -253,6 +253,31 @@ describe('LicenseValidator', () => {
       expect(LicenseValidator.hasFeature(license, 'team')).toBe(true);
     });
 
+    it('returns true for starter tier when starter is required', () => {
+      const license: LicenseInfo = { tier: 'starter', valid: true };
+      expect(LicenseValidator.hasFeature(license, 'starter')).toBe(true);
+    });
+
+    it('returns true for starter tier when pro is required', () => {
+      const license: LicenseInfo = { tier: 'starter', valid: true };
+      expect(LicenseValidator.hasFeature(license, 'pro')).toBe(true);
+    });
+
+    it('returns false for starter tier when team is required', () => {
+      const license: LicenseInfo = { tier: 'starter', valid: true };
+      expect(LicenseValidator.hasFeature(license, 'team')).toBe(false);
+    });
+
+    it('returns true for pro tier when starter is required', () => {
+      const license: LicenseInfo = { tier: 'pro', valid: true };
+      expect(LicenseValidator.hasFeature(license, 'starter')).toBe(true);
+    });
+
+    it('returns false for community tier when starter is required', () => {
+      const license: LicenseInfo = { tier: 'community', valid: true };
+      expect(LicenseValidator.hasFeature(license, 'starter')).toBe(false);
+    });
+
     it('returns false for invalid license even with matching tier', () => {
       const license: LicenseInfo = { tier: 'pro', valid: false, error: 'expired' };
       expect(LicenseValidator.hasFeature(license, 'pro')).toBe(false);

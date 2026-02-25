@@ -63,6 +63,11 @@ describe('AIAnalyzer', () => {
       expect(analyzer.isAvailable()).toBe(true);
     });
 
+    it('returns true for starter tier with licenseKey', () => {
+      const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'starter' });
+      expect(analyzer.isAvailable()).toBe(true);
+    });
+
     it('returns true for team tier with licenseKey', () => {
       const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'team' });
       expect(analyzer.isAvailable()).toBe(true);

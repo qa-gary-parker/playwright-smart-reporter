@@ -95,7 +95,7 @@ export class LicenseValidator {
     }
 
     // Validate tier
-    const validTiers: LicenseTier[] = ['pro', 'team'];
+    const validTiers: LicenseTier[] = ['starter', 'pro', 'team'];
     const tier = validTiers.includes(payload.tier) ? payload.tier : 'community';
 
     return {
@@ -109,7 +109,8 @@ export class LicenseValidator {
   static hasFeature(license: LicenseInfo, requiredTier: LicenseTier): boolean {
     if (requiredTier === 'community') return true;
     if (!license.valid) return false;
-    if (requiredTier === 'pro') return license.tier === 'pro' || license.tier === 'team';
+    if (requiredTier === 'starter') return ['starter', 'pro', 'team'].includes(license.tier);
+    if (requiredTier === 'pro') return ['starter', 'pro', 'team'].includes(license.tier);
     if (requiredTier === 'team') return license.tier === 'team';
     return false;
   }

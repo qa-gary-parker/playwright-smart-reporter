@@ -67,7 +67,6 @@ Options:
   }
 
   const { QualityGateEvaluator, formatGateReport } = await import('../gates');
-  const { type: _t, ...JsonExportType } = {} as any;
 
   const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));

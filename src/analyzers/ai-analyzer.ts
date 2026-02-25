@@ -20,7 +20,7 @@ export class AIAnalyzer {
   }
 
   isAvailable(): boolean {
-    return !!this.licenseKey && (this.tier === 'pro' || this.tier === 'team');
+    return !!this.licenseKey && (this.tier === 'starter' || this.tier === 'pro' || this.tier === 'team');
   }
 
   async analyzeFailed(results: TestResultData[]): Promise<void> {

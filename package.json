@@ -1,6 +1,6 @@
 {
   "name": "playwright-smart-reporter",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, and performance regression alerts",
   "main": "dist/smart-reporter.js",
   "types": "dist/smart-reporter.d.ts",
@@ -67,11 +67,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gary-parker/playwright-smart-reporter.git"
+    "url": "https://github.com/qa-gary-parker/playwright-smart-reporter.git"
   },
-  "homepage": "https://github.com/gary-parker/playwright-smart-reporter#readme",
+  "homepage": "https://github.com/qa-gary-parker/playwright-smart-reporter#readme",
   "bugs": {
-    "url": "https://github.com/gary-parker/playwright-smart-reporter/issues"
+    "url": "https://github.com/qa-gary-parker/playwright-smart-reporter/issues"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0",
