@@ -578,9 +578,9 @@ export default defineConfig({
 
 ## FAQ
 
-### How do I get a Pro license?
+### How do I get a license?
 
-Visit [stagewright.dev](https://stagewright.dev) to purchase. Your license key is delivered via email immediately after purchase.
+Visit [stagewright.dev](https://stagewright.dev) to purchase a Starter (£5/mo) or Pro (£9/mo) plan. Your license key is delivered via email immediately after purchase.
 
 ### Does Smart Reporter work without a license key?
 
