@@ -31,30 +31,31 @@ export default defineConfig({
 
 Run your tests and open the generated `smart-report.html`.
 
-## Free vs Pro
+## Free vs Paid
 
-The free tier includes everything you need for local test reporting. Pro adds premium themes, PDF exports, quality gates, and more — activated with a license key.
+The free tier includes everything you need for local test reporting. Paid plans add AI failure analysis, premium themes, PDF exports, quality gates, and more — activated with a license key.
 
-| Feature | Free | Pro |
-|---|:---:|:---:|
-| AI failure analysis (Claude/OpenAI/Gemini) | ✅ | ✅ |
-| Stability grades (A+ to F) | ✅ | ✅ |
-| Flakiness detection & history tracking | ✅ | ✅ |
-| Run comparison & trend analytics | ✅ | ✅ |
-| Artifact gallery & trace viewer | ✅ | ✅ |
-| Network logs & step timeline | ✅ | ✅ |
-| CI auto-detection & notifications | ✅ | ✅ |
-| 3 themes (System, Light, Dark) | ✅ | ✅ |
-| 6 additional Pro themes | | ✅ |
-| Executive PDF export (3 variants) | | ✅ |
-| JSON + JUnit export | | ✅ |
-| Quality gates (fail builds on thresholds) | | ✅ |
-| Flaky test quarantine | | ✅ |
-| Custom report branding (title, footer, colours) | | ✅ |
-| Custom theme colours | | ✅ |
-| AI health digest | | ✅ |
+| Feature | Free | Starter (£5/mo) | Pro (£9/mo) |
+|---|:---:|:---:|:---:|
+| Stability grades (A+ to F) | ✅ | ✅ | ✅ |
+| Flakiness detection & history tracking | ✅ | ✅ | ✅ |
+| Run comparison & trend analytics | ✅ | ✅ | ✅ |
+| Artifact gallery & trace viewer | ✅ | ✅ | ✅ |
+| Network logs & step timeline | ✅ | ✅ | ✅ |
+| CI auto-detection & notifications | ✅ | ✅ | ✅ |
+| 3 themes (System, Light, Dark) | ✅ | ✅ | ✅ |
+| AI failure analysis (managed) | | 2,000/mo | 5,000/mo |
+| 6 additional Pro themes | | ✅ | ✅ |
+| Executive PDF export (3 variants) | | ✅ | ✅ |
+| JSON + JUnit export | | ✅ | ✅ |
+| Quality gates (fail builds on thresholds) | | ✅ | ✅ |
+| Flaky test quarantine | | ✅ | ✅ |
+| Custom report branding (title, footer, colours) | | ✅ | ✅ |
+| Custom theme colours | | | ✅ |
+| AI health digest | | | ✅ |
+| Priority support | | | ✅ |
 
-**Get a Pro license at [stagewright.dev](https://stagewright.dev)**
+**Get a license at [stagewright.dev](https://stagewright.dev)**
 
 ### Activating Pro
 
@@ -583,7 +584,7 @@ Visit [stagewright.dev](https://stagewright.dev) to purchase. Your license key i
 
 ### Does Smart Reporter work without a license key?
 
-Yes. All core features (AI analysis, flakiness detection, stability grades, trend analytics, trace viewer, gallery, etc.) are free. Pro features unlock when you add a license key.
+Yes. All core features (flakiness detection, stability grades, trend analytics, trace viewer, gallery, etc.) are free. AI failure analysis, premium themes, and other paid features unlock when you add a license key.
 
 ### RangeError with large test suites?
 
