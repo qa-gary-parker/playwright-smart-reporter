@@ -129,7 +129,7 @@ describe('AIAnalyzer', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://stagewright.dev/api/v1/ai/analyze',
+        'https://stagewright.dev/api/ai/analyze',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({

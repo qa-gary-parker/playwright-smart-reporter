@@ -16,7 +16,7 @@ export class AIAnalyzer {
   constructor(config?: AIAnalyzerConfig) {
     this.licenseKey = config?.licenseKey;
     this.tier = config?.tier ?? 'community';
-    this.proxyUrl = config?.proxyUrl ?? 'https://stagewright.dev/api/v1/ai/analyze';
+    this.proxyUrl = config?.proxyUrl ?? 'https://stagewright.dev/api/ai/analyze';
   }
 
   isAvailable(): boolean {
