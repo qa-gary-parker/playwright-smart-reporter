@@ -242,7 +242,7 @@ export class NetworkCollector {
   /**
    * Try to parse JSON, return original string if fails
    */
-  private tryParseJson(str: string): any {
+  private tryParseJson(str: string): unknown {
     try {
       return JSON.parse(str);
     } catch {

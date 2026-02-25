@@ -31,9 +31,6 @@ export class AIAnalyzer {
     if (failedTests.length === 0) return;
 
     if (!this.isAvailable()) {
-      if (this.tier === 'community' && failedTests.length > 0) {
-        console.log('\n   AI analysis requires Pro — see stagewright.dev/pricing');
-      }
       return;
     }
 
@@ -57,7 +54,7 @@ export class AIAnalyzer {
 
           if (!this.quotaLogged) {
             this.quotaLogged = true;
-            console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt * 1000).toISOString()})`);
+            console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt).toISOString()})`);
           }
         } catch (err) {
           if (!this.rateLimited) {
@@ -89,7 +86,7 @@ export class AIAnalyzer {
 
         if (!this.quotaLogged) {
           this.quotaLogged = true;
-          console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt * 1000).toISOString()})`);
+          console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt).toISOString()})`);
         }
       } catch (err) {
         if (!this.rateLimited) {
@@ -186,7 +183,7 @@ export class AIAnalyzer {
     if (response.status === 429) {
       this.rateLimited = true;
       const data = await response.json() as { resetAt: number };
-      console.warn(`AI analysis rate limit reached. Resets at ${new Date(data.resetAt * 1000).toISOString()}`);
+      console.warn(`AI analysis rate limit reached. Resets at ${new Date(data.resetAt).toISOString()}`);
       throw new Error('Rate limit exceeded');
     }
 

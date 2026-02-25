@@ -97,7 +97,7 @@ describe('AIAnalyzer', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('logs upsell message for community tier with failures', async () => {
+    it('returns silently for community tier with failures (upsell handled by smart-reporter)', async () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const analyzer = new AIAnalyzer({ tier: 'community' });
       const results = [
@@ -106,9 +106,7 @@ describe('AIAnalyzer', () => {
 
       await analyzer.analyzeFailed(results);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '\n   AI analysis requires Pro — see stagewright.dev/pricing'
-      );
+      expect(consoleSpy).not.toHaveBeenCalled();
       expect(mockFetch).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();

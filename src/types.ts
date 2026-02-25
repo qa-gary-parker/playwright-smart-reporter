@@ -413,8 +413,8 @@ export interface NetworkLogEntry {
   };
   requestHeaders?: Record<string, string>;
   responseHeaders?: Record<string, string>;
-  requestBody?: any;
-  responseBody?: any;
+  requestBody?: unknown;
+  responseBody?: unknown;
 }
 
 export interface NetworkLogData {
