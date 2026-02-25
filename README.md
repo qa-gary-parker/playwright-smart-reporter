@@ -79,7 +79,7 @@ reporter: [
 ## Features
 
 ### Core Analysis
-- **AI Failure Analysis** — Claude/OpenAI/Gemini-powered fix suggestions with batched analysis for large suites
+- **AI Failure Analysis** — AI-powered fix suggestions via managed proxy — no API keys required
 - **Flakiness Detection** — Historical tracking to identify unreliable tests (not single-run retries)
 - **Performance Regression Alerts** — Warns when tests get significantly slower than average
 - **Stability Scoring** — Composite health metrics (0-100 with grades A+ to F)
@@ -354,15 +354,18 @@ reporter: [
 
 ### AI Analysis
 
-Set one of these environment variables to enable AI-powered failure analysis:
+AI failure analysis is a managed service powered by GPT-4o-mini via the StageWright proxy — no API keys required. To enable it, set your license key (Starter or Pro plan):
 
 ```bash
-export ANTHROPIC_API_KEY=your-key    # Claude (preferred)
-export OPENAI_API_KEY=your-key       # OpenAI
-export GEMINI_API_KEY=your-key       # Google Gemini
+export SMART_REPORTER_LICENSE_KEY=your-license-key
 ```
 
-Provider priority: Anthropic > OpenAI > Gemini. The reporter analyses failures in batches and provides fix suggestions in the report.
+Or add `licenseKey` to your reporter config. When a test fails, the reporter automatically sends the failure context to `https://stagewright.dev/api/ai/analyze` and returns fix suggestions in the report. Analysis quota depends on your plan:
+
+- **Starter** (£5/mo): 2,000 AI analyses/month
+- **Pro** (£9/mo): 5,000 AI analyses/month
+
+The free tier does not include AI analysis.
 
 ## Stability Grades
 
@@ -604,7 +607,7 @@ Enable `cspSafe: true` to save attachments as files instead of embedding, or red
 |---|---|---|
 | No history data | History file missing or wrong path | Check `historyFile` path, use CI caching |
 | No network logs | Tracing not enabled | Add `trace: 'retain-on-failure'` to config |
-| No AI suggestions | Missing API key | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
+| No AI suggestions | Missing or invalid license key | Set `SMART_REPORTER_LICENSE_KEY` env var or add `licenseKey` to config (Starter or Pro plan required) |
 | Mixed project metrics | Shared history file | Use `projectName` to isolate |
 | Pro features not showing | License key missing or expired | Check `SMART_REPORTER_LICENSE_KEY` env var or `licenseKey` config |
 | Quality gate not failing CI | Gate not run as separate step | Run `npx playwright-smart-reporter gate` as its own CI step |
