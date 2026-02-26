@@ -55,7 +55,7 @@ import {
 // Imports: Generators & Notifiers
 // ============================================================================
 
-import { generateHtml, type HtmlGeneratorData } from './generators/html-generator';
+import { generateHtml, type HtmlGeneratorData, type GeneratedReport } from './generators/html-generator';
 import { buildComparison } from './generators/comparison-generator';
 import { exportJsonData } from './generators/json-exporter';
 import { exportJunitXml } from './generators/junit-exporter';
@@ -118,7 +118,6 @@ class SmartReporter implements Reporter {
   private fullConfig: FullConfig | null = null;
   private runnerErrors: string[] = [];
   private ciInfo?: CIInfo;
-  private resolvedPerformanceThreshold: number = 0.2;
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -201,7 +200,6 @@ class SmartReporter implements Reporter {
     // Initialize all analyzers with thresholds from options
     const thresholds = this.options.thresholds;
     const performanceThreshold = thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2;
-    this.resolvedPerformanceThreshold = performanceThreshold;
     const retryFailureThreshold = this.options.retryFailureThreshold ?? 3;
     const stabilityThreshold = this.options.stabilityThreshold ?? 70;
 
@@ -418,40 +416,7 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Calculate flakiness - use history already declared above
-    // For skipped tests, set a special indicator
-    if (result.status === 'skipped') {
-      testData.flakinessIndicator = '⚪ Skipped';
-      testData.performanceTrend = '→ Skipped';
-    } else if (history.length > 0) {
-      // Filter out skipped runs for flakiness calculation
-      const relevantHistory = history.filter((e: TestHistoryEntry) => !e.skipped);
-      if (relevantHistory.length > 0) {
-        const failures = relevantHistory.filter((e: TestHistoryEntry) => !e.passed).length;
-        const flakinessScore = failures / relevantHistory.length;
-        testData.flakinessScore = flakinessScore;
-        testData.flakinessIndicator = this.getFlakinessIndicator(flakinessScore);
-
-        // Calculate performance trend (also exclude skipped runs)
-        const avgDuration =
-          relevantHistory.reduce((sum: number, e: TestHistoryEntry) => sum + e.duration, 0) /
-          relevantHistory.length;
-        testData.averageDuration = avgDuration;
-        testData.performanceTrend = this.getPerformanceTrend(
-          result.duration,
-          avgDuration
-        );
-      } else {
-        // All history entries were skipped
-        testData.flakinessIndicator = '⚪ New';
-        testData.performanceTrend = '→ Baseline';
-      }
-    } else {
-      testData.flakinessIndicator = '⚪ New';
-      testData.performanceTrend = '→ Baseline';
-    }
-
-    // Run all analyzers
+    // Run all analyzers (flakiness, performance, retries, stability)
     this.flakinessAnalyzer.analyze(testData, history);
     this.performanceAnalyzer.analyze(testData, history);
     this.retryAnalyzer.analyze(testData, history);
@@ -660,9 +625,19 @@ class SmartReporter implements Reporter {
 	      quarantineThreshold: this.options.quarantine?.threshold,
 	    };
 
-    // Generate and save HTML report
-    const html = generateHtml(htmlData);
-    fs.writeFileSync(outputPath, html);
+    // Generate and save HTML report (with optional companion CSS/JS for CSP-safe mode)
+    const report = generateHtml(htmlData);
+    fs.writeFileSync(outputPath, report.html);
+    if (report.css || report.js) {
+      const outputDir = path.dirname(outputPath);
+      const basename = path.basename(outputPath, '.html');
+      if (report.css) {
+        fs.writeFileSync(path.join(outputDir, `${basename}.css`), report.css);
+      }
+      if (report.js) {
+        fs.writeFileSync(path.join(outputDir, `${basename}.js`), report.js);
+      }
+    }
 
     // Issue #15: Better console output with command to open report
     console.log(`\n📊 Smart Report: ${outputPath}`);
@@ -805,30 +780,12 @@ class SmartReporter implements Reporter {
    * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login Test")
    */
   private getTestId(test: TestCase): string {
-    const file = path.relative(this.outputDir, test.location.file);
+    const file = path.relative(this.outputDir, test.location.file)
+      .replace(/\\/g, '/')       // Normalize to forward slashes
+      .replace(/^\.\//, '');     // Strip leading ./
     const project = test.parent?.project?.()?.name;
     const prefix = project?.trim() ? `[${project}] ` : '';
     return `${prefix}${file}::${test.title}`;
-  }
-
-  private getFlakinessIndicator(score: number): string {
-    const stableThreshold = this.options.thresholds?.flakinessStable ?? 0.1;
-    const unstableThreshold = this.options.thresholds?.flakinessUnstable ?? 0.3;
-    if (score < stableThreshold) return '🟢 Stable';
-    if (score < unstableThreshold) return '🟡 Unstable';
-    return '🔴 Flaky';
-  }
-
-  private getPerformanceTrend(current: number, average: number): string {
-    const diff = (current - average) / average;
-    const threshold = this.resolvedPerformanceThreshold;
-    if (diff > threshold) {
-      return `↑ ${Math.round(diff * 100)}% slower`;
-    }
-    if (diff < -threshold) {
-      return `↓ ${Math.round(Math.abs(diff) * 100)}% faster`;
-    }
-    return '→ Stable';
   }
 
 }

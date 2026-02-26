@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-02-26
+
+### Added
+
+- **CSP-safe external files** (#31): When `cspSafe: true`, the reporter now generates companion `.css` and `.js` files alongside the HTML report. Styles and scripts are loaded via `<link>` and `<script src>` instead of inline tags. Report data is embedded in `<script type="application/json">` tags. This enables reports to render under Jenkins' Content Security Policy (requires `script-src 'self' 'unsafe-inline'`).
+- `GeneratedReport` type exported from `html-generator` for programmatic access to companion file contents
+
+### Fixed
+
+- **Skipped test navigation broken** (#33): Clicking status counts in the overview now correctly filters tests. `filterByStatus()` was updating DOM chip classes but not the `activeFilters` state, causing `applyFilters()` to read stale data.
+- **Flaky filter mismatch** (#30): The "Flaky" filter now catches tests that are flaky by either outcome (passed on retry) or history (flakinessScore >= 0.3). Previously, the sidebar count used outcome-based detection while the filter chip used history-based detection, causing mismatches.
+- **Tests labeled "New" despite history** (#30): Tests with all-skipped history are now labeled "Skipped" instead of "New". Path normalization in `getTestId()` (forward slashes, strip leading `./`) reduces history lookup misses across CI environments.
+- Removed duplicate inline flakiness/performance calculation in `SmartReporter.onTestEnd()` — analyzers are now the sole authority
+- Companion file paths now use `path.join()` instead of regex replacement for robustness
+
+### Security
+
+- HTML-escaped `outputBasename` and `data-theme` attribute values to prevent attribute injection
+- Fixed JSON entity-escaping order (`&` now replaced before `<`/`>` to prevent double-encoding)
+- CSP JS extraction uses explicit `@csp-split` marker instead of fragile `indexOf` string matching
+
 ## [1.2.0] - 2026-02-25
 
 ### Breaking Changes

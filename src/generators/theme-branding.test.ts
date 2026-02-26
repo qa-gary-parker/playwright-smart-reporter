@@ -33,7 +33,7 @@ function buildHtmlData(overrides: Partial<HtmlGeneratorData> = {}): HtmlGenerato
 describe('theme-branding', () => {
   describe('theme presets', () => {
     it('dark preset sets data-theme="dark" on html tag', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { preset: 'dark' } },
       }));
 
@@ -41,7 +41,7 @@ describe('theme-branding', () => {
     });
 
     it('light preset sets data-theme="light" on html tag', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { preset: 'light' } },
       }));
 
@@ -49,7 +49,7 @@ describe('theme-branding', () => {
     });
 
     it('high-contrast preset sets data-theme="high-contrast" on html tag', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { preset: 'high-contrast' } },
       }));
 
@@ -57,7 +57,7 @@ describe('theme-branding', () => {
     });
 
     it('default preset does not set data-theme attribute', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { preset: 'default' } },
       }));
 
@@ -65,7 +65,7 @@ describe('theme-branding', () => {
     });
 
     it('high-contrast preset applies high-contrast CSS variables', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { preset: 'high-contrast' } },
       }));
 
@@ -78,7 +78,7 @@ describe('theme-branding', () => {
 
   describe('custom theme colors', () => {
     it('primary maps to --accent-blue CSS variable', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { primary: '#ff0000' } },
       }));
 
@@ -86,7 +86,7 @@ describe('theme-branding', () => {
     });
 
     it('success maps to --accent-green CSS variable', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { success: '#00ff00' } },
       }));
 
@@ -94,7 +94,7 @@ describe('theme-branding', () => {
     });
 
     it('primary and success map to different CSS variables', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { primary: '#ff0000', success: '#00ff00' } },
       }));
 
@@ -103,7 +103,7 @@ describe('theme-branding', () => {
     });
 
     it('background maps to --bg-primary', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { background: '#111111' } },
       }));
 
@@ -111,7 +111,7 @@ describe('theme-branding', () => {
     });
 
     it('error maps to --accent-red', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { error: '#ee0000' } },
       }));
 
@@ -121,7 +121,7 @@ describe('theme-branding', () => {
 
   describe('forcedLightPreset dead code', () => {
     it('light preset does not produce invalid CSS like ":root { data-theme: light; }"', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { theme: { preset: 'light' } },
       }));
 
@@ -131,7 +131,7 @@ describe('theme-branding', () => {
 
   describe('branding config', () => {
     it('renders logo image when branding.logo is set', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { branding: { logo: 'https://example.com/logo.png' } },
       }));
 
@@ -140,7 +140,7 @@ describe('theme-branding', () => {
     });
 
     it('renders custom title when branding.title is set', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { branding: { title: 'My Company Tests' } },
       }));
 
@@ -148,7 +148,7 @@ describe('theme-branding', () => {
     });
 
     it('renders custom footer when branding.footer is set', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { branding: { footer: 'Copyright 2024 My Company' } },
       }));
 
@@ -156,7 +156,7 @@ describe('theme-branding', () => {
     });
 
     it('suppresses powered-by attribution when hidePoweredBy is true', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: { branding: { hidePoweredBy: true } },
       }));
 
@@ -164,7 +164,7 @@ describe('theme-branding', () => {
     });
 
     it('shows powered-by attribution by default', () => {
-      const html = generateHtml(buildHtmlData({
+      const { html } = generateHtml(buildHtmlData({
         options: {},
       }));
 

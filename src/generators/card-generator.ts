@@ -50,7 +50,7 @@ function getAnnotationIcon(type: string): string {
  * Generate a single test card
  */
 export function generateTestCard(test: TestResultData, showTraceSection: boolean, quarantinedTestIds?: Set<string>): string {
-  const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
+  const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
   const isFaster = test.performanceTrend?.startsWith('↓') || false;
@@ -463,7 +463,7 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
     const testListItems = tests.map(test => {
       const cardId = sanitizeId(test.testId);
       const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
-      const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
+      const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
       const isSlow = test.performanceTrend?.startsWith('↑') || false;
       const isNew = test.flakinessIndicator?.includes('New') || false;
       

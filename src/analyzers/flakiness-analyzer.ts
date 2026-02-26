@@ -33,8 +33,8 @@ export class FlakinessAnalyzer {
     const relevantHistory = history.filter(e => !e.skipped);
 
     if (relevantHistory.length === 0) {
-      // All history entries were skipped
-      test.flakinessIndicator = '⚪ New';
+      // All history entries were skipped — not actually new
+      test.flakinessIndicator = '⚪ Skipped';
       return;
     }
 

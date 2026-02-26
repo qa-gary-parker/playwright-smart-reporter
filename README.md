@@ -545,7 +545,7 @@ npx playwright-smart-reporter-merge-history \
 
 ## CSP-Safe Mode
 
-For environments with strict Content Security Policy:
+For environments with strict Content Security Policy (e.g., Jenkins):
 
 ```typescript
 reporter: [
@@ -553,7 +553,16 @@ reporter: [
 ]
 ```
 
-Screenshots saved as separate files instead of base64, system fonts instead of Google Fonts, file references instead of embedded data.
+When enabled, the reporter generates companion `.css` and `.js` files alongside the HTML report. The HTML references these via `<link rel="stylesheet">` and `<script src defer>` instead of inline `<style>` and `<script>` tags. Report data is embedded in `<script type="application/json">` tags (not executed by the browser). System fonts are used instead of Google Fonts.
+
+**Jenkins CSP configuration** — Add to Jenkins script console or startup:
+
+```
+System.setProperty("hudson.model.DirectoryBrowserSupport.CSP",
+  "script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self';")
+```
+
+> **Note**: Inline event handlers (`onclick`, etc.) still require `'unsafe-inline'` in `script-src`. Full event delegation is planned for a future release.
 
 ## Cucumber Integration
 

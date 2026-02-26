@@ -14,6 +14,12 @@ import { generateComparison, generateComparisonScript } from './comparison-gener
 // Issue #13: Inline trace viewer integration
 import { generateJSZipScript, generateTraceViewerHtml, generateTraceViewerStyles, generateTraceViewerScript } from './trace-viewer-generator';
 
+export interface GeneratedReport {
+  html: string;
+  css?: string;
+  js?: string;
+}
+
 export interface HtmlGeneratorData {
   results: TestResultData[];
   history: TestHistory;
@@ -71,7 +77,7 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
   return results.map(test => {
     const cardId = sanitizeId(test.testId);
     const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
-    const isFlaky = test.flakinessScore !== undefined && test.flakinessScore >= 0.3;
+    const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
     const isSlow = test.performanceTrend?.startsWith('↑') || false;
     const isNew = test.flakinessIndicator?.includes('New') || false;
     const isQuarantined = quarantinedTestIds?.has(test.testId) ?? false;
@@ -493,7 +499,7 @@ function generateOverviewContent(
 /**
  * Generate complete HTML report with new app-shell layout
  */
-export function generateHtml(data: HtmlGeneratorData): string {
+export function generateHtml(data: HtmlGeneratorData): GeneratedReport {
   const { results, history, startTime, options, comparison, historyRunSnapshots, failureClusters, ciInfo } = data;
 
   const totalDuration = Date.now() - startTime;
@@ -512,9 +518,8 @@ export function generateHtml(data: HtmlGeneratorData): string {
     (r.status === 'failed' || r.status === 'timedOut')
   ).length;
   const skipped = results.filter((r) => r.status === 'skipped').length;
-  // Flaky: tests that passed on retry (outcome='flaky')
-  // This is more accurate than flakinessScore which is history-based
-  const flaky = results.filter((r) => r.outcome === 'flaky').length;
+  // Flaky: tests that are flaky by either outcome (retry-based) OR history (flakinessScore >= 0.3)
+  const flaky = results.filter((r) => r.outcome === 'flaky' || (r.flakinessScore !== undefined && r.flakinessScore >= 0.3)).length;
   const slow = results.filter((r) =>
     r.performanceTrend?.startsWith('↑')
   ).length;
@@ -601,11 +606,11 @@ export function generateHtml(data: HtmlGeneratorData): string {
     };
   });
 
-  // Escape JSON for safe embedding in HTML <script> tags
+  // Escape JSON for safe embedding in HTML <script> tags (& first to avoid double-encoding)
   const testsJson = JSON.stringify(lightenedResults)
+    .replace(/&/g, '\\u0026')
     .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026');
+    .replace(/>/g, '\\u003e');
 
   // Feature flags
   const showGallery = options.enableGalleryView !== false;
@@ -615,7 +620,7 @@ export function generateHtml(data: HtmlGeneratorData): string {
   const hasPro = licenseTier !== 'community';
   const quarantinedTestIds = data.quarantinedTestIds;
   const quarantineCount = quarantinedTestIds?.size ?? 0;
-  const outputBasename = data.outputBasename ?? 'smart-report';
+  const outputBasename = escapeHtml(data.outputBasename ?? 'smart-report');
   const branding = options.branding;
   const reportTitle = branding?.title ?? 'StageWright Local';
   const reportSubtitle = branding?.title ? '' : 'Get your test stage right.';
@@ -652,9 +657,9 @@ export function generateHtml(data: HtmlGeneratorData): string {
     : {};
   const historyRunSnapshotsJson = enableHistoryDrilldown
     ? JSON.stringify(lightenedHistorySnapshots)
+        .replace(/&/g, '\\u0026')
         .replace(/</g, '\\u003c')
         .replace(/>/g, '\\u003e')
-        .replace(/&/g, '\\u0026')
     : '{}';
 
   // Google Fonts links (only included when not in CSP-safe mode)
@@ -665,19 +670,53 @@ export function generateHtml(data: HtmlGeneratorData): string {
 
   // Stats data for JavaScript
   const statsData = JSON.stringify({ passed, failed, skipped, flaky, slow, newTests, total, passRate, gradeA, gradeB, gradeC, gradeD, gradeF, totalDuration })
+    .replace(/&/g, '\\u0026')
     .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026');
+    .replace(/>/g, '\\u003e');
 
-  return `<!DOCTYPE html>
-<html lang="en"${options.theme?.preset && options.theme.preset !== 'default' ? ` data-theme="${options.theme.preset}"` : ''}>
+  const cssContent = generateStyles(passRate, cspSafe, options.theme);
+  const scriptBody = generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson, statsData, outputBasename);
+  const traceScript = enableTraceViewer ? generateTraceViewerScript() : '';
+
+  // CSP-safe mode: build companion CSS/JS files
+  let externalCss: string | undefined;
+  let externalJs: string | undefined;
+
+  if (cspSafe) {
+    externalCss = cssContent;
+
+    // Build external JS: extract script body after data declarations, prepend DOM-based reads
+    const cspDataInit = `    const tests = JSON.parse(document.getElementById('report-data-tests').textContent);
+    const pdfBasename = JSON.parse(document.getElementById('report-data-basename').textContent);
+    const stats = JSON.parse(document.getElementById('report-data-stats').textContent);
+    const traceViewerEnabled = ${enableTraceViewer ? 'true' : 'false'};
+    const historyDrilldownEnabled = ${enableHistoryDrilldown ? 'true' : 'false'};
+    const historyRunSnapshots = JSON.parse(document.getElementById('report-data-history-snapshots').textContent);`;
+
+    // Split on the @csp-split marker to separate data declarations from app logic
+    const splitMarker = '/* @csp-split */';
+    const splitIdx = scriptBody.indexOf(splitMarker);
+    if (splitIdx === -1) {
+      throw new Error('CSP split marker not found in generated scripts — cannot build external JS');
+    }
+    const jsAfterDeclarations = scriptBody.substring(splitIdx + splitMarker.length);
+    externalJs = (enableTraceViewer ? generateJSZipScript() + '\n' : '')
+      + cspDataInit + '\n' + jsAfterDeclarations
+      + (traceScript ? '\n' + traceScript : '');
+  }
+
+  // Head section differs between CSP and standard modes
+  const headStyles = cspSafe
+    ? `  <link rel="stylesheet" href="${outputBasename}.css">`
+    : `  <style>\n${cssContent}\n  </style>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en"${options.theme?.preset && options.theme.preset !== 'default' ? ` data-theme="${escapeHtml(options.theme.preset)}"` : ''}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Test Report</title>${fontLinks}
-  <style>
-${generateStyles(passRate, cspSafe, options.theme)}
-  </style>
+  <title>Smart Test Report</title>${cspSafe ? '' : fontLinks}
+${headStyles}
 </head>
 <body>
   <!-- Skip to main content for accessibility -->
@@ -1106,20 +1145,27 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
     ${results.map(test => generateTestCard(test, showTraceSection, quarantinedTestIds)).join('\n')}
   </div>
 
-  <!-- Issue #13: JSZip library for trace extraction -->
+  ${cspSafe ? `<!-- CSP-safe: data embedded as JSON, scripts loaded externally -->
+  <script type="application/json" id="report-data-tests">${testsJson}</script>
+  <script type="application/json" id="report-data-basename">${JSON.stringify(outputBasename)}</script>
+  <script type="application/json" id="report-data-stats">${statsData}</script>
+  <script type="application/json" id="report-data-history-snapshots">${historyRunSnapshotsJson}</script>
+  <script src="${outputBasename}.js" defer></script>` : `<!-- Issue #13: JSZip library for trace extraction -->
   ${enableTraceViewer ? `<script>${generateJSZipScript()}</script>` : ''}
 
   <script>
-${generateScripts(testsJson, showGallery, showComparison, enableTraceViewer, enableHistoryDrilldown, historyRunSnapshotsJson, statsData, outputBasename)}
+${scriptBody}
 
-${enableTraceViewer ? generateTraceViewerScript() : ''}
-  </script>
+${traceScript}
+  </script>`}
 ${branding?.footer || !branding?.hidePoweredBy ? `  <footer class="report-footer" style="text-align:center;padding:12px 16px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border-subtle);">
 ${branding?.footer ? `    <div>${escapeHtml(branding.footer)}</div>` : ''}
 ${!branding?.hidePoweredBy ? '    <div>Powered by <a href="https://github.com/gary-parker/playwright-smart-reporter" style="color:var(--accent-blue);text-decoration:none;">Smart Reporter</a></div>' : ''}
   </footer>` : ''}
 </body>
 </html>`;
+
+  return { html, css: externalCss, js: externalJs };
 }
 
 /**
@@ -6691,6 +6737,7 @@ function generateScripts(
     const traceViewerEnabled = ${enableTraceViewer ? 'true' : 'false'};
     const historyDrilldownEnabled = ${enableHistoryDrilldown ? 'true' : 'false'};
     const historyRunSnapshots = ${historyRunSnapshotsJson};
+    /* @csp-split */
     const detailsBodyCache = new WeakMap();
     let currentView = 'overview';
     let selectedTestId = null;
@@ -7022,24 +7069,7 @@ function generateScripts(
     }
 
     function filterByStatus(status) {
-      // Switch to tests view first
-      switchView('tests');
-
-      // Clear all filters and activate the matching status filter
-      document.querySelectorAll('.filter-chip').forEach(chip => {
-        chip.classList.remove('active');
-        chip.setAttribute('aria-pressed', 'false');
-      });
-
-      // Find and activate the matching status filter chip
-      const statusChip = document.querySelector('.filter-chip[data-filter="' + status + '"]');
-      if (statusChip) {
-        statusChip.classList.add('active');
-        statusChip.setAttribute('aria-pressed', 'true');
-      }
-
-      // Apply filter to test cards and list items
-      applyFilters();
+      filterTests(status);
     }
 
     /* ============================================

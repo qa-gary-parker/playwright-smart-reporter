@@ -115,7 +115,7 @@ describe('FlakinessAnalyzer', () => {
       expect(test.flakinessIndicator).toBe('🟢 Stable');
     });
 
-    it('marks as new if all history entries are skipped', () => {
+    it('marks as skipped if all history entries are skipped', () => {
       const test = createTestResult();
       const history: TestHistoryEntry[] = [
         createHistoryEntry(false, 1000, true),
@@ -124,7 +124,7 @@ describe('FlakinessAnalyzer', () => {
 
       analyzer.analyze(test, history);
 
-      expect(test.flakinessIndicator).toBe('⚪ New');
+      expect(test.flakinessIndicator).toBe('⚪ Skipped');
     });
   });
 

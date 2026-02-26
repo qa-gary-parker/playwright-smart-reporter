@@ -31,7 +31,7 @@ vi.mock('fs', () => {
 });
 
 vi.mock('./generators/html-generator', () => ({
-  generateHtml: vi.fn().mockReturnValue('<html></html>'),
+  generateHtml: vi.fn().mockReturnValue({ html: '<html></html>' }),
 }));
 
 vi.mock('./generators/json-exporter', () => ({
