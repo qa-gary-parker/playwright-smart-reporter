@@ -5,6 +5,7 @@
  */
 
 import { JSZIP_SOURCE } from '../vendors/jszip-source';
+import { icon } from './icon-provider';
 
 /**
  * Generate the inlined JSZip script
@@ -26,12 +27,12 @@ export function generateTraceViewerHtml(): string {
     <div class="trace-modal-content">
       <div class="trace-modal-header">
         <h3 class="trace-modal-title">
-          <span class="trace-modal-icon">📊</span>
+          <span class="trace-modal-icon">${icon('bar-chart-2')}</span>
           <span id="traceViewerTitle">Trace Viewer</span>
         </h3>
         <div class="trace-header-controls">
           <button class="trace-btn trace-btn-small trace-btn-secondary" onclick="toggleFullscreen()" title="Toggle fullscreen">
-            <span id="fullscreenIcon">⛶</span>
+            <span id="fullscreenIcon">${icon('maximize')}</span>
           </button>
           <button class="trace-modal-close" onclick="closeTraceModal()" aria-label="Close">&times;</button>
         </div>
@@ -45,14 +46,14 @@ export function generateTraceViewerHtml(): string {
 
         <!-- Error State -->
         <div id="traceError" class="trace-error" style="display: none;">
-          <div class="trace-error-icon">⚠️</div>
+          <div class="trace-error-icon">${icon('alert-triangle', 24)}</div>
           <p id="traceErrorMessage">Failed to load trace</p>
           <div class="trace-error-actions">
             <button onclick="document.getElementById('traceFileInput').click()" class="trace-btn">
-              📁 Load from file
+              ${icon('folder')} Load from file
             </button>
             <button id="traceCopyCmd" class="trace-btn trace-btn-secondary">
-              📋 Copy CLI command
+              ${icon('clipboard')} Copy CLI command
             </button>
           </div>
           <input type="file" id="traceFileInput" accept=".zip" style="display: none;" onchange="loadTraceFromFile(this.files[0])">
@@ -1003,6 +1004,7 @@ export function generateTraceViewerStyles(monoFont: string): string {
 
     .trace-console-item {
       display: flex;
+      align-items: flex-start;
       gap: 0.75rem;
       padding: 0.5rem;
       font-size: 0.75rem;
@@ -1071,6 +1073,9 @@ export function generateTraceViewerStyles(monoFont: string): string {
     }
 
     .trace-source-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       font-size: 0.75rem;
       font-weight: 600;
       color: var(--text-muted);
@@ -1336,8 +1341,13 @@ export function generateTraceViewerStyles(monoFont: string): string {
     }
 
     .trace-network-details-title::before {
-      content: '▶';
-      font-size: 0.5rem;
+      content: '';
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-left: 5px solid currentColor;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
       transition: transform 0.15s;
     }
 
@@ -1711,7 +1721,7 @@ export function generateTraceViewerScript(): string {
           const cmd = 'npx playwright show-trace "' + tracePath + '"';
           navigator.clipboard.writeText(cmd).then(() => {
             copyCmd.textContent = '✓ Copied!';
-            setTimeout(() => { copyCmd.textContent = '📋 Copy CLI command'; }, 2000);
+            setTimeout(() => { copyCmd.innerHTML = '${icon('clipboard')} Copy CLI command'; }, 2000);
           }).catch(() => {
             window.prompt('Run this command:', cmd);
           });
@@ -2378,7 +2388,7 @@ export function generateTraceViewerScript(): string {
       if (userFrames.length > 0) {
         html += \`
           <div class="trace-source-section">
-            <div class="trace-source-title">📍 Test Code</div>
+            <div class="trace-source-title">${icon('map-pin')} Test Code</div>
             <div class="trace-source-location">
               \${userFrames.map(f => \`
                 <div class="trace-stack-frame user-code">
@@ -2394,7 +2404,7 @@ export function generateTraceViewerScript(): string {
       if (internalFrames.length > 0) {
         html += \`
           <div class="trace-source-section">
-            <div class="trace-source-title">📚 Framework Stack</div>
+            <div class="trace-source-title">${icon('book-open')} Framework Stack</div>
             <div style="max-height: 150px; overflow-y: auto;">
               \${internalFrames.slice(0, 10).map(f => \`
                 <div class="trace-stack-frame">
@@ -2456,15 +2466,15 @@ export function generateTraceViewerScript(): string {
     }
 
     function getConsoleIcon(type) {
-      const icons = {
-        'log': '📝',
-        'info': 'ℹ️',
-        'warning': '⚠️',
-        'warn': '⚠️',
-        'error': '❌',
-        'debug': '🔍'
+      const consoleIcons = {
+        'log': '${icon('pencil', 12)}',
+        'info': '${icon('info', 12)}',
+        'warning': '${icon('alert-triangle', 12)}',
+        'warn': '${icon('alert-triangle', 12)}',
+        'error': '${icon('x-circle', 12)}',
+        'debug': '${icon('search', 12)}'
       };
-      return icons[type] || '📝';
+      return consoleIcons[type] || '${icon('pencil', 12)}';
     }
 
     function filterConsole(level) {
@@ -2753,7 +2763,7 @@ export function generateTraceViewerScript(): string {
       metadataContent.innerHTML = \`
         <div class="trace-metadata-grid">
           <div class="trace-metadata-card">
-            <div class="trace-metadata-card-title">🌐 Browser</div>
+            <div class="trace-metadata-card-title">${icon('globe')} Browser</div>
             <div class="trace-metadata-row">
               <span class="trace-metadata-label">Name</span>
               <span class="trace-metadata-value">\${escapeHtmlTrace(m.browserName)}</span>
@@ -2773,7 +2783,7 @@ export function generateTraceViewerScript(): string {
           </div>
 
           <div class="trace-metadata-card">
-            <div class="trace-metadata-card-title">📐 Viewport</div>
+            <div class="trace-metadata-card-title">${icon('ruler')} Viewport</div>
             <div class="trace-metadata-row">
               <span class="trace-metadata-label">Width</span>
               <span class="trace-metadata-value">\${m.viewport.width || 'auto'}px</span>
@@ -2791,7 +2801,7 @@ export function generateTraceViewerScript(): string {
           </div>
 
           <div class="trace-metadata-card">
-            <div class="trace-metadata-card-title">💻 Platform</div>
+            <div class="trace-metadata-card-title">${icon('monitor')} Platform</div>
             <div class="trace-metadata-row">
               <span class="trace-metadata-label">OS</span>
               <span class="trace-metadata-value">\${escapeHtmlTrace(m.platform)}</span>
@@ -2811,7 +2821,7 @@ export function generateTraceViewerScript(): string {
           </div>
 
           <div class="trace-metadata-card">
-            <div class="trace-metadata-card-title">⏱️ Timing</div>
+            <div class="trace-metadata-card-title">${icon('clock')} Timing</div>
             <div class="trace-metadata-row">
               <span class="trace-metadata-label">Duration</span>
               <span class="trace-metadata-value">\${(m.duration / 1000).toFixed(2)}s</span>
@@ -2954,50 +2964,50 @@ export function generateTraceViewerScript(): string {
     }
 
     function getActionIcon(method) {
-      const icons = {
-        'goto': '🌐',
-        'click': '👆',
-        'dblclick': '👆',
-        'fill': '⌨️',
-        'type': '⌨️',
-        'press': '⌨️',
-        'check': '☑️',
-        'uncheck': '☐',
-        'selectOption': '📋',
-        'hover': '🖱️',
-        'focus': '🎯',
-        'blur': '💨',
-        'screenshot': '📸',
-        'evaluate': '⚙️',
-        'evaluateHandle': '⚙️',
-        'waitForSelector': '⏳',
-        'waitForTimeout': '⏱️',
-        'waitForLoadState': '⏳',
-        'waitForNavigation': '⏳',
-        'waitForURL': '⏳',
-        'waitForFunction': '⏳',
-        'expect': '✓',
-        'toBeVisible': '👁️',
-        'toHaveText': '📝',
-        'toHaveValue': '📝',
-        'toBeChecked': '☑️',
-        'toBeEnabled': '✓',
-        'toBeDisabled': '⛔',
-        'toHaveAttribute': '🏷️',
-        'toHaveClass': '🎨',
-        'toHaveCount': '#️⃣',
-        'toContainText': '📝',
-        'newPage': '📄',
-        'newContext': '🆕',
-        'close': '❌',
-        'setContent': '📄',
-        'setViewportSize': '📐',
-        'route': '🛣️',
-        'unroute': '🛣️',
-        'request': '📡',
-        'fetch': '📡'
+      const actionIcons = {
+        'goto': '${icon('globe', 12)}',
+        'click': '${icon('mouse-pointer', 12)}',
+        'dblclick': '${icon('mouse-pointer', 12)}',
+        'fill': '${icon('pencil', 12)}',
+        'type': '${icon('pencil', 12)}',
+        'press': '${icon('pencil', 12)}',
+        'check': '${icon('square-check', 12)}',
+        'uncheck': '${icon('square', 12)}',
+        'selectOption': '${icon('clipboard', 12)}',
+        'hover': '${icon('mouse-pointer', 12)}',
+        'focus': '${icon('target', 12)}',
+        'blur': '${icon('circle', 12)}',
+        'screenshot': '${icon('camera', 12)}',
+        'evaluate': '${icon('settings', 12)}',
+        'evaluateHandle': '${icon('settings', 12)}',
+        'waitForSelector': '${icon('timer', 12)}',
+        'waitForTimeout': '${icon('clock', 12)}',
+        'waitForLoadState': '${icon('timer', 12)}',
+        'waitForNavigation': '${icon('timer', 12)}',
+        'waitForURL': '${icon('timer', 12)}',
+        'waitForFunction': '${icon('timer', 12)}',
+        'expect': '${icon('check', 12)}',
+        'toBeVisible': '${icon('eye', 12)}',
+        'toHaveText': '${icon('pencil', 12)}',
+        'toHaveValue': '${icon('pencil', 12)}',
+        'toBeChecked': '${icon('square-check', 12)}',
+        'toBeEnabled': '${icon('check', 12)}',
+        'toBeDisabled': '${icon('ban', 12)}',
+        'toHaveAttribute': '${icon('tag', 12)}',
+        'toHaveClass': '${icon('palette', 12)}',
+        'toHaveCount': '${icon('bar-chart-2', 12)}',
+        'toContainText': '${icon('pencil', 12)}',
+        'newPage': '${icon('file', 12)}',
+        'newContext': '${icon('file', 12)}',
+        'close': '${icon('x', 12)}',
+        'setContent': '${icon('file', 12)}',
+        'setViewportSize': '${icon('ruler', 12)}',
+        'route': '${icon('route', 12)}',
+        'unroute': '${icon('route', 12)}',
+        'request': '${icon('signal', 12)}',
+        'fetch': '${icon('signal', 12)}'
       };
-      return icons[method] || '▶️';
+      return actionIcons[method] || '${icon('play', 12)}';
     }
 
     function switchTraceTab(tabName) {
@@ -3046,7 +3056,7 @@ export function generateTraceViewerScript(): string {
       if (modal) {
         modal.classList.toggle('fullscreen');
         if (icon) {
-          icon.textContent = modal.classList.contains('fullscreen') ? '⛶' : '⛶';
+          icon.innerHTML = modal.classList.contains('fullscreen') ? '${icon('minimize', 14)}' : '${icon('maximize', 14)}';
         }
       }
     }
@@ -3225,7 +3235,7 @@ export function generateTraceViewerScript(): string {
           \${traceAttachments.slice(0, 20).map((att, idx) => \`
             <div class="trace-attachment-card">
               <div class="trace-attachment-preview">
-                \${att.type === 'image' ? \`<img src="\${att.dataUri}" alt="\${escapeHtmlTrace(att.name)}" onclick="openAttachmentPreview(\${idx})">\` : \`<span class="trace-attachment-preview-icon">📎</span>\`}
+                \${att.type === 'image' ? \`<img src="\${att.dataUri}" alt="\${escapeHtmlTrace(att.name)}" onclick="openAttachmentPreview(\${idx})">\` : \`<span class="trace-attachment-preview-icon">${icon('paperclip', 24)}</span>\`}
               </div>
               <div class="trace-attachment-info">
                 <div class="trace-attachment-name" title="\${escapeHtmlTrace(att.name)}">\${escapeHtmlTrace(att.name)}</div>

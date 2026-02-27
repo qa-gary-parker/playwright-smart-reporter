@@ -10,6 +10,7 @@ import { formatDuration, escapeHtml, escapeJsString, sanitizeId } from '../utils
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
 import { generateGallery, generateGalleryScript } from './gallery-generator';
+import { icon } from './icon-provider';
 import { generateComparison, generateComparisonScript } from './comparison-generator';
 // Issue #13: Inline trace viewer integration
 import { generateJSZipScript, generateTraceViewerHtml, generateTraceViewerStyles, generateTraceViewerScript } from './trace-viewer-generator';
@@ -59,7 +60,7 @@ function generateFileTree(results: TestResultData[]): string {
     const fileName = file.split(/[\\/]/).pop() || file;
     return `
       <div class="file-tree-item ${statusClass}" data-file="${escapeHtml(file)}" onclick="filterByFile('${escapeJsString(file)}')">
-        <span class="file-tree-icon">📄</span>
+        <span class="file-tree-icon">${icon('file')}</span>
         <span class="file-tree-name" title="${escapeHtml(file)}">${escapeHtml(fileName)}</span>
         <span class="file-tree-stats">
           ${stats.passed > 0 ? `<span class="file-stat passed">${stats.passed}</span>` : ''}
@@ -201,7 +202,7 @@ function generateOverviewContent(
   const clustersHtml = (failureClusters && failureClusters.length > 0) ? `
     <div class="overview-section">
       <div class="section-header">
-        <span class="section-icon">🔍</span>
+        <span class="section-icon">${icon('search')}</span>
         <span class="section-title">Failure Clusters</span>
       </div>
       <div class="failure-clusters-grid">
@@ -212,7 +213,7 @@ function generateOverviewContent(
           return `
           <div class="cluster-card" onclick="filterTests('failed'); switchView('tests');">
             <div class="cluster-header">
-              <div class="cluster-icon">⚠️</div>
+              <div class="cluster-icon">${icon('alert-triangle')}</div>
               <div class="cluster-type">${escapeHtml(cluster.errorType)}</div>
               <div class="cluster-count">${cluster.count} test${cluster.count > 1 ? 's' : ''}</div>
             </div>
@@ -236,7 +237,7 @@ function generateOverviewContent(
   const attentionHtml = hasAttentionItems ? `
     <div class="overview-section attention-section">
       <div class="section-header">
-        <span class="section-icon">⚡</span>
+        <span class="section-icon">${icon('zap')}</span>
         <span class="section-title">Attention Required</span>
       </div>
       <div class="attention-grid">
@@ -287,19 +288,19 @@ function generateOverviewContent(
       <div class="quality-gate-card ${qualityGateResult.passed ? 'gate-passed' : 'gate-failed'}">
         <div class="gate-header">
           <div class="gate-title-row">
-            <span class="section-icon">&#x1F6A6;</span>
+            <span class="section-icon">${icon('gauge')}</span>
             <span class="gate-title">Quality Gates</span>
           </div>
           <span class="gate-status ${qualityGateResult.passed ? 'gate-status-passed' : 'gate-status-failed'}">${qualityGateResult.passed ? 'PASSED' : 'FAILED'}</span>
         </div>
         <div class="gate-rules">
           ${qualityGateResult.rules.map(rule => {
-            const icon = rule.skipped ? '&#x25CB;' : rule.passed ? '&#x2713;' : '&#x2717;';
+            const ruleIcon = rule.skipped ? icon('circle', 14) : rule.passed ? icon('check', 14) : icon('x', 14);
             const iconClass = rule.skipped ? 'gate-skipped' : rule.passed ? 'gate-pass' : 'gate-fail';
             const label = ruleLabels[rule.rule] || rule.rule;
             return `
             <div class="gate-rule-row">
-              <span class="gate-rule-icon ${iconClass}">${icon}</span>
+              <span class="gate-rule-icon ${iconClass}">${ruleIcon}</span>
               <span class="gate-rule-name">${escapeHtml(label)}</span>
               <span class="gate-rule-values">${rule.skipped ? '(skipped)' : `${escapeHtml(rule.actual)} ${escapeHtml(rule.threshold)}`}</span>
             </div>`;
@@ -312,7 +313,7 @@ function generateOverviewContent(
       <div class="quality-gate-card pro-feature-placeholder">
         <div class="gate-header">
           <div class="gate-title-row">
-            <span class="section-icon">&#x1F6A6;</span>
+            <span class="section-icon">${icon('gauge')}</span>
             <span class="gate-title">Quality Gates</span>
           </div>
           <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Pro</span>
@@ -329,7 +330,7 @@ function generateOverviewContent(
       <div class="quarantine-card">
         <div class="quarantine-header">
           <div class="quarantine-title-row">
-            <span class="section-icon">&#x1F512;</span>
+            <span class="section-icon">${icon('lock')}</span>
             <span class="quarantine-title">Quarantine</span>
           </div>
           <span class="quarantine-count">${quarantineCount} test${quarantineCount !== 1 ? 's' : ''}</span>
@@ -351,7 +352,7 @@ function generateOverviewContent(
       <div class="quarantine-card pro-feature-placeholder">
         <div class="quarantine-header">
           <div class="quarantine-title-row">
-            <span class="section-icon">&#x1F512;</span>
+            <span class="section-icon">${icon('lock')}</span>
             <span class="quarantine-title">Quarantine</span>
           </div>
           <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Pro</span>
@@ -443,13 +444,13 @@ function generateOverviewContent(
     <!-- Quick Insights -->
     <div class="overview-section">
       <div class="section-header">
-        <span class="section-icon">💡</span>
+        <span class="section-icon">${icon('lightbulb')}</span>
         <span class="section-title">Quick Insights</span>
       </div>
       <div class="insights-grid">
         ${slowestTest ? `
           <div class="insight-card" onclick="selectTest('${sanitizeId(slowestTest.testId)}'); switchView('tests');">
-            <div class="insight-icon">🐢</div>
+            <div class="insight-icon">${icon('hourglass', 24)}</div>
             <div class="insight-content">
               <div class="insight-label">Slowest Test</div>
               <div class="insight-title">${escapeHtml(slowestTest.title)}</div>
@@ -459,7 +460,7 @@ function generateOverviewContent(
         ` : ''}
         ${mostFlakyTest && mostFlakyTest.flakinessScore && mostFlakyTest.flakinessScore > 0 ? `
           <div class="insight-card" onclick="selectTest('${sanitizeId(mostFlakyTest.testId)}'); switchView('tests');">
-            <div class="insight-icon">⚡</div>
+            <div class="insight-icon">${icon('zap', 24)}</div>
             <div class="insight-content">
               <div class="insight-label">Most Flaky Test</div>
               <div class="insight-title">${escapeHtml(mostFlakyTest.title)}</div>
@@ -468,7 +469,7 @@ function generateOverviewContent(
           </div>
         ` : ''}
         <div class="insight-card clickable" onclick="switchView('tests')" title="View all tests">
-          <div class="insight-icon">📊</div>
+          <div class="insight-icon">${icon('bar-chart-2', 24)}</div>
           <div class="insight-content">
             <div class="insight-label">Test Distribution</div>
             <div class="insight-mini-stats">
@@ -479,7 +480,7 @@ function generateOverviewContent(
           </div>
         </div>
         <div class="insight-card clickable" onclick="switchView('trends')" title="View trends">
-          <div class="insight-icon">📈</div>
+          <div class="insight-icon">${icon('trending-up', 24)}</div>
           <div class="insight-content">
             <div class="insight-label">Pass Rate Trend</div>
             <div class="mini-sparkline">
@@ -728,7 +729,7 @@ ${headStyles}
     <header class="top-bar">
       <div class="top-bar-left">
         <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar (⌘B)" aria-label="Toggle sidebar navigation" aria-expanded="true" aria-controls="sidebar">
-          <span class="hamburger-icon" aria-hidden="true">☰</span>
+          <span class="hamburger-icon" aria-hidden="true">${icon('menu')}</span>
         </button>
         <div class="logo">
 ${branding?.logo ? `          <img class="logo-image" src="${escapeHtml(branding.logo)}" alt="${escapeHtml(reportTitle)} logo" height="28" />` : ''}
@@ -745,81 +746,81 @@ ${reportSubtitle ? `            <span class="logo-subtitle">${escapeHtml(reportS
       </div>
       <div class="top-bar-right">
         <button class="search-trigger" onclick="openSearch()" title="Search (⌘K)" aria-label="Search tests">
-          <span class="search-icon-btn">🔍</span>
+          <span class="search-icon-btn">${icon('search')}</span>
           <span class="search-label">Search...</span>
           <kbd class="search-kbd">⌘K</kbd>
         </button>
         <div class="export-dropdown" id="exportDropdown">
           <button class="top-bar-btn" onclick="toggleExportMenu()" title="Export" aria-haspopup="true" aria-expanded="false">
-            <span>📥</span>
+            <span>${icon('download')}</span>
             <span class="btn-label">Export</span>
           </button>
           <div class="export-menu" role="menu">
             <button class="export-menu-item" onclick="exportJSON()" role="menuitem">
-              <span>📄</span> JSON
+              <span>${icon('braces')}</span> JSON
             </button>
             <button class="export-menu-item" onclick="exportCSV()" role="menuitem">
-              <span>📊</span> CSV
+              <span>${icon('table')}</span> CSV
             </button>
             <button class="export-menu-item" onclick="showSummaryExport()" role="menuitem">
-              <span>📋</span> Summary Card
+              <span>${icon('clipboard')}</span> Summary Card
             </button>
 ${hasPro ? `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
 ${options.exportPdf ? `            <button class="export-menu-item" onclick="showPdfPicker()" role="menuitem">
-              <span>📑</span> PDF Report
+              <span>${icon('file-text')}</span> PDF Report
             </button>` : ''}
 ${options.exportJson ? `            <a class="export-menu-item" href="${outputBasename}-data.json" download role="menuitem" style="text-decoration:none;color:inherit;">
-              <span>📦</span> Full JSON Data
+              <span>${icon('package')}</span> Full JSON Data
             </a>` : ''}
 ${options.exportJunit ? `            <a class="export-menu-item" href="${outputBasename}-junit.xml" download role="menuitem" style="text-decoration:none;color:inherit;">
-              <span>🏷️</span> JUnit XML
+              <span>${icon('tag')}</span> JUnit XML
             </a>` : ''}` : `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
-              <span>📑</span> PDF Report <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+              <span>${icon('file-text')}</span> PDF Report <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
             </div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
-              <span>📦</span> Full JSON Data <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+              <span>${icon('package')}</span> Full JSON Data <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
             </div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
-              <span>🏷️</span> JUnit XML <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+              <span>${icon('tag')}</span> JUnit XML <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
             </div>`}
           </div>
         </div>
         <div class="theme-dropdown" id="themeDropdown">
           <button class="theme-toggle" onclick="toggleThemeMenu()" title="Theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false">
-            <span class="theme-toggle-icon" id="themeIcon">🌙</span>
+            <span class="theme-toggle-icon" id="themeIcon">${icon('moon')}</span>
             <span class="theme-label" id="themeLabel">Dark</span>
           </button>
           <div class="theme-menu" role="menu">
             <button class="theme-menu-item" onclick="setTheme('system')" role="menuitem" data-theme="system">
-              <span>💻</span> System
+              <span>${icon('monitor')}</span> System
             </button>
             <button class="theme-menu-item" onclick="setTheme('light')" role="menuitem" data-theme="light">
-              <span>☀️</span> Light
+              <span>${icon('sun')}</span> Light
             </button>
             <button class="theme-menu-item" onclick="setTheme('dark')" role="menuitem" data-theme="dark">
-              <span>🌙</span> Dark
+              <span>${icon('moon')}</span> Dark
             </button>
 ${hasPro ? `            <div style="height:1px;background:var(--border-subtle);margin:4px 0;position:relative;">
               <span style="position:absolute;right:4px;top:-8px;font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">PRO</span>
             </div>
             <button class="theme-menu-item" onclick="setTheme('ocean')" role="menuitem" data-theme="ocean">
-              <span>🌊</span> Ocean
+              <span>${icon('waves')}</span> Ocean
             </button>
             <button class="theme-menu-item" onclick="setTheme('sunset')" role="menuitem" data-theme="sunset">
-              <span>🌅</span> Sunset
+              <span>${icon('sunset')}</span> Sunset
             </button>
             <button class="theme-menu-item" onclick="setTheme('dracula')" role="menuitem" data-theme="dracula">
-              <span>🧛</span> Dracula
+              <span>${icon('moon')}</span> Dracula
             </button>
             <button class="theme-menu-item" onclick="setTheme('cyberpunk')" role="menuitem" data-theme="cyberpunk">
-              <span>⚡</span> Cyberpunk
+              <span>${icon('zap')}</span> Cyberpunk
             </button>
             <button class="theme-menu-item" onclick="setTheme('forest')" role="menuitem" data-theme="forest">
-              <span>🌲</span> Forest
+              <span>${icon('tree-pine')}</span> Forest
             </button>
             <button class="theme-menu-item" onclick="setTheme('rose')" role="menuitem" data-theme="rose">
-              <span>🌹</span> Rose
+              <span>${icon('flower-2')}</span> Rose
             </button>` : ''}
           </div>
         </div>
@@ -880,27 +881,27 @@ ${hasPro ? `            <div style="height:1px;background:var(--border-subtle);m
         <div class="nav-section-title" id="nav-section-label">Navigation</div>
         <div role="tablist" aria-labelledby="nav-section-label">
           <button class="nav-item active" data-view="overview" onclick="switchView('overview')" role="tab" aria-selected="true" aria-controls="view-overview">
-            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-icon" aria-hidden="true">${icon('bar-chart-2')}</span>
             <span class="nav-label">Overview</span>
           </button>
           <button class="nav-item" data-view="tests" onclick="switchView('tests')" role="tab" aria-selected="false" aria-controls="view-tests">
-            <span class="nav-icon" aria-hidden="true">🧪</span>
+            <span class="nav-icon" aria-hidden="true">${icon('test-tube')}</span>
             <span class="nav-label">Tests</span>
             <span class="nav-badge" aria-label="${total} total tests">${total}</span>
           </button>
           <button class="nav-item" data-view="trends" onclick="switchView('trends')" role="tab" aria-selected="false" aria-controls="view-trends">
-            <span class="nav-icon" aria-hidden="true">📈</span>
+            <span class="nav-icon" aria-hidden="true">${icon('trending-up')}</span>
             <span class="nav-label">Trends</span>
           </button>
           ${showComparison ? `
           <button class="nav-item" data-view="comparison" onclick="switchView('comparison')" role="tab" aria-selected="false" aria-controls="view-comparison">
-            <span class="nav-icon" aria-hidden="true">⚖️</span>
+            <span class="nav-icon" aria-hidden="true">${icon('scale')}</span>
             <span class="nav-label">Comparison</span>
           </button>
           ` : ''}
           ${showGallery ? `
           <button class="nav-item" data-view="gallery" onclick="switchView('gallery')" role="tab" aria-selected="false" aria-controls="view-gallery">
-            <span class="nav-icon" aria-hidden="true">🖼️</span>
+            <span class="nav-icon" aria-hidden="true">${icon('image')}</span>
             <span class="nav-label">Gallery</span>
           </button>
           ` : ''}
@@ -980,7 +981,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
       <!-- Duration -->
       <div class="sidebar-footer">
         <div class="run-duration">
-          <span class="duration-icon">⏱️</span>
+          <span class="duration-icon">${icon('clock')}</span>
           <span class="duration-value">${formatDuration(totalDuration)}</span>
         </div>
       </div>
@@ -1017,7 +1018,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
             <div class="test-list-content">
               <!-- Empty state for no results -->
               <div class="empty-state" id="emptyState" style="display: none;">
-                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-icon">${icon('search', 24)}</div>
                 <div class="empty-state-title">No tests found</div>
                 <div class="empty-state-message">No tests match your current filters. Try adjusting your search or filter criteria.</div>
                 <button class="empty-state-action" onclick="clearAllFilters()">Clear filters</button>
@@ -1078,7 +1079,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
           <!-- Test Detail (Detail) -->
           <div class="test-detail-panel" id="test-detail-panel">
             <div class="detail-placeholder">
-              <div class="placeholder-icon">🧪</div>
+              <div class="placeholder-icon">${icon('test-tube', 32)}</div>
               <div class="placeholder-text">Select a test to view details</div>
               <div class="placeholder-hint">Click on any test in the list</div>
             </div>
@@ -1127,7 +1128,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
     <div class="search-modal-backdrop" onclick="closeSearch()"></div>
     <div class="search-modal-content">
       <div class="search-modal-header">
-        <span class="search-modal-icon" aria-hidden="true">🔍</span>
+        <span class="search-modal-icon" aria-hidden="true">${icon('search')}</span>
         <label for="search-modal-input" class="visually-hidden" id="search-modal-title">Search tests</label>
         <input type="text" class="search-modal-input" id="search-modal-input" placeholder="Search tests..." oninput="handleSearchInput(this.value)" aria-describedby="search-modal-hint">
         <span id="search-modal-hint" class="visually-hidden">Press Escape to close</span>
@@ -2857,7 +2858,10 @@ ${highContrastOverride}${customOverrides}
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      flex-shrink: 0;
+      flex-shrink: 1;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: 60%;
     }
 
     .test-item-duration {
@@ -4127,6 +4131,9 @@ ${highContrastOverride}${customOverrides}
     }
 
     .test-browser-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
       font-family: ${monoFont};
       font-size: 0.6rem;
       padding: 0.15rem 0.4rem;
@@ -4150,6 +4157,9 @@ ${highContrastOverride}${customOverrides}
     }
 
     .test-annotation-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
       font-family: ${monoFont};
       font-size: 0.6rem;
       padding: 0.15rem 0.4rem;
@@ -5296,6 +5306,9 @@ ${highContrastOverride}${customOverrides}
     }
 
     .gallery-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
       font-size: 1rem;
       font-weight: 600;
       color: var(--text-primary);
@@ -5308,6 +5321,9 @@ ${highContrastOverride}${customOverrides}
     }
 
     .gallery-filter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
       font-family: ${monoFont};
       font-size: 0.75rem;
       padding: 0.4rem 0.8rem;
@@ -5588,6 +5604,9 @@ ${highContrastOverride}${customOverrides}
     }
 
     .comparison-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       font-size: 1rem;
       font-weight: 600;
       color: var(--text-primary);
@@ -6830,7 +6849,7 @@ function generateScripts(
           viewHeader.appendChild(historyBanner);
         }
         historyBanner.innerHTML = \`
-          <span class="history-banner-icon">📅</span>
+          <span class="history-banner-icon">${icon('calendar')}</span>
           <span class="history-banner-text">Viewing run: <strong>\${label}</strong> — Each test shows this run's data. Use per-test history dots to compare.</span>
           <button class="history-banner-close" onclick="exitGlobalHistoricalView()">Back to Current Run</button>
         \`;
@@ -7017,13 +7036,13 @@ function generateScripts(
               </div>
               \${test.error ? \`
                 <div class="detail-section">
-                  <div class="detail-label"><span class="icon">⚠</span> Error</div>
+                  <div class="detail-label"><span class="icon">${icon('alert-triangle')}</span> Error</div>
                   <div class="error-box">\${escapeHtmlUnsafe(test.error)}</div>
                 </div>
               \` : ''}
               \${test.steps && test.steps.length > 0 ? \`
                 <div class="detail-section">
-                  <div class="detail-label"><span class="icon">⏱</span> Steps (\${test.steps.length})</div>
+                  <div class="detail-label"><span class="icon">${icon('clock')}</span> Steps (\${test.steps.length})</div>
                   <div class="steps-container">
                     \${test.steps.map(step => \`
                       <div class="step-row \${step.isSlowest ? 'slowest' : ''}">
@@ -7036,7 +7055,7 @@ function generateScripts(
               \` : ''}
               \${test.aiSuggestion ? \`
                 <div class="detail-section">
-                  <div class="detail-label"><span class="icon">🤖</span> AI Suggestion</div>
+                  <div class="detail-label"><span class="icon">${icon('bot')}</span> AI Suggestion</div>
                   <div class="ai-box">\${escapeHtmlUnsafe(test.aiSuggestion)}</div>
                 </div>
               \` : ''}
@@ -7638,8 +7657,8 @@ function generateScripts(
       const toast = document.createElement('div');
       toast.className = 'toast ' + type;
 
-      const icons = { success: '✓', error: '✗', info: 'ℹ' };
-      toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span><span class="toast-message">' + escapeHtmlUnsafe(message) + '</span>';
+      const toastIcons = { success: '${icon('check', 14)}', error: '${icon('x', 14)}', info: '${icon('info', 14)}' };
+      toast.innerHTML = '<span class="toast-icon">' + (toastIcons[type] || toastIcons.info) + '</span><span class="toast-message">' + escapeHtmlUnsafe(message) + '</span>';
 
       container.appendChild(toast);
 
@@ -7679,15 +7698,15 @@ function generateScripts(
     });
 
     const themeConfig = {
-      system:    { icon: '💻', label: 'System',    attr: null },
-      light:     { icon: '☀️', label: 'Light',     attr: 'light' },
-      dark:      { icon: '🌙', label: 'Dark',      attr: 'dark' },
-      ocean:     { icon: '🌊', label: 'Ocean',     attr: 'ocean' },
-      sunset:    { icon: '🌅', label: 'Sunset',    attr: 'sunset' },
-      dracula:   { icon: '🧛', label: 'Dracula',   attr: 'dracula' },
-      cyberpunk: { icon: '⚡', label: 'Cyberpunk', attr: 'cyberpunk' },
-      forest:    { icon: '🌲', label: 'Forest',    attr: 'forest' },
-      rose:      { icon: '🌹', label: 'Rose',      attr: 'rose' },
+      system:    { icon: '${icon('monitor')}', label: 'System',    attr: null },
+      light:     { icon: '${icon('sun')}', label: 'Light',     attr: 'light' },
+      dark:      { icon: '${icon('moon')}', label: 'Dark',      attr: 'dark' },
+      ocean:     { icon: '${icon('waves')}', label: 'Ocean',     attr: 'ocean' },
+      sunset:    { icon: '${icon('sunset')}', label: 'Sunset',    attr: 'sunset' },
+      dracula:   { icon: '${icon('moon')}', label: 'Dracula',   attr: 'dracula' },
+      cyberpunk: { icon: '${icon('zap')}', label: 'Cyberpunk', attr: 'cyberpunk' },
+      forest:    { icon: '${icon('tree-pine')}', label: 'Forest',    attr: 'forest' },
+      rose:      { icon: '${icon('flower-2')}', label: 'Rose',      attr: 'rose' },
     };
 
     function setTheme(theme) {
@@ -7705,7 +7724,7 @@ function generateScripts(
       } else {
         root.removeAttribute('data-theme');
       }
-      if (icon) icon.textContent = cfg.icon;
+      if (icon) icon.innerHTML = cfg.icon;
       if (label) label.textContent = cfg.label;
       localStorage.setItem('theme', theme);
       showToast(cfg.attr ? cfg.label + ' theme' : 'Using system theme', 'info');
@@ -7726,7 +7745,7 @@ function generateScripts(
       if (cfg.attr) {
         document.documentElement.setAttribute('data-theme', cfg.attr);
       }
-      if (icon) icon.textContent = cfg.icon;
+      if (icon) icon.innerHTML = cfg.icon;
       if (label) label.textContent = cfg.label;
     })();
 
@@ -7777,7 +7796,7 @@ function generateScripts(
 	        }).join('');
         parts.push(
           '<div class="detail-section">' +
-            '<div class="detail-label"><span class="icon">⏱</span> Step Timings</div>' +
+            '<div class="detail-label"><span class="icon">${icon('clock')}</span> Step Timings</div>' +
             '<div class="steps-container">' + rows + '</div>' +
 	          '</div>'
 	        );
@@ -7786,7 +7805,7 @@ function generateScripts(
 	      if (snapshot.error) {
 	        parts.push(
 	          '<div class="detail-section">' +
-	            '<div class="detail-label"><span class="icon">⚠</span> Error</div>' +
+	            '<div class="detail-label"><span class="icon">${icon('alert-triangle')}</span> Error</div>' +
 	            '<div class="error-box">' + escapeHtmlUnsafe(snapshot.error) + '</div>' +
 	          '</div>'
 	        );
@@ -7796,7 +7815,7 @@ function generateScripts(
 	        const first = snapshot.attachments.screenshots[0];
 	        parts.push(
 	          '<div class="detail-section">' +
-            '<div class="detail-label"><span class="icon">📸</span> Screenshot</div>' +
+            '<div class="detail-label"><span class="icon">${icon('camera')}</span> Screenshot</div>' +
             '<div class="screenshot-box">' +
               '<img src="' + escapeHtmlUnsafe(first) + '" alt="Screenshot" onclick="window.open(this.src, \\'_blank\\')" onerror="this.style.display=\\'none\\'; this.nextElementSibling.style.display=\\'flex\\';"/>' +
               '<div class="screenshot-fallback" style="display:none;">' +
@@ -7811,9 +7830,9 @@ function generateScripts(
       if (snapshot.attachments && snapshot.attachments.videos && snapshot.attachments.videos.length > 0) {
         parts.push(
           '<div class="detail-section">' +
-            '<div class="detail-label"><span class="icon">📎</span> Attachments</div>' +
+            '<div class="detail-label"><span class="icon">${icon('paperclip')}</span> Attachments</div>' +
             '<div class="attachments">' +
-              '<a href="file://' + escapeHtmlUnsafe(snapshot.attachments.videos[0]) + '" class="attachment-link" target="_blank">🎬 Video</a>' +
+              '<a href="file://' + escapeHtmlUnsafe(snapshot.attachments.videos[0]) + '" class="attachment-link" target="_blank">${icon('film')} Video</a>' +
             '</div>' +
           '</div>'
         );
@@ -7825,7 +7844,7 @@ function generateScripts(
 	          : escapeHtmlUnsafe(snapshot.aiSuggestion);
 	        parts.push(
 	          '<div class="detail-section">' +
-	            '<div class="detail-label"><span class="icon">🤖</span> AI Suggestion</div>' +
+	            '<div class="detail-label"><span class="icon">${icon('bot')}</span> AI Suggestion</div>' +
 	            '<div class="ai-box ai-markdown">' + aiHtml + '</div>' +
 	          '</div>'
 	        );

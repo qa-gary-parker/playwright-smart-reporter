@@ -5,6 +5,7 @@
 import type { TestResultData, TestHistory, RunSummary } from '../types';
 import { formatDuration, formatShortDate } from '../utils';
 import { escapeHtml } from '../utils/sanitizers';
+import { icon } from './icon-provider';
 
 export interface ChartData {
   results: TestResultData[];
@@ -22,11 +23,11 @@ export function generateTrendChart(data: ChartData): string {
     return `
       <div class="trend-section">
         <div class="trend-header">
-          <div class="trend-title">📊 Test Run Trends</div>
+          <div class="trend-title">${icon('bar-chart-2')} Test Run Trends</div>
           <div class="trend-subtitle">Collecting data...</div>
         </div>
         <div class="trend-message">
-          <p>📈 <strong>Trends will appear after 2+ test runs.</strong></p>
+          <p>${icon('trending-up')} <strong>Trends will appear after 2+ test runs.</strong></p>
           <p>Run your tests again to start seeing historical trends, pass rates, and performance patterns.</p>
           <p style="font-size: 0.85em; opacity: 0.7;">Make sure your <code>historyFile</code> option points to a persistent location.</p>
         </div>
@@ -129,7 +130,7 @@ export function generateTrendChart(data: ChartData): string {
       const isAnomaly = anomalies[i];
 
       return `
-        <g class="bar-group${clickable ? ' clickable' : ''}" data-tooltip="${label}: ${displayValue}${isAnomaly ? ' ⚠ Anomaly' : ''}" ${clickable ? `data-runid="${escapeHtml(runId)}" onclick="loadHistoricalRun('${safeRunId}', '${label}')"` : ''}>
+        <g class="bar-group${clickable ? ' clickable' : ''}" data-tooltip="${label}: ${displayValue}${isAnomaly ? ' Anomaly' : ''}" ${clickable ? `data-runid="${escapeHtml(runId)}" onclick="loadHistoricalRun('${safeRunId}', '${label}')"` : ''}>
           <rect
             x="${x}"
             y="${y}"
@@ -234,8 +235,8 @@ export function generateTrendChart(data: ChartData): string {
     <div id="trends-section" class="trend-section collapsible-section">
       <div class="trend-header" onclick="toggleSection('trends-section')">
         <div style="display: flex; align-items: center;">
-          <div class="trend-title">📊 Test Run Trends</div>
-          <span class="section-toggle">▼</span>
+          <div class="trend-title">${icon('bar-chart-2')} Test Run Trends</div>
+          <span class="section-toggle">${icon('chevron-down', 14)}</span>
         </div>
         <div class="trend-subtitle">Last ${allSummaries.length} runs</div>
       </div>
@@ -243,19 +244,19 @@ export function generateTrendChart(data: ChartData): string {
       <!-- All Charts in Grid -->
       <div class="section-content all-charts-grid">
         <div class="line-chart-container">
-          <h4 class="chart-title">✅ Pass Rate</h4>
+          <h4 class="chart-title">${icon('check-circle')} Pass Rate</h4>
           ${passRateChart}
         </div>
         <div class="line-chart-container">
-          <h4 class="chart-title">⏱️ Duration</h4>
+          <h4 class="chart-title">${icon('clock')} Duration</h4>
           ${durationChart}
         </div>
         <div class="line-chart-container">
-          <h4 class="chart-title">🟡 Flaky Tests</h4>
+          <h4 class="chart-title">${icon('shuffle')} Flaky Tests</h4>
           ${flakyChart}
         </div>
         <div class="line-chart-container">
-          <h4 class="chart-title">🐢 Slow Tests</h4>
+          <h4 class="chart-title">${icon('hourglass')} Slow Tests</h4>
           ${slowChart}
         </div>
       </div>

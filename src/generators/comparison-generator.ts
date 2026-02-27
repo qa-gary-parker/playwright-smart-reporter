@@ -5,6 +5,7 @@
 
 import type { RunComparison, RunSummary, TestResultData, ComparisonChanges } from '../types';
 import { formatDuration, escapeHtml, sanitizeId } from '../utils';
+import { icon } from './icon-provider';
 
 /**
  * Generate comparison view between current and baseline runs
@@ -22,7 +23,7 @@ export function generateComparison(comparison: RunComparison): string {
   return `
     <div class="comparison-section">
       <div class="comparison-header">
-        <div class="comparison-title">🔄 Run Comparison</div>
+        <div class="comparison-title">${icon('refresh-cw')} Run Comparison</div>
         <div class="comparison-subtitle">
           Baseline: ${new Date(baselineRun.timestamp).toLocaleDateString()} vs Current
         </div>
@@ -73,11 +74,11 @@ export function generateComparison(comparison: RunComparison): string {
 
       <!-- Change Details -->
       <div class="comparison-details">
-        ${generateComparisonSection('🆕 New Failures', changes.newFailures, 'failure')}
-        ${generateComparisonSection('✅ Fixed Tests', changes.fixedTests, 'fixed')}
-        ${generateComparisonSection('🐢 Performance Regressions', changes.regressions, 'regression')}
-        ${generateComparisonSection('⚡ Performance Improvements', changes.improvements, 'improvement')}
-        ${generateComparisonSection('📝 New Tests', changes.newTests, 'new')}
+        ${generateComparisonSection(`${icon('x-circle')} New Failures`, changes.newFailures, 'failure')}
+        ${generateComparisonSection(`${icon('check-circle')} Fixed Tests`, changes.fixedTests, 'fixed')}
+        ${generateComparisonSection(`${icon('hourglass')} Performance Regressions`, changes.regressions, 'regression')}
+        ${generateComparisonSection(`${icon('zap')} Performance Improvements`, changes.improvements, 'improvement')}
+        ${generateComparisonSection(`${icon('pencil')} New Tests`, changes.newTests, 'new')}
       </div>
     </div>
   `;
@@ -185,10 +186,10 @@ export function generateComparisonScript(): string {
 
       if (section.style.display === 'none') {
         section.style.display = 'block';
-        icon.textContent = '▼';
+        icon.innerHTML = '${icon('chevron-down', 14)}';
       } else {
         section.style.display = 'none';
-        icon.textContent = '▶';
+        icon.innerHTML = '${icon('chevron-right', 14)}';
       }
     }
   `;

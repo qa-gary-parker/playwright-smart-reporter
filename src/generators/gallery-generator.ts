@@ -5,6 +5,7 @@
 
 import type { TestResultData, GalleryItem } from '../types';
 import { escapeHtml, sanitizeId } from '../utils';
+import { icon } from './icon-provider';
 
 /**
  * Generate gallery view of all attachments
@@ -23,24 +24,24 @@ export function generateGallery(results: TestResultData[]): string {
   return `
     <div class="gallery-section">
       <div class="gallery-header">
-        <div class="gallery-title">🖼️ Attachments Gallery</div>
+        <div class="gallery-title">${icon('image')} Attachments Gallery</div>
         <div class="gallery-filters">
           <button class="gallery-filter-btn active" data-type="all" onclick="filterGallery('all')">
             All (${galleryItems.length})
           </button>
           ${screenshots.length > 0 ? `
             <button class="gallery-filter-btn" data-type="screenshots" onclick="filterGallery('screenshots')">
-              📸 Screenshots (${screenshots.length})
+              ${icon('camera')} Screenshots (${screenshots.length})
             </button>
           ` : ''}
           ${videos.length > 0 ? `
             <button class="gallery-filter-btn" data-type="videos" onclick="filterGallery('videos')">
-              🎬 Videos (${videos.length})
+              ${icon('film')} Videos (${videos.length})
             </button>
           ` : ''}
           ${traces.length > 0 ? `
             <button class="gallery-filter-btn" data-type="traces" onclick="filterGallery('traces')">
-              🔍 Traces (${traces.length})
+              ${icon('search')} Traces (${traces.length})
             </button>
           ` : ''}
         </div>
@@ -60,8 +61,8 @@ export function generateGallery(results: TestResultData[]): string {
           <div class="lightbox-status" id="lightbox-status"></div>
         </div>
         <div class="lightbox-nav">
-          <button class="lightbox-prev" onclick="navigateLightbox(-1)">❮</button>
-          <button class="lightbox-next" onclick="navigateLightbox(1)">❯</button>
+          <button class="lightbox-prev" onclick="navigateLightbox(-1)">${icon('chevron-left', 20)}</button>
+          <button class="lightbox-next" onclick="navigateLightbox(1)">${icon('chevron-right', 20)}</button>
         </div>
       </div>
     </div>
@@ -82,12 +83,12 @@ function generateGalleryItem(item: GalleryItem): string {
         <div class="gallery-item-preview">
           <img src="${item.dataUri}" alt="${escapeHtml(item.testTitle)}" loading="lazy" onerror="this.style.display='none'; var fb=this.nextElementSibling; fb.style.display='flex'; fb.nextElementSibling.style.display='none';"/>
           <div class="gallery-fallback" style="display:none;">
-            <span class="gallery-item-icon">📸</span>
+            <span class="gallery-item-icon">${icon('camera', 20)}</span>
             <span>Blocked</span>
             <a href="${item.dataUri}" download class="download-btn-small" onclick="event.stopPropagation();">Download</a>
           </div>
           <div class="gallery-item-overlay">
-            <span class="gallery-item-icon">📸</span>
+            <span class="gallery-item-icon">${icon('camera', 20)}</span>
           </div>
         </div>
         <div class="gallery-item-info">
@@ -104,7 +105,7 @@ function generateGalleryItem(item: GalleryItem): string {
       <div class="gallery-item" data-type="videos" data-id="${itemId}">
         <div class="gallery-item-preview video-preview">
           <div class="gallery-item-overlay">
-            <span class="gallery-item-icon">🎬</span>
+            <span class="gallery-item-icon">${icon('film', 20)}</span>
           </div>
         </div>
         <div class="gallery-item-info">
@@ -125,7 +126,7 @@ function generateGalleryItem(item: GalleryItem): string {
         <div class="gallery-item-preview trace-preview">
           <div class="gallery-item-overlay">
             <div class="trace-icon-wrapper">
-              <span class="trace-file-icon">📊</span>
+              <span class="trace-file-icon">${icon('bar-chart-2', 20)}</span>
               <span class="trace-file-type">.zip</span>
             </div>
           </div>
@@ -134,7 +135,7 @@ function generateGalleryItem(item: GalleryItem): string {
           <div class="gallery-item-title" title="${escapeHtml(item.testTitle)}">${escapeHtml(item.testTitle)}</div>
           <div class="gallery-item-status ${statusClass}">${item.status}</div>
           <a href="${item.tracePath}" class="gallery-trace-download" download onclick="event.stopPropagation()">
-            <span class="download-icon">⬇</span>
+            <span class="download-icon">${icon('download')}</span>
             <span>Download Trace</span>
           </a>
         </div>
