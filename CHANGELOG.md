@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-02-28
+
+### Added
+
+- **Smooth area curves with gradient fills** on Trends tab — replaces flat bar charts with modern area visualisations matching the Overview sparkline style
+- **Chart display toggles** — global "3-run avg" and "Bars" buttons in the Trends header let teams switch between area curves and bar charts, and show/hide the moving average line
+- **Smooth moving average line** — the 3-run average now uses monotone cubic interpolation instead of straight-segment polylines
+
+### Changed
+
+- Moving average line colour changed from yellow (`#ffcc00`) to sky blue (`#38bdf8`) to avoid collision with the Flaky Tests chart colour
+- Overview sparklines (Quality Gates, Quarantine) now include the current run as the rightmost data point, matching the Trends tab data exactly
+- Overview sparklines now use fixed y-axis scaling (0–100 for pass rate, 0–max for flaky count) to match Trends chart proportions
+- Anomaly markers simplified to red dots only (removed dashed bar stroke)
+
+### Fixed
+
+- Defensive `?? 0` for `s.flaky` in sparkline data to prevent `NaN` from legacy history files missing the flaky field
+- Trend controls now correctly hide when the Trends section is collapsed
+
+### Removed
+
+- Dead `.chart-bar-anomaly` CSS class (no longer referenced after anomaly marker simplification)
+
 ## [1.3.0] - 2026-02-26
 
 ### Added

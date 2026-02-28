@@ -95,7 +95,8 @@ export function generateTrendChart(data: ChartData): string {
     color: string,
     yAxisLabel: string,
     formatValue?: (val: number) => string,
-    avgColor: string = '#ffcc00'
+    avgColor: string = '#38bdf8',
+    gradientId: string = 'trendGrad'
   ): string => {
     const barWidth = Math.min(40, plotWidth / chartData.length - 4);
     const spacing = plotWidth / chartData.length;
@@ -115,8 +116,65 @@ export function generateTrendChart(data: ChartData): string {
       `;
     }).join('');
 
-    // Generate bars with tooltips and anomaly markers
-    const bars = chartData.map((d, i) => {
+    // Compute area curve points (center of each bar)
+    const curvePoints: [number, number][] = chartData.map((d, i) => {
+      const value = getValue(d);
+      const cx = padding.left + i * spacing + spacing / 2;
+      const cy = padding.top + plotHeight - (value / maxValue) * plotHeight;
+      return [cx, cy];
+    });
+
+    // Build smooth area curve (monotone cubic interpolation) — needs 2+ points
+    let areaSvg = '';
+    const n = curvePoints.length;
+    if (n >= 2) {
+      const tangents: [number, number][] = curvePoints.map((_, i) => {
+        if (i === 0) return [curvePoints[1][0] - curvePoints[0][0], curvePoints[1][1] - curvePoints[0][1]];
+        if (i === n - 1) return [curvePoints[n - 1][0] - curvePoints[n - 2][0], curvePoints[n - 1][1] - curvePoints[n - 2][1]];
+        return [(curvePoints[i + 1][0] - curvePoints[i - 1][0]) / 2, (curvePoints[i + 1][1] - curvePoints[i - 1][1]) / 2];
+      });
+
+      let linePath = `M${curvePoints[0][0].toFixed(1)},${curvePoints[0][1].toFixed(1)}`;
+      for (let i = 0; i < n - 1; i++) {
+        const p0 = curvePoints[i], p1 = curvePoints[i + 1];
+        const t0 = tangents[i], t1 = tangents[i + 1];
+        const cp1x = p0[0] + t0[0] / 3;
+        const cp1y = p0[1] + t0[1] / 3;
+        const cp2x = p1[0] - t1[0] / 3;
+        const cp2y = p1[1] - t1[1] / 3;
+        linePath += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p1[0].toFixed(1)},${p1[1].toFixed(1)}`;
+      }
+
+      const baseline = padding.top + plotHeight;
+      const areaPath = `${linePath} L${curvePoints[n - 1][0].toFixed(1)},${baseline} L${curvePoints[0][0].toFixed(1)},${baseline} Z`;
+
+      areaSvg = `
+        <path d="${areaPath}" fill="url(#${gradientId})" />
+        <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4" />`;
+    }
+
+    // Generate visible bars (shown when bar mode active)
+    const visibleBars = chartData.map((d, i) => {
+      const value = getValue(d);
+      const x = (padding.left + i * spacing + (spacing - barWidth) / 2).toFixed(1);
+      const barHeight = ((value / maxValue) * plotHeight).toFixed(1);
+      const y = (padding.top + plotHeight - parseFloat(barHeight)).toFixed(1);
+      const isCurrent = i === chartData.length - 1;
+
+      return `
+          <rect
+            x="${x}" y="${y}"
+            width="${barWidth.toFixed(1)}" height="${barHeight}"
+            fill="${color}"
+            opacity="${isCurrent ? '0.5' : '0.4'}"
+            stroke="${isCurrent ? 'var(--text-primary)' : 'none'}"
+            stroke-width="${isCurrent ? '1' : '0'}"
+            rx="3"
+          />`;
+    }).join('');
+
+    // Generate invisible hit-target bars (always present for tooltips + click)
+    const hitBars = chartData.map((d, i) => {
       const value = getValue(d);
       const x = (padding.left + i * spacing + (spacing - barWidth) / 2).toFixed(1);
       const barHeight = ((value / maxValue) * plotHeight).toFixed(1);
@@ -132,17 +190,10 @@ export function generateTrendChart(data: ChartData): string {
       return `
         <g class="bar-group${clickable ? ' clickable' : ''}" data-tooltip="${label}: ${displayValue}${isAnomaly ? ' Anomaly' : ''}" ${clickable ? `data-runid="${escapeHtml(runId)}" onclick="loadHistoricalRun('${safeRunId}', '${label}')"` : ''}>
           <rect
-            x="${x}"
-            y="${y}"
-            width="${barWidth.toFixed(1)}"
-            height="${barHeight}"
-            fill="${color}"
-            opacity="${isCurrent ? '1' : '0.85'}"
-            stroke="${isAnomaly ? 'var(--accent-red)' : isCurrent ? 'var(--text-primary)' : 'none'}"
-            stroke-width="${isAnomaly || isCurrent ? '2' : '0'}"
-            ${isAnomaly ? 'stroke-dasharray="4 2"' : ''}
-            rx="3"
-            class="chart-bar${clickable ? ' chart-bar-clickable' : ''}${isAnomaly ? ' chart-bar-anomaly' : ''}"
+            x="${x}" y="${y}"
+            width="${barWidth.toFixed(1)}" height="${barHeight}"
+            fill="transparent"
+            class="chart-bar${clickable ? ' chart-bar-clickable' : ''}"
             style="${clickable ? 'cursor: pointer;' : ''}"
           />
           ${isAnomaly ? `<circle cx="${(parseFloat(x) + barWidth / 2).toFixed(1)}" cy="${(parseFloat(y) - 6).toFixed(1)}" r="4" class="chart-anomaly-marker" fill="var(--accent-red)"/>` : ''}
@@ -150,17 +201,33 @@ export function generateTrendChart(data: ChartData): string {
       `;
     }).join('');
 
-    // Generate moving average line
-    const avgPoints = avgValues.map((val, i) => {
-      if (val === null) return null;
-      const x = (padding.left + i * spacing + spacing / 2).toFixed(1);
-      const y = (padding.top + plotHeight - (val / maxValue) * plotHeight).toFixed(1);
-      return `${x},${y}`;
-    }).filter(Boolean);
+    // Generate smooth moving average line (monotone cubic interpolation)
+    const avgPointPairs: [number, number][] = [];
+    avgValues.forEach((val, i) => {
+      if (val === null) return;
+      const ax = padding.left + i * spacing + spacing / 2;
+      const ay = padding.top + plotHeight - (val / maxValue) * plotHeight;
+      avgPointPairs.push([ax, ay]);
+    });
 
-    const avgLine = avgPoints.length >= 2
-      ? `<polyline points="${avgPoints.join(' ')}" class="trend-moving-avg" stroke="${avgColor}" /><text class="trend-avg-label" x="${padding.left + plotWidth - 5}" y="${padding.top + 10}" text-anchor="end">3-run avg</text>`
-      : '';
+    let avgLine = '';
+    const an = avgPointPairs.length;
+    if (an >= 2) {
+      const at: [number, number][] = avgPointPairs.map((_, i) => {
+        if (i === 0) return [avgPointPairs[1][0] - avgPointPairs[0][0], avgPointPairs[1][1] - avgPointPairs[0][1]];
+        if (i === an - 1) return [avgPointPairs[an - 1][0] - avgPointPairs[an - 2][0], avgPointPairs[an - 1][1] - avgPointPairs[an - 2][1]];
+        return [(avgPointPairs[i + 1][0] - avgPointPairs[i - 1][0]) / 2, (avgPointPairs[i + 1][1] - avgPointPairs[i - 1][1]) / 2];
+      });
+
+      let avgPath = `M${avgPointPairs[0][0].toFixed(1)},${avgPointPairs[0][1].toFixed(1)}`;
+      for (let i = 0; i < an - 1; i++) {
+        const p0 = avgPointPairs[i], p1 = avgPointPairs[i + 1];
+        const t0 = at[i], t1 = at[i + 1];
+        avgPath += ` C${(p0[0] + t0[0] / 3).toFixed(1)},${(p0[1] + t0[1] / 3).toFixed(1)} ${(p1[0] - t1[0] / 3).toFixed(1)},${(p1[1] - t1[1] / 3).toFixed(1)} ${p1[0].toFixed(1)},${p1[1].toFixed(1)}`;
+      }
+
+      avgLine = `<path d="${avgPath}" class="trend-moving-avg" stroke="${avgColor}" fill="none" /><text class="trend-avg-label" x="${padding.left + plotWidth - 5}" y="${padding.top + 10}" text-anchor="end">3-run avg</text>`;
+    }
 
     // Generate x-axis labels
     const xLabels = chartData.map((d, i) => {
@@ -172,17 +239,36 @@ export function generateTrendChart(data: ChartData): string {
 
     return `
       <svg viewBox="0 0 ${chartWidth} ${chartHeight}" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: auto; overflow: visible;" class="chart-svg">
+        <defs>
+          <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.03"/>
+          </linearGradient>
+        </defs>
+
         <!-- Y-axis label -->
         <text x="12" y="${chartHeight / 2}" fill="var(--text-secondary)" font-size="11" font-weight="600" text-anchor="middle" transform="rotate(-90, 12, ${chartHeight / 2})">${yAxisLabel}</text>
 
         <!-- Grid lines and y-axis labels -->
         ${yGridLines}
 
-        <!-- Bars -->
-        ${bars}
+        <!-- Area curve (visible in area mode) -->
+        <g class="chart-layer-area">
+          ${areaSvg}
+        </g>
 
-        <!-- Moving average line -->
-        ${avgLine}
+        <!-- Visible bars (hidden in area mode, shown in bar mode) -->
+        <g class="chart-layer-bars" style="display: none;">
+          ${visibleBars}
+        </g>
+
+        <!-- Invisible hit-target bars (always present) -->
+        ${hitBars}
+
+        <!-- Moving average line (hidden by default) -->
+        <g class="chart-layer-avg" style="display: none;">
+          ${avgLine}
+        </g>
 
         <!-- X-axis labels -->
         ${xLabels}
@@ -200,7 +286,9 @@ export function generateTrendChart(data: ChartData): string {
     100,
     '#22c55e',
     'Pass Rate (%)',
-    (val) => `${val}%`
+    (val) => `${val}%`,
+    '#38bdf8',
+    'trendGrad-passrate'
   );
 
   // Generate duration bar chart
@@ -210,7 +298,9 @@ export function generateTrendChart(data: ChartData): string {
     Math.ceil(maxDuration / 1000),
     '#a855f7',
     'Duration (s)',
-    (val) => `${val}s`
+    (val) => `${val}s`,
+    '#38bdf8',
+    'trendGrad-duration'
   );
 
   // Generate flaky tests bar chart
@@ -219,7 +309,10 @@ export function generateTrendChart(data: ChartData): string {
     (s) => s.flaky || 0,
     maxFlaky,
     '#eab308',
-    'Flaky Tests'
+    'Flaky Tests',
+    undefined,
+    '#38bdf8',
+    'trendGrad-flaky'
   );
 
   // Generate slow tests bar chart
@@ -228,7 +321,10 @@ export function generateTrendChart(data: ChartData): string {
     (s) => s.slow || 0,
     maxSlow,
     '#f97316',
-    'Slow Tests'
+    'Slow Tests',
+    undefined,
+    '#38bdf8',
+    'trendGrad-slow'
   );
 
   return `
@@ -239,6 +335,10 @@ export function generateTrendChart(data: ChartData): string {
           <span class="section-toggle">${icon('chevron-down', 14)}</span>
         </div>
         <div class="trend-subtitle">Last ${allSummaries.length} runs</div>
+      </div>
+      <div class="trend-controls" onclick="event.stopPropagation()">
+        <button class="chart-toggle-btn" onclick="toggleAllAvg(this)" title="Toggle 3-run average on all charts">${icon('trending-up', 12)} <span>3-run avg</span></button>
+        <button class="chart-toggle-btn" onclick="toggleAllMode(this)" title="Switch all charts to bar view">${icon('bar-chart-2', 12)} <span>Bars</span></button>
       </div>
 
       <!-- All Charts in Grid -->

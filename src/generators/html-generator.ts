@@ -144,6 +144,63 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
 }
 
 /**
+ * Generate a background SVG area sparkline with gradient fill.
+ * Positioned absolutely behind card content as a subtle visual.
+ * Returns empty string if fewer than 2 data points.
+ */
+function generateSparkline(values: number[], color: string, gradientId: string, fixedMin?: number, fixedMax?: number): string {
+  if (values.length < 2) return '';
+
+  const W = 200;
+  const H = 60;
+  const padX = 0;
+  const padTop = 10;
+  const padBottom = 8;
+  const n = values.length;
+  const min = fixedMin ?? Math.min(...values);
+  const max = fixedMax ?? Math.max(...values);
+  const range = max - min || 1;
+
+  const points: [number, number][] = values.map((v, i) => [
+    padX + (i / (n - 1)) * (W - 2 * padX),
+    (H - padBottom) - ((v - min) / range) * (H - padTop - padBottom),
+  ]);
+
+  // Monotone cubic interpolation — compute tangents
+  const tangents: [number, number][] = points.map((_, i) => {
+    if (i === 0) return [points[1][0] - points[0][0], points[1][1] - points[0][1]];
+    if (i === n - 1) return [points[n - 1][0] - points[n - 2][0], points[n - 1][1] - points[n - 2][1]];
+    return [(points[i + 1][0] - points[i - 1][0]) / 2, (points[i + 1][1] - points[i - 1][1]) / 2];
+  });
+
+  // Build cubic bezier path segments
+  let linePath = `M${points[0][0].toFixed(1)},${points[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = points[i], p1 = points[i + 1];
+    const t0 = tangents[i], t1 = tangents[i + 1];
+    const cp1x = p0[0] + t0[0] / 3;
+    const cp1y = p0[1] + t0[1] / 3;
+    const cp2x = p1[0] - t1[0] / 3;
+    const cp2y = p1[1] - t1[1] / 3;
+    linePath += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p1[0].toFixed(1)},${p1[1].toFixed(1)}`;
+  }
+
+  const areaPath = `${linePath} L${points[n - 1][0].toFixed(1)},${H} L${points[0][0].toFixed(1)},${H} Z`;
+
+  return `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="sparkline-bg">
+        <defs>
+          <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.03"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaPath}" fill="url(#${gradientId})" />
+        <path d="${linePath}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4" />
+      </svg>`;
+}
+
+/**
  * Generate the Overview content with executive summary
  */
 function generateOverviewContent(
@@ -192,11 +249,14 @@ function generateOverviewContent(
   const slowestTest = [...results].sort((a, b) => b.duration - a.duration)[0];
   const mostFlakyTest = [...results].filter(r => r.flakinessScore !== undefined).sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0))[0];
 
-  // Pass rate sparkline from history
-  const passRateHistory = (history.summaries ?? []).slice(-10).map(s => {
-    const rate = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
-    return { rate, passed: s.passed, failed: s.failed };
-  });
+  // Pass rate sparkline from history + current run
+  const passRateHistory = [
+    ...(history.summaries ?? []).slice(-10).map(s => {
+      const rate = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
+      return { rate, passed: s.passed, failed: s.failed };
+    }),
+    { rate: passRate, passed, failed },
+  ];
 
   // Generate failure clusters section
   const clustersHtml = (failureClusters && failureClusters.length > 0) ? `
@@ -286,6 +346,7 @@ function generateOverviewContent(
   const qualityGatesHtml = qualityGateResult ? `
     <div class="overview-section quality-gate-section">
       <div class="quality-gate-card ${qualityGateResult.passed ? 'gate-passed' : 'gate-failed'}">
+        ${generateSparkline(passRateHistory.map(h => h.rate), '#22c55e', 'sparkGradGate', 0, 100)}
         <div class="gate-header">
           <div class="gate-title-row">
             <span class="section-icon">${icon('gauge')}</span>
@@ -323,11 +384,19 @@ function generateOverviewContent(
     </div>
   ` : '');
 
+  // Flaky count sparkline from history + current run
+  const flakyCountHistory = [
+    ...(history.summaries ?? []).slice(-10).map(s => s.flaky ?? 0),
+    flaky,
+  ];
+  const maxFlakyCount = Math.max(...flakyCountHistory, 1);
+
   // Quarantine card
   const quarantineCount = quarantineEntries?.length ?? 0;
   const quarantineHtml = quarantineCount > 0 ? `
     <div class="overview-section quarantine-section">
       <div class="quarantine-card">
+        ${generateSparkline(flakyCountHistory, '#eab308', 'sparkGradQuarantine', 0, maxFlakyCount)}
         <div class="quarantine-header">
           <div class="quarantine-title-row">
             <span class="section-icon">${icon('lock')}</span>
@@ -3215,7 +3284,8 @@ ${highContrastOverride}${customOverrides}
       transform: rotate(-90deg);
     }
 
-    .collapsible-section.collapsed .section-content {
+    .collapsible-section.collapsed .section-content,
+    .collapsible-section.collapsed .trend-controls {
       display: none;
     }
 
@@ -4237,6 +4307,8 @@ ${highContrastOverride}${customOverrides}
       border-radius: 12px;
       padding: 1rem 1.25rem;
       border-left: 4px solid var(--border-subtle);
+      position: relative;
+      overflow: hidden;
     }
     .quality-gate-card.gate-passed { border-left-color: var(--accent-green); }
     .quality-gate-card.gate-failed { border-left-color: var(--accent-red); }
@@ -4250,6 +4322,7 @@ ${highContrastOverride}${customOverrides}
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.75rem;
+      position: relative;
     }
     .gate-title-row {
       display: flex;
@@ -4273,7 +4346,7 @@ ${highContrastOverride}${customOverrides}
     .gate-status-passed { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
     .gate-status-failed { background: rgba(255, 68, 102, 0.15); color: var(--accent-red); }
 
-    .gate-rules { display: flex; flex-direction: column; gap: 0.35rem; }
+    .gate-rules { display: flex; flex-direction: column; gap: 0.35rem; position: relative; }
     .gate-rule-row {
       display: flex;
       align-items: center;
@@ -4289,6 +4362,16 @@ ${highContrastOverride}${customOverrides}
     .gate-rule-name { flex: 1; }
     .gate-rule-values { color: var(--text-muted); white-space: nowrap; }
 
+    /* Background sparkline charts */
+    .sparkline-bg {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 60%;
+      pointer-events: none;
+    }
+
     .gate-placeholder-desc {
       font-size: 0.8rem;
       color: var(--text-muted);
@@ -4303,6 +4386,8 @@ ${highContrastOverride}${customOverrides}
       border-radius: 12px;
       padding: 1rem 1.25rem;
       border-left: 4px solid rgba(245, 158, 11, 0.6);
+      position: relative;
+      overflow: hidden;
     }
     .quarantine-card.pro-feature-placeholder {
       opacity: 0.4;
@@ -4314,6 +4399,7 @@ ${highContrastOverride}${customOverrides}
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.5rem;
+      position: relative;
     }
     .quarantine-title-row {
       display: flex;
@@ -4337,7 +4423,7 @@ ${highContrastOverride}${customOverrides}
       color: var(--text-muted);
       margin-bottom: 0.5rem;
     }
-    .quarantine-entries { display: flex; flex-direction: column; gap: 0.25rem; }
+    .quarantine-entries { display: flex; flex-direction: column; gap: 0.25rem; position: relative; }
     .quarantine-entry {
       display: flex;
       justify-content: space-between;
@@ -6424,15 +6510,40 @@ ${highContrastOverride}${customOverrides}
       stroke-width: 2;
       fill: none;
     }
-    .chart-bar-anomaly {
-      stroke: var(--accent-red) !important;
-      stroke-width: 2 !important;
-      stroke-dasharray: 4 2;
-    }
     .trend-avg-label {
       font-size: 9px;
       fill: var(--accent-yellow);
       font-style: italic;
+    }
+    .trend-controls {
+      display: flex;
+      gap: 6px;
+      padding: 0 1rem 0.5rem;
+    }
+    .trend-controls .chart-toggle-btn span {
+      font-size: 11px;
+      margin-left: 4px;
+    }
+    .chart-toggle-btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 3px 6px;
+      cursor: pointer;
+      opacity: 0.4;
+      transition: opacity 0.2s ease, background 0.2s ease;
+      display: flex;
+      align-items: center;
+      color: var(--text-muted);
+    }
+    .chart-toggle-btn:hover {
+      opacity: 0.7;
+    }
+    .chart-toggle-btn.active {
+      opacity: 1;
+      background: var(--bg-tertiary);
+      border-color: var(--text-muted);
+      color: var(--text-secondary);
     }
 
     /* ============================================
@@ -7545,6 +7656,29 @@ function generateScripts(
       if (section) {
         section.classList.toggle('collapsed');
       }
+    }
+
+    function toggleAllAvg(btn) {
+      btn.classList.toggle('active');
+      var show = btn.classList.contains('active');
+      var section = document.getElementById('trends-section');
+      if (!section) return;
+      section.querySelectorAll('.chart-layer-avg').forEach(function(el) {
+        el.style.display = show ? '' : 'none';
+      });
+    }
+
+    function toggleAllMode(btn) {
+      btn.classList.toggle('active');
+      var showBars = btn.classList.contains('active');
+      var section = document.getElementById('trends-section');
+      if (!section) return;
+      section.querySelectorAll('.chart-layer-area').forEach(function(el) {
+        el.style.display = showBars ? 'none' : '';
+      });
+      section.querySelectorAll('.chart-layer-bars').forEach(function(el) {
+        el.style.display = showBars ? '' : 'none';
+      });
     }
 
     function toggleNetworkEntry(entryId) {
