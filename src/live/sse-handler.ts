@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 export interface SseClient {
   write(data: string): boolean;
@@ -16,6 +17,7 @@ export function buildSseHandler(jsonlPath: string): SseHandler {
   const clients: Set<SseClient> = new Set();
   let lastOffset = 0;
   let watcher: fs.FSWatcher | null = null;
+  let dirWatcher: fs.FSWatcher | null = null;
 
   if (fs.existsSync(jsonlPath)) {
     lastOffset = fs.statSync(jsonlPath).size;
@@ -54,12 +56,36 @@ export function buildSseHandler(jsonlPath: string): SseHandler {
     }
   }
 
-  try {
-    watcher = fs.watch(jsonlPath, () => {
-      broadcastNewLines();
-    });
-  } catch {
-    // File may not exist yet — will be created by LiveWriter
+  function startFileWatcher(): void {
+    if (watcher) return;
+    try {
+      watcher = fs.watch(jsonlPath, () => {
+        broadcastNewLines();
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  // Watch the file if it exists, otherwise watch the parent directory for creation
+  if (fs.existsSync(jsonlPath)) {
+    startFileWatcher();
+  } else {
+    const dir = path.dirname(jsonlPath);
+    const base = path.basename(jsonlPath);
+    try {
+      dirWatcher = fs.watch(dir, (_event, filename) => {
+        if (filename === base && fs.existsSync(jsonlPath) && !watcher) {
+          startFileWatcher();
+          if (dirWatcher) {
+            dirWatcher.close();
+            dirWatcher = null;
+          }
+        }
+      });
+    } catch {
+      // Parent dir doesn't exist yet — rare edge case
+    }
   }
 
   return {
@@ -87,6 +113,10 @@ export function buildSseHandler(jsonlPath: string): SseHandler {
       if (watcher) {
         watcher.close();
         watcher = null;
+      }
+      if (dirWatcher) {
+        dirWatcher.close();
+        dirWatcher = null;
       }
       clients.clear();
     },

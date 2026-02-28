@@ -228,7 +228,7 @@ class SmartReporter implements Reporter {
     this.liveWriter.start(totalTests, this.ciInfo);
 
     // Generate live dashboard HTML alongside the live results file
-    if (this.options.live?.dashboard !== false) {
+    if (this.options.live?.enabled && this.options.live?.dashboard !== false) {
       const liveOutputFile = this.options.live?.outputFile ?? '.smart-live-results.jsonl';
       const dashboardPath = path.resolve(this.outputDir, 'smart-live.html');
       const dashboardHtml = generateLiveDashboard({ jsonlFile: liveOutputFile });
@@ -466,12 +466,12 @@ class SmartReporter implements Reporter {
       error: testData.error,
     });
 
-    // Live: send notification on first failure (Starter tier)
+    // Live: send notification on first failure (Starter+ tier)
     if (
       this.options.live?.notifyOnFirstFailure &&
       !this.liveFirstFailureSent &&
       (result.status === 'failed' || result.status === 'timedOut') &&
-      LicenseValidator.hasFeature(this.license, 'pro')
+      (LicenseValidator.hasFeature(this.license, 'starter') || LicenseValidator.hasFeature(this.license, 'pro'))
     ) {
       this.liveFirstFailureSent = true;
       const msg = `First failure detected: "${test.title}" in ${file}`;

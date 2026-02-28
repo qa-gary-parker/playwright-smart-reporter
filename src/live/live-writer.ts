@@ -125,7 +125,7 @@ export class LiveWriter {
         flaky++;
       } else if (tracked.status === 'passed') {
         passed++;
-      } else if (tracked.status === 'failed' || tracked.status === 'timedOut') {
+      } else if (tracked.status === 'failed' || tracked.status === 'timedOut' || tracked.status === 'interrupted') {
         failed++;
       } else if (tracked.status === 'skipped') {
         skipped++;
