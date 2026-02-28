@@ -164,6 +164,9 @@ export interface SmartReporterOptions {
   // Premium: Flakiness quarantine (Pro tier) - auto-quarantine flaky tests
   quarantine?: QuarantineConfig;
 
+  // Live reporting: stream results during execution
+  live?: LiveConfig;
+
   // Premium: Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
   exportPdfFull?: boolean;
 }
@@ -493,6 +496,55 @@ export interface QuarantineFile {
   generatedAt: string;
   threshold: number;
   entries: QuarantineEntry[];
+}
+
+// ============================================================================
+// Live Reporting
+// ============================================================================
+
+export interface LiveConfig {
+  enabled: boolean;
+  outputFile?: string;        // Default: .smart-live-results.jsonl
+  dashboard?: boolean;        // Generate smart-live.html alongside report (default: true)
+  notifyOnFirstFailure?: boolean; // Starter tier: send Slack/Teams on first failure
+}
+
+export interface LiveEvent {
+  event: 'start' | 'test' | 'complete';
+  timestamp: string;
+}
+
+export interface LiveStartEvent extends LiveEvent {
+  event: 'start';
+  totalExpected: number;
+  ciInfo?: CIInfo;
+}
+
+export interface LiveTestEvent extends LiveEvent {
+  event: 'test';
+  testId: string;
+  title: string;
+  file: string;
+  status: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
+  duration: number;
+  error?: string;
+  retry: number;
+  counters: LiveCounters;
+}
+
+export interface LiveCompleteEvent extends LiveEvent {
+  event: 'complete';
+  duration: number;
+  counters: LiveCounters;
+}
+
+export interface LiveCounters {
+  passed: number;
+  failed: number;
+  skipped: number;
+  flaky: number;
+  completed: number;
+  totalExpected: number;
 }
 
 // ============================================================================
