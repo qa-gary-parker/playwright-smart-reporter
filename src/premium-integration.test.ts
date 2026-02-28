@@ -164,7 +164,7 @@ const fakeConfig = {
   webServer: null,
 } as any;
 
-const fakeSuite = {} as any;
+const fakeSuite = { allTests: () => [] } as any;
 const fakeFullResult = { status: 'passed', startTime: new Date(), duration: 1000 } as any;
 
 // ---------------------------------------------------------------------------

@@ -69,6 +69,7 @@ import { generateExecutivePdf, type PdfThemeName } from './generators/executive-
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import type { CIInfo } from './types';
+import { LiveWriter } from './live';
 
 // ============================================================================
 // Smart Reporter
@@ -118,6 +119,7 @@ class SmartReporter implements Reporter {
   private fullConfig: FullConfig | null = null;
   private runnerErrors: string[] = [];
   private ciInfo?: CIInfo;
+  private liveWriter: LiveWriter;
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -163,6 +165,14 @@ class SmartReporter implements Reporter {
     });
     this.cloudUploader = new CloudUploader(options);
 
+    // Initialize live writer (defaults to disabled no-op)
+    if (options.live?.enabled) {
+      const liveOutputFile = options.live.outputFile ?? '.smart-live-results.jsonl';
+      this.liveWriter = new LiveWriter({ outputFile: liveOutputFile });
+    } else {
+      this.liveWriter = LiveWriter.disabled();
+    }
+
     // Initialize advanced notification manager if configured (Pro feature)
     if (options.notifications && LicenseValidator.hasFeature(this.license, 'pro')) {
       this.notificationManager = new NotificationManager(options.notifications);
@@ -175,7 +185,7 @@ class SmartReporter implements Reporter {
    * @param config - Playwright full configuration
    * @param _suite - Root test suite (unused)
    */
-  onBegin(config: FullConfig, _suite: Suite): void {
+  onBegin(config: FullConfig, suite: Suite): void {
     this.startTime = Date.now();
     // Issue #20: Support path resolution relative to current working directory
     // When relativeToCwd is true, use process.cwd() instead of config.rootDir
@@ -211,6 +221,10 @@ class SmartReporter implements Reporter {
     // Initialize notifiers
     this.slackNotifier = new SlackNotifier(this.options.slackWebhook);
     this.teamsNotifier = new TeamsNotifier(this.options.teamsWebhook);
+
+    // Start live reporting (writes start event with total test count)
+    const totalTests = suite.allTests().length;
+    this.liveWriter.start(totalTests, this.ciInfo);
   }
 
   onError(error: unknown): void {
@@ -429,6 +443,17 @@ class SmartReporter implements Reporter {
       // This is a newer attempt - replace the previous one
       this.resultsMap.set(testId, testData);
     }
+
+    // Write live result for real-time dashboard
+    this.liveWriter.writeTestResult({
+      testId,
+      title: test.title,
+      file,
+      status: result.status,
+      duration: result.duration,
+      retry: result.retry,
+      error: testData.error,
+    });
   }
 
   /**
@@ -440,6 +465,9 @@ class SmartReporter implements Reporter {
     // Convert resultsMap to array - this ensures we only have the final attempt for each test
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());
+
+    // Signal live reporting that the run is complete
+    this.liveWriter.complete(Date.now() - this.startTime);
 
     // Get failure clusters
     const failureClusters = this.failureClusterer.clusterFailures(this.results);
