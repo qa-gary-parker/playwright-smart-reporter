@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
+import { buildSseHandler } from '../live/sse-handler';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -37,6 +38,8 @@ Arguments:
 Options:
   --port <port>         Port to serve on (default: 0 = auto-assign)
   --no-open             Don't open the browser automatically
+  --live                Enable SSE endpoint for live reporting
+  --live-file <path>    Path to live results JSONL (default: .smart-live-results.jsonl)
   -h, --help            Show this help message
 
 Examples:
@@ -50,6 +53,8 @@ interface ServeOptions {
   reportPath: string;
   port: number;
   open: boolean;
+  live: boolean;
+  liveFile: string;
 }
 
 function parseArgs(argv: string[]): ServeOptions {
@@ -64,6 +69,8 @@ function parseArgs(argv: string[]): ServeOptions {
     reportPath: '',
     port: 0,
     open: true,
+    live: false,
+    liveFile: '.smart-live-results.jsonl',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -72,6 +79,10 @@ function parseArgs(argv: string[]): ServeOptions {
       options.port = parseInt(args[++i] || '0', 10);
     } else if (arg === '--no-open') {
       options.open = false;
+    } else if (arg === '--live') {
+      options.live = true;
+    } else if (arg === '--live-file') {
+      options.liveFile = args[++i] || '.smart-live-results.jsonl';
     } else if (!arg.startsWith('-') && !options.reportPath) {
       options.reportPath = arg;
     }
@@ -140,7 +151,28 @@ function main(): void {
   const options = parseArgs(process.argv);
   const { dir, file } = resolveReport(options.reportPath);
 
+  let sseHandler: ReturnType<typeof buildSseHandler> | null = null;
+  if (options.live) {
+    const liveFilePath = path.resolve(dir, options.liveFile);
+    sseHandler = buildSseHandler(liveFilePath);
+  }
+
   const server = http.createServer((req, res) => {
+    // SSE endpoint for live reporting
+    if (sseHandler && req.url === '/sse') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.write(':ok\n\n');
+      const client = { write: (data: string) => res.write(data), end: () => res.end() };
+      sseHandler.addClient(client);
+      req.on('close', () => { sseHandler!.removeClient(client); });
+      return;
+    }
+
     const urlPath = decodeURIComponent(req.url || '/');
     const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
 
