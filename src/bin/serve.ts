@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
+import { buildSseHandler } from '../live/sse-handler';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -37,6 +38,9 @@ Arguments:
 Options:
   --port <port>         Port to serve on (default: 0 = auto-assign)
   --no-open             Don't open the browser automatically
+  --live                Enable SSE endpoint for live reporting
+  --live-file <path>    Path to live results JSONL (default: .smart-live-results.jsonl)
+  --run-command <cmd>   Command to run tests (enables /run endpoint)
   -h, --help            Show this help message
 
 Examples:
@@ -50,6 +54,10 @@ interface ServeOptions {
   reportPath: string;
   port: number;
   open: boolean;
+  live: boolean;
+  liveFile: string;
+  runCommand: string;
+  running: boolean;
 }
 
 function parseArgs(argv: string[]): ServeOptions {
@@ -64,6 +72,10 @@ function parseArgs(argv: string[]): ServeOptions {
     reportPath: '',
     port: 0,
     open: true,
+    live: false,
+    liveFile: '.smart-live-results.jsonl',
+    runCommand: '',
+    running: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -72,6 +84,12 @@ function parseArgs(argv: string[]): ServeOptions {
       options.port = parseInt(args[++i] || '0', 10);
     } else if (arg === '--no-open') {
       options.open = false;
+    } else if (arg === '--live') {
+      options.live = true;
+    } else if (arg === '--live-file') {
+      options.liveFile = args[++i] || '.smart-live-results.jsonl';
+    } else if (arg === '--run-command') {
+      options.runCommand = args[++i] || '';
     } else if (!arg.startsWith('-') && !options.reportPath) {
       options.reportPath = arg;
     }
@@ -140,7 +158,67 @@ function main(): void {
   const options = parseArgs(process.argv);
   const { dir, file } = resolveReport(options.reportPath);
 
+  let sseHandler: ReturnType<typeof buildSseHandler> | null = null;
+  if (options.live) {
+    const liveFilePath = path.resolve(dir, options.liveFile);
+    sseHandler = buildSseHandler(liveFilePath);
+  }
+
   const server = http.createServer((req, res) => {
+    // SSE endpoint for live reporting
+    if (sseHandler && req.url === '/sse') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.write(':ok\n\n');
+      const client = { write: (data: string) => res.write(data), end: () => res.end() };
+      sseHandler.addClient(client);
+      req.on('close', () => { sseHandler!.removeClient(client); });
+      return;
+    }
+
+    // Run tests endpoint (only when --run-command is configured)
+    if (req.url === '/run' && req.method === 'POST' && options.runCommand) {
+      const remoteAddr = req.socket.remoteAddress || '';
+      if (!remoteAddr.includes('127.0.0.1') && !remoteAddr.includes('::1')) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Only localhost requests allowed' }));
+        return;
+      }
+
+      if (options.running) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'A test run is already in progress' }));
+        return;
+      }
+
+      options.running = true;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'started', command: options.runCommand }));
+
+      const child = exec(options.runCommand, { cwd: process.cwd() }, (err) => {
+        options.running = false;
+        if (err) {
+          console.log(`\n  Test run finished with exit code ${err.code ?? 1}`);
+        } else {
+          console.log('\n  Test run finished successfully');
+        }
+      });
+
+      child.stdout?.on('data', (data) => process.stdout.write(data));
+      child.stderr?.on('data', (data) => process.stderr.write(data));
+      return;
+    }
+
+    if (req.url === '/run' && req.method === 'GET' && options.runCommand) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ running: options.running, command: options.runCommand }));
+      return;
+    }
+
     const urlPath = decodeURIComponent(req.url || '/');
     const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
 

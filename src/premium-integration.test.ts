@@ -2,9 +2,9 @@
  * Premium Pipeline Integration Tests
  *
  * Tests the SmartReporter constructor's license-gating logic:
- * - Community tier: theme/branding stripped, warnings emitted, no Pro features activated
- * - Pro tier: theme/branding preserved, notifications wired, custom AI model accepted
- * - Team tier: all Pro features work (Team is a superset of Pro)
+ * - Community tier: theme/branding stripped, warnings emitted, no Starter features activated
+ * - Starter/Pro tier: theme/branding preserved, notifications wired, custom AI model accepted
+ * - Team tier: all Starter/Pro features work (Team is a superset of Pro)
  *
  * Strategy: test the constructor and onEnd() in isolation by mocking fs, html-generator,
  * the license module, and the export functions. This lets us verify wiring contracts
@@ -164,7 +164,7 @@ const fakeConfig = {
   webServer: null,
 } as any;
 
-const fakeSuite = {} as any;
+const fakeSuite = { allTests: () => [] } as any;
 const fakeFullResult = { status: 'passed', startTime: new Date(), duration: 1000 } as any;
 
 // ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ describe('Premium Pipeline Integration', () => {
       new SmartReporter(opts);
 
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Custom themes require a Pro license')
+        expect.stringContaining('Custom themes require a Starter or Pro license')
       );
     });
 
@@ -243,7 +243,7 @@ describe('Premium Pipeline Integration', () => {
       new SmartReporter(opts);
 
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Custom branding requires a Pro license')
+        expect.stringContaining('Custom branding requires a Starter or Pro license')
       );
     });
 
@@ -311,7 +311,7 @@ describe('Premium Pipeline Integration', () => {
       await reporter.onEnd(fakeFullResult);
 
       const logCalls = logSpy.mock.calls.map(c => String(c[0]));
-      expect(logCalls.some(m => m.includes('Pro features available'))).toBe(true);
+      expect(logCalls.some(m => m.includes('Starter features available'))).toBe(true);
     });
 
     it('theme config is absent from generateHtml call (stripped at construction time)', async () => {
@@ -434,7 +434,7 @@ describe('Premium Pipeline Integration', () => {
       await reporter.onEnd(fakeFullResult);
 
       const logCalls = logSpy.mock.calls.map(c => String(c[0]));
-      expect(logCalls.some(m => m.includes('Pro features available'))).toBe(false);
+      expect(logCalls.some(m => m.includes('Starter features available'))).toBe(false);
     });
   });
 
@@ -455,7 +455,7 @@ describe('Premium Pipeline Integration', () => {
       vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
-    it('calls exportJsonData (Team includes Pro features)', async () => {
+    it('calls exportJsonData (Team includes Starter features)', async () => {
       const reporter = new SmartReporter({ exportJson: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
@@ -463,7 +463,7 @@ describe('Premium Pipeline Integration', () => {
       expect(exportJsonData).toHaveBeenCalled();
     });
 
-    it('calls exportJunitXml (Team includes Pro features)', async () => {
+    it('calls exportJunitXml (Team includes Starter features)', async () => {
       const reporter = new SmartReporter({ exportJunit: true });
       reporter.onBegin(fakeConfig, fakeSuite);
       await reporter.onEnd(fakeFullResult);
@@ -505,7 +505,7 @@ describe('Premium Pipeline Integration', () => {
   // =========================================================================
 
   describe('export gating messages (community tier)', () => {
-    it('logs JSON export upsell message when exportJson requested without Pro', async () => {
+    it('logs JSON export upsell message when exportJson requested without license', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -514,10 +514,10 @@ describe('Premium Pipeline Integration', () => {
       await reporter.onEnd(fakeFullResult);
 
       const logCalls = logSpy.mock.calls.map(c => String(c[0]));
-      expect(logCalls.some(m => m.includes('JSON export requires a Pro license'))).toBe(true);
+      expect(logCalls.some(m => m.includes('JSON export requires a Starter or Pro license'))).toBe(true);
     });
 
-    it('logs JUnit export upsell message when exportJunit requested without Pro', async () => {
+    it('logs JUnit export upsell message when exportJunit requested without license', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -526,10 +526,10 @@ describe('Premium Pipeline Integration', () => {
       await reporter.onEnd(fakeFullResult);
 
       const logCalls = logSpy.mock.calls.map(c => String(c[0]));
-      expect(logCalls.some(m => m.includes('JUnit export requires a Pro license'))).toBe(true);
+      expect(logCalls.some(m => m.includes('JUnit export requires a Starter or Pro license'))).toBe(true);
     });
 
-    it('logs PDF export upsell message when exportPdf requested without Pro', async () => {
+    it('logs PDF export upsell message when exportPdf requested without license', async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -538,7 +538,7 @@ describe('Premium Pipeline Integration', () => {
       await reporter.onEnd(fakeFullResult);
 
       const logCalls = logSpy.mock.calls.map(c => String(c[0]));
-      expect(logCalls.some(m => m.includes('PDF export requires a Pro license'))).toBe(true);
+      expect(logCalls.some(m => m.includes('PDF export requires a Starter or Pro license'))).toBe(true);
     });
   });
 });

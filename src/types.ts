@@ -144,25 +144,28 @@ export interface SmartReporterOptions {
   // Premium: License key (also from SMART_REPORTER_LICENSE_KEY env var)
   licenseKey?: string;
 
-  // Premium: Export options (Pro tier)
+  // Premium: Export options (Starter tier)
   exportJson?: boolean;            // Write smart-report-data.json alongside HTML
   exportPdf?: boolean;             // Generate PDF executive summary
   exportJunit?: boolean;           // Generate JUnit XML output
 
-  // Premium: Custom themes (Pro tier)
+  // Premium: Custom themes (Starter tier)
   theme?: ThemeConfig;
 
-  // Premium: Advanced notifications (Pro tier)
+  // Premium: Advanced notifications (Starter tier)
   notifications?: NotificationConfig[];
 
-  // Premium: Report branding (Pro tier)
+  // Premium: Report branding (Starter tier)
   branding?: BrandingConfig;
 
-  // Premium: Quality gates (Pro tier) - CI pipeline pass/fail rules
+  // Premium: Quality gates (Starter tier) - CI pipeline pass/fail rules
   qualityGates?: QualityGateConfig;
 
-  // Premium: Flakiness quarantine (Pro tier) - auto-quarantine flaky tests
+  // Premium: Flakiness quarantine (Starter tier) - auto-quarantine flaky tests
   quarantine?: QuarantineConfig;
+
+  // Live reporting: stream results during execution
+  live?: LiveConfig;
 
   // Premium: Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
   exportPdfFull?: boolean;
@@ -446,7 +449,7 @@ export interface SuiteStats {
 }
 
 // ============================================================================
-// Quality Gates (Pro)
+// Quality Gates (Starter+)
 // ============================================================================
 
 export interface QualityGateConfig {
@@ -471,7 +474,7 @@ export interface QualityGateResult {
 }
 
 // ============================================================================
-// Quarantine (Pro)
+// Quarantine (Starter+)
 // ============================================================================
 
 export interface QuarantineConfig {
@@ -493,6 +496,55 @@ export interface QuarantineFile {
   generatedAt: string;
   threshold: number;
   entries: QuarantineEntry[];
+}
+
+// ============================================================================
+// Live Reporting
+// ============================================================================
+
+export interface LiveConfig {
+  enabled: boolean;
+  outputFile?: string;        // Default: .smart-live-results.jsonl
+  dashboard?: boolean;        // Generate smart-live.html alongside report (default: true)
+  notifyOnFirstFailure?: boolean; // Starter tier: send Slack/Teams on first failure
+}
+
+export interface LiveEvent {
+  event: 'start' | 'test' | 'complete';
+  timestamp: string;
+}
+
+export interface LiveStartEvent extends LiveEvent {
+  event: 'start';
+  totalExpected: number;
+  ciInfo?: CIInfo;
+}
+
+export interface LiveTestEvent extends LiveEvent {
+  event: 'test';
+  testId: string;
+  title: string;
+  file: string;
+  status: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
+  duration: number;
+  error?: string;
+  retry: number;
+  counters: LiveCounters;
+}
+
+export interface LiveCompleteEvent extends LiveEvent {
+  event: 'complete';
+  duration: number;
+  counters: LiveCounters;
+}
+
+export interface LiveCounters {
+  passed: number;
+  failed: number;
+  skipped: number;
+  flaky: number;
+  completed: number;
+  totalExpected: number;
 }
 
 // ============================================================================

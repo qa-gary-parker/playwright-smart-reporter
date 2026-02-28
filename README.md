@@ -1,6 +1,6 @@
 # playwright-smart-reporter
 
-An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and a modern interactive dashboard. Free + Pro tiers — same npm package, Pro unlocks with a license key.
+An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and a modern interactive dashboard. Free + Starter + Pro tiers — same npm package, paid features unlock with a license key.
 
 ![Report Overview](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/report-overview-dark.png)
 *Dashboard with quality gates, quarantine, suite health grade, attention alerts, and failure clusters*
@@ -45,7 +45,7 @@ The free tier includes everything you need for local test reporting. Paid plans 
 | CI auto-detection & notifications | ✅ | ✅ | ✅ |
 | 4 built-in themes (System, Light, Dark, High Contrast) | ✅ | ✅ | ✅ |
 | AI failure analysis (managed) | | 2,000/mo | 5,000/mo |
-| 6 additional Pro themes | | ✅ | ✅ |
+| 6 additional themes | | ✅ | ✅ |
 | Executive PDF export (3 variants) | | ✅ | ✅ |
 | JSON + JUnit export | | ✅ | ✅ |
 | Quality gates (fail builds on thresholds) | | ✅ | ✅ |
@@ -57,7 +57,7 @@ The free tier includes everything you need for local test reporting. Paid plans 
 
 **Get a license at [stagewright.dev](https://stagewright.dev)**
 
-### Activating Pro
+### Activating a License
 
 Set your license key via environment variable or config:
 
@@ -141,9 +141,9 @@ Smart Reporter tracks flakiness **across runs**, not within a single run:
 Indicators:
 - **Stable** (<10% failure rate) — **Unstable** (10-30%) — **Flaky** (>30%) — **New** (no history)
 
-## Pro Features
+## Starter Features
 
-### Pro Themes
+### Themes
 
 6 additional themes beyond the 4 built-in themes (System, Light, Dark, High Contrast): **Ocean**, **Sunset**, **Dracula**, **Cyberpunk**, **Forest**, and **Rose**. Set via config:
 
@@ -612,7 +612,7 @@ Enable `cspSafe: true` to save attachments as files instead of embedding, or red
 | No network logs | Tracing not enabled | Add `trace: 'retain-on-failure'` to config |
 | No AI suggestions | Missing or invalid license key | Set `SMART_REPORTER_LICENSE_KEY` env var or add `licenseKey` to config (Starter or Pro plan required) |
 | Mixed project metrics | Shared history file | Use `projectName` to isolate |
-| Pro features not showing | License key missing or expired | Check `SMART_REPORTER_LICENSE_KEY` env var or `licenseKey` config |
+| Starter features not showing | License key missing or expired | Check `SMART_REPORTER_LICENSE_KEY` env var or `licenseKey` config |
 | Quality gate not failing CI | Gate not run as separate step | Run `npx playwright-smart-reporter gate` as its own CI step |
 
 ## Development
@@ -632,4 +632,4 @@ npm run test:demo
 
 ## License
 
-MIT — free and Pro features in one package. Pro features require a valid license key from [stagewright.dev](https://stagewright.dev).
+MIT — free and paid features in one package. Starter and Pro features require a valid license key from [stagewright.dev](https://stagewright.dev).

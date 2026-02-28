@@ -103,7 +103,7 @@ All notable changes to this project will be documented in this file.
 - **Quality Gates**: configurable thresholds (min pass rate, max flaky rate, min stability grade) with CI exit codes via `npx playwright-smart-reporter gate`
 - **Flaky Test Quarantine**: auto-detection and JSON-based tracking with `getQuarantinedPattern()` helper for `test.skip()`
 - **Executive PDF Export**: three themed variants (Corporate, Minimal, Dark) via pdfkit with PDF style picker modal in HTML report
-- **6 Pro Themes**: Ocean, Sunset, Dracula, Cyberpunk, Forest, Rose
+- **6 Themes**: Ocean, Sunset, Dracula, Cyberpunk, Forest, Rose
 - **Custom Branding**: configurable report title, footer text, accent colours, and logo
 - **AI Health Digest**: weekly/daily/monthly trend summaries from history data via `npx playwright-smart-reporter digest`
 - **Notification System**: Slack, Microsoft Teams, email (SendGrid), and PagerDuty integrations with configurable rules
