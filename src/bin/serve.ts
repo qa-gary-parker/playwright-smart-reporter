@@ -40,6 +40,7 @@ Options:
   --no-open             Don't open the browser automatically
   --live                Enable SSE endpoint for live reporting
   --live-file <path>    Path to live results JSONL (default: .smart-live-results.jsonl)
+  --run-command <cmd>   Command to run tests (enables /run endpoint)
   -h, --help            Show this help message
 
 Examples:
@@ -55,6 +56,8 @@ interface ServeOptions {
   open: boolean;
   live: boolean;
   liveFile: string;
+  runCommand: string;
+  running: boolean;
 }
 
 function parseArgs(argv: string[]): ServeOptions {
@@ -71,6 +74,8 @@ function parseArgs(argv: string[]): ServeOptions {
     open: true,
     live: false,
     liveFile: '.smart-live-results.jsonl',
+    runCommand: '',
+    running: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -83,6 +88,8 @@ function parseArgs(argv: string[]): ServeOptions {
       options.live = true;
     } else if (arg === '--live-file') {
       options.liveFile = args[++i] || '.smart-live-results.jsonl';
+    } else if (arg === '--run-command') {
+      options.runCommand = args[++i] || '';
     } else if (!arg.startsWith('-') && !options.reportPath) {
       options.reportPath = arg;
     }
@@ -170,6 +177,45 @@ function main(): void {
       const client = { write: (data: string) => res.write(data), end: () => res.end() };
       sseHandler.addClient(client);
       req.on('close', () => { sseHandler!.removeClient(client); });
+      return;
+    }
+
+    // Run tests endpoint (only when --run-command is configured)
+    if (req.url === '/run' && req.method === 'POST' && options.runCommand) {
+      const remoteAddr = req.socket.remoteAddress || '';
+      if (!remoteAddr.includes('127.0.0.1') && !remoteAddr.includes('::1')) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Only localhost requests allowed' }));
+        return;
+      }
+
+      if (options.running) {
+        res.writeHead(409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'A test run is already in progress' }));
+        return;
+      }
+
+      options.running = true;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'started', command: options.runCommand }));
+
+      const child = exec(options.runCommand, { cwd: process.cwd() }, (err) => {
+        options.running = false;
+        if (err) {
+          console.log(`\n  Test run finished with exit code ${err.code ?? 1}`);
+        } else {
+          console.log('\n  Test run finished successfully');
+        }
+      });
+
+      child.stdout?.on('data', (data) => process.stdout.write(data));
+      child.stderr?.on('data', (data) => process.stderr.write(data));
+      return;
+    }
+
+    if (req.url === '/run' && req.method === 'GET' && options.runCommand) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ running: options.running, command: options.runCommand }));
       return;
     }
 
