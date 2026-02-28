@@ -132,15 +132,15 @@ class SmartReporter implements Reporter {
       console.warn(`⚠️  License: ${this.license.error}`);
     }
 
-    // Gate theme behind Pro tier
+    // Gate theme behind Starter tier
     if (options.theme && !LicenseValidator.hasFeature(this.license, 'pro')) {
-      console.warn('Smart Reporter: Custom themes require a Pro license. Using defaults.');
+      console.warn('Smart Reporter: Custom themes require a Starter or Pro license. Using defaults.');
       this.options = { ...this.options, theme: undefined };
     }
 
-    // Gate branding behind Pro tier
+    // Gate branding behind Starter tier
     if (options.branding && !LicenseValidator.hasFeature(this.license, 'pro')) {
-      console.warn('Smart Reporter: Custom branding requires a Pro license. Using defaults.');
+      console.warn('Smart Reporter: Custom branding requires a Starter or Pro license. Using defaults.');
       this.options = { ...this.options, branding: undefined };
     }
 
@@ -174,7 +174,7 @@ class SmartReporter implements Reporter {
       this.liveWriter = LiveWriter.disabled();
     }
 
-    // Initialize advanced notification manager if configured (Pro feature)
+    // Initialize advanced notification manager if configured (Starter feature)
     if (options.notifications && LicenseValidator.hasFeature(this.license, 'pro')) {
       this.notificationManager = new NotificationManager(options.notifications);
     }
@@ -504,7 +504,7 @@ class SmartReporter implements Reporter {
     // Get failure clusters
     const failureClusters = this.failureClusterer.clusterFailures(this.results);
 
-    // Run AI analysis on failures and clusters if enabled (Pro feature)
+    // Run AI analysis on failures and clusters if enabled (Starter feature)
     const options = this.historyCollector.getOptions();
     const hasProForAI = LicenseValidator.hasFeature(this.license, 'pro');
     if (hasProForAI && options.enableAIRecommendations !== false) {
@@ -515,7 +515,7 @@ class SmartReporter implements Reporter {
     } else if (!hasProForAI && options.enableAIRecommendations !== false) {
       const failedCount = this.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
       if (failedCount > 0) {
-        console.log('\n   AI analysis requires Pro — see stagewright.dev/pricing');
+        console.log('\n   AI analysis requires a Starter or Pro license — see stagewright.dev/pricing');
       }
     }
 
@@ -642,7 +642,7 @@ class SmartReporter implements Reporter {
     const hasPro = LicenseValidator.hasFeature(this.license, 'pro');
     const exportDir = path.dirname(outputPath);
 
-    // Quality gates (Pro feature) - evaluate BEFORE HTML generation so results embed in report
+    // Quality gates (Starter feature) - evaluate BEFORE HTML generation so results embed in report
     let qualityGateResult: QualityGateResult | undefined;
     if (this.options.qualityGates && hasPro) {
       try {
@@ -653,7 +653,7 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Quarantine (Pro feature) - evaluate BEFORE HTML generation so badges/cards embed in report
+    // Quarantine (Starter feature) - evaluate BEFORE HTML generation so badges/cards embed in report
     let quarantineResult: QuarantineFile | null = null;
     let quarantinedTestIds: Set<string> | undefined;
     if (this.options.quarantine?.enabled && hasPro) {
@@ -722,7 +722,7 @@ class SmartReporter implements Reporter {
         console.warn('⚠️  JSON export failed:', err);
       }
     } else if (this.options.exportJson && !hasPro) {
-      console.log('   JSON export requires a Pro license — see stagewright.dev/pricing');
+      console.log('   JSON export requires a Starter or Pro license — see stagewright.dev/pricing');
     }
 
     if (this.options.exportJunit && hasPro) {
@@ -733,7 +733,7 @@ class SmartReporter implements Reporter {
         console.warn('⚠️  JUnit export failed:', err);
       }
     } else if (this.options.exportJunit && !hasPro) {
-      console.log('   JUnit export requires a Pro license — see stagewright.dev/pricing');
+      console.log('   JUnit export requires a Starter or Pro license — see stagewright.dev/pricing');
     }
 
     if (this.options.exportPdf && hasPro) {
@@ -770,7 +770,7 @@ class SmartReporter implements Reporter {
         console.warn('⚠️  PDF export failed:', err);
       }
     } else if (this.options.exportPdf && !hasPro) {
-      console.log('   PDF export requires a Pro license — see stagewright.dev/pricing');
+      console.log('   PDF export requires a Starter or Pro license — see stagewright.dev/pricing');
     }
 
     // Update history
@@ -782,7 +782,7 @@ class SmartReporter implements Reporter {
       (r.status === 'failed' || r.status === 'timedOut')
     ).length;
 
-    // Advanced notification manager (Pro feature) takes precedence
+    // Advanced notification manager (Starter feature) takes precedence
     if (this.notificationManager) {
       await this.notificationManager.notify(this.results, this.startTime, comparison);
     } else {
@@ -793,24 +793,24 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Quality gates (Pro feature) - log results and set exitCode
+    // Quality gates (Starter feature) - log results and set exitCode
     if (qualityGateResult) {
       console.log(formatGateReport(qualityGateResult));
       if (!qualityGateResult.passed) {
         process.exitCode = 1;
       }
     } else if (this.options.qualityGates && !hasPro) {
-      console.log('   Quality gates require a Pro license — see stagewright.dev/pricing');
+      console.log('   Quality gates require a Starter or Pro license — see stagewright.dev/pricing');
     }
 
-    // Quarantine (Pro feature) - log results (file already written above)
+    // Quarantine (Starter feature) - log results (file already written above)
     if (quarantineResult) {
       const qPath = new QuarantineGenerator(this.options.quarantine!).getOutputPath(exportDir);
       console.log(`   Quarantine: ${quarantineResult.entries.length} test(s) quarantined -> ${qPath}`);
     } else if (this.options.quarantine?.enabled && hasPro) {
       console.log('   Quarantine: no tests exceed flakiness threshold');
     } else if (this.options.quarantine?.enabled && !hasPro) {
-      console.log('   Quarantine requires a Pro license — see stagewright.dev/pricing');
+      console.log('   Quarantine requires a Starter or Pro license — see stagewright.dev/pricing');
     }
 
     // Upload to StageWright Cloud if enabled
@@ -825,7 +825,7 @@ class SmartReporter implements Reporter {
 
     // Gentle upsell for community tier
     if (this.license.tier === 'community') {
-      console.log(`\n   Pro features available — see stagewright.dev/pricing`);
+      console.log(`\n   Starter features available — see stagewright.dev/pricing`);
     }
   }
 

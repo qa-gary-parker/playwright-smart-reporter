@@ -144,24 +144,24 @@ export interface SmartReporterOptions {
   // Premium: License key (also from SMART_REPORTER_LICENSE_KEY env var)
   licenseKey?: string;
 
-  // Premium: Export options (Pro tier)
+  // Premium: Export options (Starter tier)
   exportJson?: boolean;            // Write smart-report-data.json alongside HTML
   exportPdf?: boolean;             // Generate PDF executive summary
   exportJunit?: boolean;           // Generate JUnit XML output
 
-  // Premium: Custom themes (Pro tier)
+  // Premium: Custom themes (Starter tier)
   theme?: ThemeConfig;
 
-  // Premium: Advanced notifications (Pro tier)
+  // Premium: Advanced notifications (Starter tier)
   notifications?: NotificationConfig[];
 
-  // Premium: Report branding (Pro tier)
+  // Premium: Report branding (Starter tier)
   branding?: BrandingConfig;
 
-  // Premium: Quality gates (Pro tier) - CI pipeline pass/fail rules
+  // Premium: Quality gates (Starter tier) - CI pipeline pass/fail rules
   qualityGates?: QualityGateConfig;
 
-  // Premium: Flakiness quarantine (Pro tier) - auto-quarantine flaky tests
+  // Premium: Flakiness quarantine (Starter tier) - auto-quarantine flaky tests
   quarantine?: QuarantineConfig;
 
   // Live reporting: stream results during execution
@@ -449,7 +449,7 @@ export interface SuiteStats {
 }
 
 // ============================================================================
-// Quality Gates (Pro)
+// Quality Gates (Starter+)
 // ============================================================================
 
 export interface QualityGateConfig {
@@ -474,7 +474,7 @@ export interface QualityGateResult {
 }
 
 // ============================================================================
-// Quarantine (Pro)
+// Quarantine (Starter+)
 // ============================================================================
 
 export interface QuarantineConfig {

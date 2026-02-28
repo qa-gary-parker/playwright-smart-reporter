@@ -377,7 +377,7 @@ function generateOverviewContent(
             <span class="section-icon">${icon('gauge')}</span>
             <span class="gate-title">Quality Gates</span>
           </div>
-          <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Pro</span>
+          <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Starter</span>
         </div>
         <div class="gate-placeholder-desc">Configure CI pass/fail rules for your test suite</div>
       </div>
@@ -424,7 +424,7 @@ function generateOverviewContent(
             <span class="section-icon">${icon('lock')}</span>
             <span class="quarantine-title">Quarantine</span>
           </div>
-          <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Pro</span>
+          <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;">Starter</span>
         </div>
         <div class="quarantine-placeholder-desc">Auto-quarantine flaky tests above a threshold</div>
       </div>
@@ -845,13 +845,13 @@ ${options.exportJunit ? `            <a class="export-menu-item" href="${outputB
               <span>${icon('tag')}</span> JUnit XML
             </a>` : ''}` : `            <div class="export-menu-divider" style="height:1px;background:var(--border-subtle);margin:4px 0;"></div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
-              <span>${icon('file-text')}</span> PDF Report <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+              <span>${icon('file-text')}</span> PDF Report <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Starter</span>
             </div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
-              <span>${icon('package')}</span> Full JSON Data <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+              <span>${icon('package')}</span> Full JSON Data <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Starter</span>
             </div>
             <div class="export-menu-item export-premium-placeholder" style="opacity:0.4;cursor:default;pointer-events:none;">
-              <span>${icon('tag')}</span> JUnit XML <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Pro</span>
+              <span>${icon('tag')}</span> JUnit XML <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Starter</span>
             </div>`}
           </div>
         </div>
@@ -1410,7 +1410,7 @@ ${highContrastOverride}${customOverrides}
       --accent-orange: #dd6622;
     }
 
-    /* Pro Theme: Ocean */
+    /* Theme: Ocean */
     :root[data-theme="ocean"] {
       --bg-primary: #0b1628;
       --bg-secondary: #0f1f38;
@@ -1434,7 +1434,7 @@ ${highContrastOverride}${customOverrides}
       --accent-orange: #ff9e6d;
     }
 
-    /* Pro Theme: Sunset */
+    /* Theme: Sunset */
     :root[data-theme="sunset"] {
       --bg-primary: #1a0f0a;
       --bg-secondary: #241510;
@@ -1458,7 +1458,7 @@ ${highContrastOverride}${customOverrides}
       --accent-orange: #ff8c42;
     }
 
-    /* Pro Theme: Dracula */
+    /* Theme: Dracula */
     :root[data-theme="dracula"] {
       --bg-primary: #282a36;
       --bg-secondary: #21222c;
@@ -1482,7 +1482,7 @@ ${highContrastOverride}${customOverrides}
       --accent-orange: #ffb86c;
     }
 
-    /* Pro Theme: Cyberpunk */
+    /* Theme: Cyberpunk */
     :root[data-theme="cyberpunk"] {
       --bg-primary: #0a0014;
       --bg-secondary: #110022;
@@ -1506,7 +1506,7 @@ ${highContrastOverride}${customOverrides}
       --accent-orange: #ff6600;
     }
 
-    /* Pro Theme: Forest */
+    /* Theme: Forest */
     :root[data-theme="forest"] {
       --bg-primary: #0c1a0e;
       --bg-secondary: #112416;
@@ -1530,7 +1530,7 @@ ${highContrastOverride}${customOverrides}
       --accent-orange: #fb923c;
     }
 
-    /* Pro Theme: Rose */
+    /* Theme: Rose */
     :root[data-theme="rose"] {
       --bg-primary: #1a0a14;
       --bg-secondary: #24101c;
