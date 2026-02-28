@@ -69,7 +69,7 @@ import { generateExecutivePdf, type PdfThemeName } from './generators/executive-
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import type { CIInfo } from './types';
-import { LiveWriter } from './live';
+import { LiveWriter, generateLiveDashboard } from './live';
 
 // ============================================================================
 // Smart Reporter
@@ -120,6 +120,7 @@ class SmartReporter implements Reporter {
   private runnerErrors: string[] = [];
   private ciInfo?: CIInfo;
   private liveWriter: LiveWriter;
+  private liveFirstFailureSent: boolean = false;
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -225,6 +226,16 @@ class SmartReporter implements Reporter {
     // Start live reporting (writes start event with total test count)
     const totalTests = suite.allTests().length;
     this.liveWriter.start(totalTests, this.ciInfo);
+
+    // Generate live dashboard HTML alongside the live results file
+    if (this.options.live?.dashboard !== false) {
+      const liveOutputFile = this.options.live?.outputFile ?? '.smart-live-results.jsonl';
+      const dashboardPath = path.resolve(this.outputDir, 'smart-live.html');
+      const dashboardHtml = generateLiveDashboard({ jsonlFile: liveOutputFile });
+      fs.writeFileSync(dashboardPath, dashboardHtml);
+      console.log(`\n📡 Live dashboard: ${dashboardPath}`);
+      console.log(`   Serve for SSE: npx playwright-smart-reporter-serve --live "${dashboardPath}"`);
+    }
   }
 
   onError(error: unknown): void {
@@ -454,6 +465,27 @@ class SmartReporter implements Reporter {
       retry: result.retry,
       error: testData.error,
     });
+
+    // Live: send notification on first failure (Starter tier)
+    if (
+      this.options.live?.notifyOnFirstFailure &&
+      !this.liveFirstFailureSent &&
+      (result.status === 'failed' || result.status === 'timedOut') &&
+      LicenseValidator.hasFeature(this.license, 'pro')
+    ) {
+      this.liveFirstFailureSent = true;
+      const msg = `First failure detected: "${test.title}" in ${file}`;
+      if (this.options.slackWebhook) {
+        this.slackNotifier.sendMessage(msg).catch(() => {});
+      }
+      if (this.options.teamsWebhook) {
+        this.teamsNotifier.sendMessage(msg).catch(() => {});
+      }
+      if (this.notificationManager) {
+        const failureResult: TestResultData[] = [testData];
+        this.notificationManager.notify(failureResult, this.startTime).catch(() => {});
+      }
+    }
   }
 
   /**
