@@ -5,7 +5,7 @@
  * REDESIGNED: Modern app-shell layout with sidebar, top bar, and master-detail view
  */
 
-import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo, LicenseTier, ThemeConfig, BrandingConfig, QualityGateResult, QualityGateRuleResult, QuarantineEntry } from '../types';
+import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo, LicenseTier, ThemeConfig, BrandingConfig, QualityGateResult, QualityGateRuleResult, QuarantineEntry, A11ySuiteScore } from '../types';
 import { formatDuration, escapeHtml, escapeJsString, sanitizeId, renderMarkdownLite } from '../utils';
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
@@ -37,6 +37,7 @@ export interface HtmlGeneratorData {
   quarantineEntries?: QuarantineEntry[];
   quarantineThreshold?: number;
   aiSuiteHealthSummary?: string;
+  a11ySuiteScore?: A11ySuiteScore;
 }
 
 /**

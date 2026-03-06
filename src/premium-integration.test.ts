@@ -104,6 +104,9 @@ vi.mock('./collectors', () => ({
   NetworkCollector: vi.fn().mockImplementation(() => ({
     collectFromTrace: vi.fn().mockResolvedValue({ entries: [] }),
   })),
+  A11yCollector: vi.fn().mockImplementation(() => ({
+    collect: vi.fn().mockReturnValue(undefined),
+  })),
 }));
 
 vi.mock('./analyzers', () => ({
@@ -116,6 +119,10 @@ vi.mock('./analyzers', () => ({
     analyzeFailed: vi.fn().mockResolvedValue(undefined),
     analyzeClusters: vi.fn().mockResolvedValue(undefined),
     analyzeSuiteHealth: vi.fn().mockResolvedValue(undefined),
+  })),
+  A11yAnalyzer: vi.fn().mockImplementation(() => ({
+    analyze: vi.fn(),
+    calculateSuiteScore: vi.fn().mockReturnValue({ testsScanned: 0, averageScore: 0, categories: {} }),
   })),
 }));
 
