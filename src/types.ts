@@ -74,6 +74,9 @@ export interface ThresholdConfig {
   gradeC?: number;                 // Default: 70
   gradeD?: number;                 // Default: 60
 
+  // Accessibility thresholds
+  a11yCriticalMax?: number;          // Default: 0 (any critical = needs attention)
+  a11ySeriousMax?: number;           // Default: 3
 }
 
 export interface SmartReporterOptions {
@@ -170,6 +173,9 @@ export interface SmartReporterOptions {
 
   // Premium: Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
   exportPdfFull?: boolean;
+
+  // Accessibility checking (Community: basic, Starter+: advanced features)
+  accessibility?: AccessibilityConfig;
 }
 
 // ============================================================================
@@ -301,6 +307,7 @@ export interface TestResultData {
   attachments?: AttachmentData;
   performanceMetrics?: PerformanceMetrics;
   networkLogs?: NetworkLogData;        // NEW: Network logs from trace
+  accessibility?: A11yResult;
 }
 
 // NEW: Retry Analysis
@@ -459,6 +466,9 @@ export interface QualityGateConfig {
   maxFlakyRate?: number;
   minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
   noNewFailures?: boolean;
+  maxA11yCritical?: number;
+  maxA11ySerious?: number;
+  maxA11yTotal?: number;
 }
 
 export interface QualityGateRuleResult {
@@ -497,6 +507,65 @@ export interface QuarantineFile {
   generatedAt: string;
   threshold: number;
   entries: QuarantineEntry[];
+}
+
+// ============================================================================
+// Accessibility (Community: basic, Starter+: advanced)
+// ============================================================================
+
+export interface AccessibilityConfig {
+  enabled: boolean;
+  standard?: 'WCAG2A' | 'WCAG2AA' | 'WCAG2AAA';
+  failOnSeverity?: 'critical' | 'serious' | 'moderate' | 'minor';
+  include?: string[];
+  exclude?: string[];
+  selector?: string;
+}
+
+export type A11yImpact = 'minor' | 'moderate' | 'serious' | 'critical';
+
+export interface A11yNode {
+  target: string[];
+  html: string;
+  failureSummary: string;
+}
+
+export interface A11yViolation {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  nodes: A11yNode[];
+}
+
+export interface A11yTreeSnapshot {
+  role: string;
+  name: string;
+  children?: A11yTreeSnapshot[];
+}
+
+export interface A11yResult {
+  violations: A11yViolation[];
+  passes: number;
+  incomplete: number;
+  inapplicable: number;
+  tree?: A11yTreeSnapshot;
+  timestamp: string;
+  standard: string;
+  url?: string;
+}
+
+export interface A11ySuiteScore {
+  totalViolations: number;
+  critical: number;
+  serious: number;
+  moderate: number;
+  minor: number;
+  testsWithViolations: number;
+  testsScanned: number;
+  rating: 'excellent' | 'good' | 'fair' | 'poor';
+  topViolationIds: string[];
 }
 
 // ============================================================================
