@@ -42,3 +42,6 @@ keys/
 benchmark/results/
 benchmark/node_modules/
 benchmark/specs/
+
+# Worktrees
+.worktrees/
