@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import { mergeHistories } from './smart-reporter';
 import type { TestHistory } from './types';
+import { A11yCollector } from './collectors';
+import { A11yAnalyzer } from './analyzers';
 
 vi.mock('fs');
 
@@ -231,5 +233,57 @@ describe('mergeHistories', () => {
     expect(result.runs).toEqual([]);
     expect(result.tests).toEqual({});
     expect(result.summaries).toEqual([]);
+  });
+});
+
+describe('accessibility integration', () => {
+  it('processes a11y attachments and includes data in results', () => {
+    const a11yData = {
+      violations: [
+        {
+          id: 'color-contrast',
+          impact: 'serious' as const,
+          description: 'Elements must have sufficient color contrast',
+          helpUrl: 'https://dequeuniversity.com/rules/axe/4.7/color-contrast',
+          wcagTags: ['wcag2aa'],
+          nodes: [{ target: ['h1'], html: '<h1>Test</h1>', failureSummary: 'Fix contrast' }],
+        },
+      ],
+      passes: 15,
+      incomplete: 1,
+      inapplicable: 3,
+      timestamp: '2026-03-06T12:00:00.000Z',
+      standard: 'WCAG2AA',
+    };
+
+    // Verify A11yCollector parses the attachment
+    const collector = new A11yCollector();
+    const mockResult = {
+      attachments: [{
+        name: 'smart-reporter-a11y',
+        contentType: 'application/json',
+        body: Buffer.from(JSON.stringify(a11yData)),
+      }],
+    };
+    const result = collector.collect(mockResult);
+    expect(result).toBeDefined();
+    expect(result!.violations).toHaveLength(1);
+
+    // Verify A11yAnalyzer scores it
+    const analyzer = new A11yAnalyzer();
+    const testData = {
+      testId: 'test-1', title: 'Test 1', file: 'test.spec.ts',
+      status: 'passed' as const, duration: 1000, retry: 0, steps: [], history: [],
+    };
+    analyzer.analyze(testData, result);
+    expect(testData.accessibility).toBeDefined();
+    expect(testData.accessibility!.violations[0].id).toBe('color-contrast');
+
+    // Verify suite score
+    const suiteScore = analyzer.calculateSuiteScore([testData]);
+    expect(suiteScore.serious).toBe(1);
+    expect(suiteScore.rating).toBe('fair');
+    expect(suiteScore.testsScanned).toBe(1);
+    expect(suiteScore.testsWithViolations).toBe(1);
   });
 });
