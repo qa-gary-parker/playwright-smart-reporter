@@ -2,9 +2,10 @@
  * Card Generator - Handles test card and test detail generation
  */
 
-import type { TestResultData, NetworkLogData, NetworkLogEntry } from '../types';
+import type { TestResultData, NetworkLogData, NetworkLogEntry, LicenseTier } from '../types';
 import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../utils';
 import { icon } from './icon-provider';
+import { generateTestA11ySection } from './a11y-generator';
 
 /**
  * Get appropriate icon for attachment content type
@@ -50,7 +51,7 @@ function getAnnotationIcon(type: string): string {
 /**
  * Generate a single test card
  */
-export function generateTestCard(test: TestResultData, showTraceSection: boolean, quarantinedTestIds?: Set<string>): string {
+export function generateTestCard(test: TestResultData, showTraceSection: boolean, quarantinedTestIds?: Set<string>, licenseTier?: LicenseTier): string {
   const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
@@ -161,7 +162,7 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
           ${hasDetails ? `<span class="expand-icon">${icon('chevron-right', 14)}</span>` : ''}
         </div>
       </div>
-      ${hasDetails ? generateTestDetails(test, cardId, showTraceSection) : ''}
+      ${hasDetails ? generateTestDetails(test, cardId, showTraceSection, licenseTier) : ''}
     </div>
   `;
 }
@@ -169,7 +170,7 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
 /**
  * Generate test details section (history, steps, errors, AI suggestions)
  */
-export function generateTestDetails(test: TestResultData, cardId: string, showTraceSection: boolean): string {
+export function generateTestDetails(test: TestResultData, cardId: string, showTraceSection: boolean, licenseTier?: LicenseTier): string {
   let historyDetails = '';
   let bodyDetails = '';
 
@@ -294,6 +295,9 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
   if (test.networkLogs && test.networkLogs.entries.length > 0) {
     bodyDetails += generateNetworkLogsSection(test.networkLogs, cardId);
   }
+
+  // Accessibility section
+  bodyDetails += generateTestA11ySection(test, licenseTier);
 
   if (test.error) {
     // Try to extract expected/actual values from assertion errors for diff view

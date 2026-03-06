@@ -12,6 +12,7 @@ import { generateGroupedTests, generateTestCard, AttentionSets } from './card-ge
 import { generateGallery, generateGalleryScript } from './gallery-generator';
 import { icon } from './icon-provider';
 import { generateComparison, generateComparisonScript } from './comparison-generator';
+import { generateTestA11ySection, generateA11yTab, generateA11yStyles, generateA11yScript } from './a11y-generator';
 // Issue #13: Inline trace viewer integration
 import { generateJSZipScript, generateTraceViewerHtml, generateTraceViewerStyles, generateTraceViewerScript } from './trace-viewer-generator';
 
@@ -1099,6 +1100,13 @@ ${!hasPro ? `            </div>` : ''}
             <span class="live-nav-dot" id="live-nav-indicator"></span>
           </button>
           ` : ''}
+          ${data.a11ySuiteScore ? `
+          <button class="nav-item" data-view="accessibility" onclick="switchView('accessibility')" role="tab" aria-selected="false" aria-controls="view-accessibility">
+            <span class="nav-icon" aria-hidden="true">${icon('accessibility')}</span>
+            <span class="nav-label">Accessibility</span>
+            ${data.a11ySuiteScore.totalViolations > 0 ? `<span class="nav-badge nav-badge-warning">${data.a11ySuiteScore.totalViolations}</span>` : ''}
+          </button>
+          ` : ''}
         </div>
       </nav>
 
@@ -1420,6 +1428,11 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
         </div>
       </section>
       ` : ''}
+      ${data.a11ySuiteScore ? `
+      <section class="view-panel" id="view-accessibility" style="display: none;" role="tabpanel" aria-label="Accessibility">
+        ${generateA11yTab(data.results, data.a11ySuiteScore)}
+      </section>
+      ` : ''}
     </main>
   </div>
 
@@ -1443,7 +1456,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
 
   <!-- Hidden data containers for detail rendering -->
   <div id="test-cards-data" style="display: none;">
-    ${results.map(test => generateTestCard(test, showTraceSection, quarantinedTestIds)).join('\n')}
+    ${results.map(test => generateTestCard(test, showTraceSection, quarantinedTestIds, data.licenseTier)).join('\n')}
   </div>
 
   ${cspSafe ? `<!-- CSP-safe: data embedded as JSON, scripts loaded externally -->
@@ -8607,6 +8620,9 @@ ${highContrastOverride}${customOverrides}
 
     /* Issue #13: Inline Trace Viewer Styles */
     ${generateTraceViewerStyles(monoFont)}
+
+    /* Accessibility UI Styles */
+    ${generateA11yStyles()}
 `;
 }
 
@@ -10329,5 +10345,8 @@ ${includeComparison ? `    // Comparison functions\n${generateComparisonScript()
         showToast('Failed to copy', 'error');
       });
     }
+
+    /* Accessibility UI Scripts */
+    ${generateA11yScript()}
 `;
 }
