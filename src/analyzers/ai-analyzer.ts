@@ -208,7 +208,70 @@ export class AIAnalyzer {
     return recommendations.sort((a, b) => b.priority - a.priority);
   }
 
-  private async callProxy(prompt: string, type: 'failure' | 'cluster' | 'suite-health'): Promise<{ suggestion: string; remaining: number; resetAt: number }> {
+  async analyzeAccessibility(
+    suiteScore: import('../types').A11ySuiteScore,
+    results: TestResultData[],
+  ): Promise<string | undefined> {
+    if (!this.isAvailable() || this.rateLimited) return undefined;
+    if (suiteScore.testsScanned === 0) return undefined;
+
+    console.log('\n   Generating AI accessibility analysis...');
+
+    const violationMap = new Map<string, { count: number; impact: string; description: string; wcagTags: string[]; nodeCount: number }>();
+    for (const test of results) {
+      if (!test.accessibility) continue;
+      for (const v of test.accessibility.violations) {
+        const existing = violationMap.get(v.id);
+        if (existing) {
+          existing.count++;
+          existing.nodeCount += v.nodes.length;
+        } else {
+          violationMap.set(v.id, { count: 1, impact: v.impact, description: v.description, wcagTags: v.wcagTags, nodeCount: v.nodes.length });
+        }
+      }
+    }
+
+    const topViolations = Array.from(violationMap.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 10)
+      .map(([id, info]) => `- [${info.impact}] ${id}: ${info.description} (${info.count} tests, ${info.nodeCount} nodes, WCAG: ${info.wcagTags.join(', ') || 'n/a'})`)
+      .join('\n');
+
+    const prompt = `You are an accessibility expert reviewing a Playwright test suite's WCAG compliance results. Write a concise, actionable analysis (3-5 sentences) in flowing prose. Focus on the highest-impact issues and provide specific remediation priorities. Do not use bullet points or headers.
+
+Accessibility Score: ${suiteScore.rating}
+Tests Scanned: ${suiteScore.testsScanned}
+Tests With Violations: ${suiteScore.testsWithViolations}
+Total Violations: ${suiteScore.totalViolations}
+
+Severity Breakdown:
+- Critical: ${suiteScore.critical}
+- Serious: ${suiteScore.serious}
+- Moderate: ${suiteScore.moderate}
+- Minor: ${suiteScore.minor}
+
+Top Violations:
+${topViolations || 'None'}
+
+Write the analysis now.`;
+
+    try {
+      const result = await this.callProxy(prompt, 'accessibility');
+      if (!this.quotaLogged) {
+        this.quotaLogged = true;
+        console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt).toISOString()})`);
+      }
+      console.log('   Accessibility analysis generated');
+      return result.suggestion;
+    } catch (err) {
+      if (!this.rateLimited) {
+        console.error('Failed to generate accessibility analysis:', err);
+      }
+      return undefined;
+    }
+  }
+
+  private async callProxy(prompt: string, type: 'failure' | 'cluster' | 'suite-health' | 'accessibility'): Promise<{ suggestion: string; remaining: number; resetAt: number }> {
     const response = await fetch(this.proxyUrl, {
       method: 'POST',
       headers: {

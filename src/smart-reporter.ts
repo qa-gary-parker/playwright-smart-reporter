@@ -25,6 +25,7 @@ import type {
   LicenseInfo,
   QualityGateResult,
   QuarantineFile,
+  A11ySuiteScore,
 } from './types';
 
 // ============================================================================
@@ -36,6 +37,7 @@ import {
   StepCollector,
   AttachmentCollector,
   NetworkCollector,
+  A11yCollector,
 } from './collectors';
 
 // ============================================================================
@@ -49,6 +51,7 @@ import {
   FailureClusterer,
   StabilityScorer,
   AIAnalyzer,
+  A11yAnalyzer,
 } from './analyzers';
 
 // ============================================================================
@@ -97,6 +100,8 @@ class SmartReporter implements Reporter {
   private retryAnalyzer!: RetryAnalyzer;
   private failureClusterer: FailureClusterer;
   private stabilityScorer!: StabilityScorer;
+  private a11yCollector: A11yCollector;
+  private a11yAnalyzer: A11yAnalyzer;
   private aiAnalyzer: AIAnalyzer;
 
   // Notifiers
@@ -144,6 +149,15 @@ class SmartReporter implements Reporter {
       this.options = { ...this.options, branding: undefined };
     }
 
+    // Gate failOnSeverity behind Starter tier
+    if (options.accessibility?.failOnSeverity && !LicenseValidator.hasFeature(this.license, 'pro')) {
+      console.warn('Smart Reporter: accessibility.failOnSeverity requires a Starter or Pro license. Ignoring threshold.');
+      this.options = {
+        ...this.options,
+        accessibility: this.options.accessibility ? { ...this.options.accessibility, failOnSeverity: undefined } : undefined,
+      };
+    }
+
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     // Issue #22: Pass filterPwApiSteps option to StepCollector
     this.stepCollector = new StepCollector({
@@ -157,6 +171,9 @@ class SmartReporter implements Reporter {
       maxEntries: 30,
       includeBodies: true,
     });
+
+    this.a11yCollector = new A11yCollector();
+    this.a11yAnalyzer = new A11yAnalyzer();
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
@@ -266,6 +283,7 @@ class SmartReporter implements Reporter {
     const steps = this.stepCollector.extractSteps(result);
     const attachments = this.attachmentCollector.collectAttachments(result);
     const history = this.historyCollector.getTestHistory(testId);
+    const accessibility = this.a11yCollector.collect(result);
 
     // Issue #15: Improved tag extraction
     // 1. Use test.tags directly (Playwright's built-in tag collection)
@@ -452,6 +470,7 @@ class SmartReporter implements Reporter {
     this.performanceAnalyzer.analyze(testData, history);
     this.retryAnalyzer.analyze(testData, history);
     this.stabilityScorer.scoreTest(testData);
+    this.a11yAnalyzer.analyze(testData, accessibility);
 
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
@@ -512,6 +531,7 @@ class SmartReporter implements Reporter {
 
     // Get failure clusters
     const failureClusters = this.failureClusterer.clusterFailures(this.results);
+    const a11ySuiteScore = this.a11yAnalyzer.calculateSuiteScore(this.results);
 
     // Run AI analysis on failures and clusters if enabled (Starter feature)
     const options = this.historyCollector.getOptions();
@@ -548,6 +568,12 @@ class SmartReporter implements Reporter {
       if (failedCount > 0) {
         console.log('\n   AI analysis requires a Starter or Pro license — see stagewright.dev/#pricing');
       }
+    }
+
+    // AI accessibility analysis (Starter+ feature)
+    let aiA11ySummary: string | undefined;
+    if (hasProForAI && a11ySuiteScore.testsScanned > 0 && options.enableAIRecommendations !== false) {
+      aiA11ySummary = await this.aiAnalyzer.analyzeAccessibility(a11ySuiteScore, this.results);
     }
 
     // Get comparison data if enabled
@@ -715,6 +741,8 @@ class SmartReporter implements Reporter {
 	      quarantineEntries: quarantineResult?.entries,
 	      quarantineThreshold: this.options.quarantine?.threshold,
 	      aiSuiteHealthSummary,
+	      a11ySuiteScore: a11ySuiteScore.testsScanned > 0 ? a11ySuiteScore : undefined,
+	      aiA11ySummary,
 	    };
 
     // Generate and save HTML report (with optional companion CSS/JS for CSP-safe mode)
@@ -963,3 +991,5 @@ export function mergeHistories(
 }
 
 export default SmartReporter;
+
+export { test as accessibilityTest } from './accessibility';

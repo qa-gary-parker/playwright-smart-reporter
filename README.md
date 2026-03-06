@@ -55,6 +55,8 @@ The free tier includes everything you need for local test reporting. Paid plans 
 | Brand reports with your logo and team name | | ✅ | ✅ |
 | Fully custom theme colours to match your brand | | | ✅ |
 | AI health summary — executive overview of suite quality | | ✅ | ✅ |
+| WCAG accessibility scanning with axe-core integration | ✅ | ✅ | ✅ |
+| AI accessibility analysis and a11y quality gates | | ✅ | ✅ |
 | Priority email support — direct access to the team | | | ✅ |
 
 **Get a license at [stagewright.dev](https://stagewright.dev)**
@@ -270,6 +272,79 @@ reporter: [
     enableAISuiteHealth: false,  // Disable AI health summary (saves 1 AI request per run)
   }],
 ]
+```
+
+### Accessibility Scanning
+
+Automatically scan pages for WCAG violations using axe-core. Each test runs an accessibility audit after completion, with results aggregated into a dedicated Accessibility tab.
+
+**Setup:**
+
+1. Install the axe-core integration:
+
+```bash
+npm install -D @axe-core/playwright
+```
+
+2. Import the accessibility test fixture instead of the standard Playwright `test`:
+
+```typescript
+// In your test files
+import { test } from 'playwright-smart-reporter/accessibility';
+import { expect } from '@playwright/test';
+
+test('homepage accessibility', async ({ page }) => {
+  await page.goto('https://example.com');
+  expect(page).toHaveTitle(/Example/);
+});
+```
+
+3. Enable in your Playwright config:
+
+```typescript
+export default defineConfig({
+  use: {
+    smartReporterA11y: {
+      enabled: true,
+      standard: 'WCAG2AA',  // WCAG2A, WCAG2AA, or WCAG2AAA
+    },
+  },
+  reporter: [
+    ['playwright-smart-reporter', {
+      outputFile: 'smart-report.html',
+      licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
+    }],
+  ],
+});
+```
+
+**Report Features:**
+- Per-test violation cards with impact badges (critical, serious, moderate, minor)
+- Dedicated Accessibility tab with suite-wide score, severity breakdown, and top issues
+- WCAG criterion links for each violation
+- Copy Prompt button to generate AI-ready fix prompts
+- Accessibility tree viewer (when tree snapshot is enabled)
+
+**Configuration Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Enable accessibility scanning |
+| `standard` | string | `'WCAG2AA'` | WCAG standard level |
+| `include` | string[] | `[]` | Only check these axe rules |
+| `exclude` | string[] | `[]` | Skip these axe rules |
+| `selector` | string | `undefined` | CSS selector to scope the scan |
+
+**Quality Gates:**
+
+Add accessibility thresholds to your quality gates:
+
+```typescript
+qualityGates: {
+  maxA11yViolations: 10,
+  maxA11yCritical: 0,
+  minA11yRating: 'fair',  // excellent, good, fair, poor, critical
+},
 ```
 
 ## Configuration
@@ -625,7 +700,7 @@ Enable `cspSafe: true` to save attachments as files instead of embedding, or red
 ```bash
 npm install
 npm run build
-npm test        # 666 tests
+npm test        # 800+ tests
 npm run test:demo
 ```
 
