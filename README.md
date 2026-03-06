@@ -55,7 +55,8 @@ The free tier includes everything you need for local test reporting. Paid plans 
 | Brand reports with your logo and team name | | ✅ | ✅ |
 | Fully custom theme colours to match your brand | | | ✅ |
 | AI health summary — executive overview of suite quality | | ✅ | ✅ |
-| WCAG accessibility scanning with axe-core integration | | ✅ | ✅ |
+| WCAG accessibility scanning with axe-core integration | ✅ | ✅ | ✅ |
+| AI accessibility analysis and a11y quality gates | | ✅ | ✅ |
 | Priority email support — direct access to the team | | | ✅ |
 
 **Get a license at [stagewright.dev](https://stagewright.dev)**
