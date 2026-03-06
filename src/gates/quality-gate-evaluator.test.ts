@@ -594,4 +594,83 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.actual).toBe('33%');
     });
   });
+
+  // ── Accessibility gates ──────────────────────────────────────────────
+
+  describe('accessibility gates', () => {
+    const a11yData = (violations: Array<{ id: string; impact: string }>) => ({
+      violations: violations.map(v => ({
+        id: v.id,
+        impact: v.impact as any,
+        description: '',
+        helpUrl: '',
+        wcagTags: [],
+        nodes: [],
+      })),
+      passes: 10,
+      incomplete: 0,
+      inapplicable: 0,
+      timestamp: '',
+      standard: 'WCAG2AA' as const,
+    });
+
+    it('passes maxA11yCritical when no critical violations', () => {
+      const results = [
+        createTestResult({
+          accessibility: a11yData([
+            { id: 'color-contrast', impact: 'serious' },
+            { id: 'image-alt', impact: 'serious' },
+          ]),
+        }),
+      ];
+      const result = evaluator.evaluate({ maxA11yCritical: 0 }, results);
+      const rule = result.rules.find(r => r.rule === 'maxA11yCritical');
+      expect(rule?.passed).toBe(true);
+      expect(rule?.actual).toBe('0');
+    });
+
+    it('fails maxA11yCritical when critical violations exceed threshold', () => {
+      const results = [
+        createTestResult({
+          accessibility: a11yData([
+            { id: 'bypass', impact: 'critical' },
+          ]),
+        }),
+      ];
+      const result = evaluator.evaluate({ maxA11yCritical: 0 }, results);
+      expect(result.passed).toBe(false);
+      const rule = result.rules.find(r => r.rule === 'maxA11yCritical');
+      expect(rule?.passed).toBe(false);
+      expect(rule?.actual).toBe('1');
+      expect(rule?.threshold).toBe('≤ 0');
+    });
+
+    it('passes maxA11yTotal when violations within threshold', () => {
+      const results = [
+        createTestResult({
+          accessibility: a11yData([
+            { id: 'color-contrast', impact: 'minor' },
+            { id: 'image-alt', impact: 'minor' },
+          ]),
+        }),
+      ];
+      const result = evaluator.evaluate({ maxA11yTotal: 5 }, results);
+      const rule = result.rules.find(r => r.rule === 'maxA11yTotal');
+      expect(rule?.passed).toBe(true);
+      expect(rule?.actual).toBe('2');
+    });
+
+    it('skips a11y gates when no tests have a11y data', () => {
+      const results = [createTestResult(), createTestResult({ testId: 'test-2' })];
+      const result = evaluator.evaluate(
+        { maxA11yCritical: 0, maxA11ySerious: 0, maxA11yTotal: 0 },
+        results,
+      );
+      const a11yRules = result.rules.filter(r => r.rule.startsWith('maxA11y'));
+      expect(a11yRules.length).toBe(3);
+      expect(a11yRules.every(r => r.skipped === true)).toBe(true);
+      expect(a11yRules.every(r => r.passed === true)).toBe(true);
+      expect(a11yRules.every(r => r.actual === 'N/A')).toBe(true);
+    });
+  });
 });
