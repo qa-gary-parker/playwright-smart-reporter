@@ -94,7 +94,7 @@ describe('generateTestA11ySection', () => {
     expect(html).toContain('a11y-node-target');
     expect(html).toContain('.btn');
     expect(html).toContain('Fix contrast ratio');
-    expect(html).toContain('Learn more');
+    expect(html).toContain('Docs');
     expect(html).toContain('dequeuniversity.com');
   });
 
@@ -175,7 +175,7 @@ describe('generateA11yTab', () => {
     ];
     const score = makeSuiteScore();
     const html = generateA11yTab(tests, score);
-    expect(html).toContain('Most Common Issues');
+    expect(html).toContain('Top Issues');
     expect(html).toContain('color-contrast');
     expect(html).toContain('image-alt');
   });
@@ -208,11 +208,57 @@ describe('generateA11yTab', () => {
     expect(html).toContain('2 violations');
   });
 
+  it('renders AI analysis section when summary provided', () => {
+    const score = makeSuiteScore();
+    const html = generateA11yTab([], score, 'Your suite has critical contrast issues.');
+    expect(html).toContain('AI Accessibility Analysis');
+    expect(html).toContain('critical contrast issues');
+    expect(html).toContain('a11y-ai-card');
+  });
+
+  it('does not render AI section when no summary', () => {
+    const score = makeSuiteScore();
+    const html = generateA11yTab([], score);
+    expect(html).not.toContain('a11y-ai-card');
+  });
+
+  it('renders collapsible issue details with node info', () => {
+    const tests = [
+      makeTest({
+        accessibility: {
+          violations: [makeViolation()],
+          passes: 5, incomplete: 0, inapplicable: 0,
+          timestamp: new Date().toISOString(), standard: 'wcag2aa',
+        },
+      }),
+    ];
+    const html = generateA11yTab(tests, makeSuiteScore());
+    expect(html).toContain('a11y-collapsible');
+    expect(html).toContain('a11y-detail-body');
+    expect(html).toContain('a11y-node-target');
+    expect(html).toContain('.btn');
+  });
+
+  it('renders WCAG criterion links for known tags', () => {
+    const tests = [
+      makeTest({
+        accessibility: {
+          violations: [makeViolation({ wcagTags: ['wcag143'] })],
+          passes: 5, incomplete: 0, inapplicable: 0,
+          timestamp: new Date().toISOString(), standard: 'wcag2aa',
+        },
+      }),
+    ];
+    const html = generateA11yTab(tests, makeSuiteScore());
+    expect(html).toContain('WCAG 1.4.3');
+    expect(html).toContain('w3.org/WAI/WCAG21');
+  });
+
   it('handles empty results gracefully', () => {
     const score = makeSuiteScore({ totalViolations: 0, critical: 0, serious: 0, moderate: 0, minor: 0 });
     const html = generateA11yTab([], score);
     expect(html).toContain('Accessibility');
-    expect(html).not.toContain('Most Common Issues');
+    expect(html).not.toContain('Top Issues');
     expect(html).not.toContain('Worst Offenders');
   });
 });
@@ -232,5 +278,6 @@ describe('generateA11yScript', () => {
     const js = generateA11yScript();
     expect(js).toContain('toggleA11ySection');
     expect(js).toContain('toggleA11yTree');
+    expect(js).toContain('toggleA11yDetail');
   });
 });

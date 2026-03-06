@@ -39,6 +39,7 @@ export interface HtmlGeneratorData {
   quarantineThreshold?: number;
   aiSuiteHealthSummary?: string;
   a11ySuiteScore?: A11ySuiteScore;
+  aiA11ySummary?: string;
 }
 
 /**
@@ -1104,6 +1105,7 @@ ${!hasPro ? `            </div>` : ''}
           <button class="nav-item" data-view="accessibility" onclick="switchView('accessibility')" role="tab" aria-selected="false" aria-controls="view-accessibility">
             <span class="nav-icon" aria-hidden="true">${icon('accessibility')}</span>
             <span class="nav-label">Accessibility</span>
+            <span class="premium-badge" style="font-size:9px;background:var(--accent-purple);color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">Starter</span>
             ${data.a11ySuiteScore.totalViolations > 0 ? `<span class="nav-badge nav-badge-warning">${data.a11ySuiteScore.totalViolations}</span>` : ''}
           </button>
           ` : ''}
@@ -1430,7 +1432,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
       ` : ''}
       ${data.a11ySuiteScore && hasStarter ? `
       <section class="view-panel" id="view-accessibility" style="display: none;" role="tabpanel" aria-label="Accessibility">
-        ${generateA11yTab(data.results, data.a11ySuiteScore)}
+        ${generateA11yTab(data.results, data.a11ySuiteScore, data.aiA11ySummary)}
       </section>
       ` : ''}
     </main>

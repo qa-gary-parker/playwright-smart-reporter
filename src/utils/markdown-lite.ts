@@ -12,25 +12,43 @@ function escapeHtmlAttr(value: string): string {
 }
 
 function renderInline(text: string): string {
-  // Minimal inline code support using backticks.
+  // Process inline code (backticks) first to protect their contents from further parsing.
   let out = '';
   let i = 0;
   while (i < text.length) {
     const start = text.indexOf('`', i);
     if (start === -1) {
-      out += escapeHtml(text.slice(i));
+      out += text.slice(i);
       break;
     }
     const end = text.indexOf('`', start + 1);
     if (end === -1) {
-      out += escapeHtml(text.slice(i));
+      out += text.slice(i);
       break;
     }
-    out += escapeHtml(text.slice(i, start));
-    out += `<code class="ai-inline-code">${escapeHtml(text.slice(start + 1, end))}</code>`;
+    out += text.slice(i, start);
+    out += `\x00CODE${escapeHtml(text.slice(start + 1, end))}\x00EDOC`;
     i = end + 1;
   }
-  return out;
+
+  // Escape HTML in non-code segments, then apply bold/italic.
+  const segments = out.split(/(\x00CODE[\s\S]*?\x00EDOC)/);
+  let result = '';
+  for (const seg of segments) {
+    if (seg.startsWith('\x00CODE')) {
+      result += `<code class="ai-inline-code">${seg.slice(5, -5)}</code>`;
+    } else {
+      let escaped = escapeHtml(seg);
+      // Bold: **text** or __text__
+      escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      escaped = escaped.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      // Italic: *text* or _text_ (but not inside words for underscores)
+      escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      escaped = escaped.replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
+      result += escaped;
+    }
+  }
+  return result;
 }
 
 function renderParagraph(text: string): string {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AIAnalyzer } from './ai-analyzer';
-import type { TestResultData, FailureCluster, SuiteStats } from '../types';
+import type { TestResultData, FailureCluster, SuiteStats, A11ySuiteScore } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
   return {
@@ -573,6 +573,272 @@ describe('AIAnalyzer', () => {
           recommendations[i + 1].priority
         );
       }
+    });
+  });
+
+  describe('analyzeAccessibility', () => {
+    function createSuiteScore(overrides: Partial<A11ySuiteScore> = {}): A11ySuiteScore {
+      return {
+        totalViolations: 5,
+        critical: 1,
+        serious: 2,
+        moderate: 1,
+        minor: 1,
+        testsWithViolations: 3,
+        testsScanned: 10,
+        rating: 'fair',
+        topViolationIds: ['color-contrast', 'image-alt'],
+        ...overrides,
+      };
+    }
+
+    function createTestResultWithA11y(overrides: Partial<TestResultData> = {}): TestResultData {
+      return createTestResult({
+        accessibility: {
+          violations: [
+            {
+              id: 'color-contrast',
+              impact: 'serious',
+              description: 'Elements must have sufficient color contrast',
+              helpUrl: 'https://dequeuniversity.com/rules/axe/4.4/color-contrast',
+              wcagTags: ['wcag2aa', 'wcag143'],
+              nodes: [{ html: '<button>', target: ['button'], failureSummary: 'Fix contrast' }],
+            },
+          ],
+          passes: 10,
+          incomplete: 0,
+          inapplicable: 0,
+          timestamp: '2025-01-01T00:00:00Z',
+          standard: 'WCAG2AA',
+        },
+        ...overrides,
+      });
+    }
+
+    it('returns undefined when isAvailable() is false (no license key)', async () => {
+      const analyzer = new AIAnalyzer({ tier: 'pro' });
+      const suiteScore = createSuiteScore();
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, []);
+
+      expect(result).toBeUndefined();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined when isAvailable() is false (community tier)', async () => {
+      const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'community' });
+      const suiteScore = createSuiteScore();
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, []);
+
+      expect(result).toBeUndefined();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined when testsScanned is 0', async () => {
+      const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'pro' });
+      const suiteScore = createSuiteScore({ testsScanned: 0 });
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, []);
+
+      expect(result).toBeUndefined();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined when rate limited', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Trigger rate limiting on the same analyzer instance via analyzeFailed
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({ resetAt: 1700000000 }),
+      });
+      const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'pro' });
+      await analyzer.analyzeFailed([createTestResult({ status: 'failed', error: 'Error' })]);
+
+      mockFetch.mockClear();
+      const suiteScore = createSuiteScore();
+      const result = await analyzer.analyzeAccessibility(suiteScore, []);
+
+      expect(result).toBeUndefined();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns string suggestion from proxy response', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockProxyResponse('Accessibility analysis complete.'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'pro' });
+      const suiteScore = createSuiteScore({ critical: 2, serious: 3, totalViolations: 8 });
+      const results = [createTestResultWithA11y()];
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, results);
+
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Accessibility analysis complete.');
+    });
+
+    it('prompt includes violation severity counts from suite score', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockProxyResponse('Severity analysis done.'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key-123', tier: 'pro' });
+      const suiteScore = createSuiteScore({
+        rating: 'poor',
+        totalViolations: 12,
+        testsWithViolations: 7,
+        testsScanned: 10,
+        critical: 3,
+        serious: 4,
+      });
+
+      await analyzer.analyzeAccessibility(suiteScore, []);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.prompt).toContain('poor');
+      expect(body.prompt).toContain('12');
+      expect(body.prompt).toContain('7');
+      expect(body.prompt).toContain('10');
+      expect(body.prompt).toContain('3'); // critical count
+      expect(body.prompt).toContain('4'); // serious count
+    });
+
+    it('calls proxy with type accessibility and returns suggestion', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockProxyResponse('Your app has critical contrast issues.'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'my-key', tier: 'pro' });
+      const suiteScore = createSuiteScore();
+      const results = [createTestResultWithA11y()];
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, results);
+
+      expect(result).toBe('Your app has critical contrast issues.');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://stagewright.dev/api/ai/analyze',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer my-key',
+          }),
+        })
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.type).toBe('accessibility');
+    });
+
+    it('proxy request body contains accessibility score data', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockProxyResponse('Fix your contrast ratios.'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key', tier: 'pro' });
+      const suiteScore = createSuiteScore({
+        rating: 'poor',
+        totalViolations: 20,
+        critical: 5,
+        testsScanned: 15,
+        testsWithViolations: 8,
+      });
+
+      await analyzer.analyzeAccessibility(suiteScore, []);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.prompt).toContain('poor');
+      expect(body.prompt).toContain('15');
+      expect(body.prompt).toContain('20');
+      expect(body.prompt).toContain('5');
+    });
+
+    it('returns undefined on proxy error (fetch throws)', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockFetch.mockRejectedValueOnce(new Error('Network failure'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key', tier: 'pro' });
+      const suiteScore = createSuiteScore();
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, []);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined on proxy 500 error', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key', tier: 'pro' });
+      const suiteScore = createSuiteScore();
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, []);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('aggregates violations across multiple results for prompt', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockProxyResponse('Multiple issues found.'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key', tier: 'pro' });
+      const suiteScore = createSuiteScore();
+
+      const results = [
+        createTestResultWithA11y({ testId: 'test-1' }),
+        createTestResultWithA11y({
+          testId: 'test-2',
+          accessibility: {
+            violations: [
+              {
+                id: 'image-alt',
+                impact: 'critical',
+                description: 'Images must have alternate text',
+                helpUrl: 'https://dequeuniversity.com/rules/axe/4.4/image-alt',
+                wcagTags: ['wcag2a', 'wcag111'],
+                nodes: [{ html: '<img src="logo.png">', target: ['img'], failureSummary: 'Add alt' }],
+              },
+            ],
+            passes: 5,
+            incomplete: 0,
+            inapplicable: 0,
+            timestamp: '2025-01-01T00:00:00Z',
+            standard: 'WCAG2AA',
+          },
+        }),
+      ];
+
+      await analyzer.analyzeAccessibility(suiteScore, results);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      // Both violations should appear in prompt
+      expect(body.prompt).toContain('color-contrast');
+      expect(body.prompt).toContain('image-alt');
+    });
+
+    it('skips results with no accessibility data when building violation map', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockProxyResponse('No violations from skipped tests.'));
+
+      const analyzer = new AIAnalyzer({ licenseKey: 'key', tier: 'pro' });
+      const suiteScore = createSuiteScore();
+
+      const results = [
+        createTestResult({ testId: 'no-a11y' }), // no accessibility field
+        createTestResultWithA11y({ testId: 'has-a11y' }),
+      ];
+
+      const result = await analyzer.analyzeAccessibility(suiteScore, results);
+
+      expect(result).toBe('No violations from skipped tests.');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.prompt).toContain('color-contrast');
     });
   });
 });

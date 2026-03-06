@@ -16,7 +16,7 @@ function meetsOrExceedsSeverity(impact: A11yImpact, threshold: A11yImpact): bool
 async function runAxeAnalysis(page: Page, config: AccessibilityConfig): Promise<A11yResult> {
   let AxeBuilder: any;
   try {
-    // @ts-expect-error - @axe-core/playwright is an optional peer dependency
+    // @axe-core/playwright is an optional peer dependency
     const axeModule = await import('@axe-core/playwright');
     AxeBuilder = axeModule.default || axeModule.AxeBuilder;
   } catch (err: any) {

@@ -15,6 +15,7 @@ blobs/
 
 # Example outputs
 example/smart-report.html
+example/smart-report-a11y.html
 example/test-history.json
 example/parallel/smart-report.html
 example/parallel/test-history.json

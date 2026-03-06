@@ -1,7 +1,7 @@
 {
   "name": "playwright-smart-reporter",
   "version": "1.7.0",
-  "description": "An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, and performance regression alerts",
+  "description": "An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and WCAG accessibility scanning",
   "main": "dist/smart-reporter.js",
   "types": "dist/smart-reporter.d.ts",
   "bin": {
@@ -20,6 +20,10 @@
       "default": "./dist/quarantine/quarantine-helper.js"
     },
     "./a11y": {
+      "types": "./dist/accessibility/index.d.ts",
+      "default": "./dist/accessibility/index.js"
+    },
+    "./accessibility": {
       "types": "./dist/accessibility/index.d.ts",
       "default": "./dist/accessibility/index.js"
     }
@@ -78,9 +82,9 @@
     "url": "https://github.com/qa-gary-parker/playwright-smart-reporter/issues"
   },
   "peerDependencies": {
+    "@axe-core/playwright": ">=4.0.0",
     "@playwright/test": ">=1.40.0",
-    "playwright-core": ">=1.40.0",
-    "@axe-core/playwright": ">=4.0.0"
+    "playwright-core": ">=1.40.0"
   },
   "peerDependenciesMeta": {
     "playwright-core": {
@@ -91,6 +95,7 @@
     }
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "^1.49.0",
     "@types/adm-zip": "^0.5.7",
     "@types/pdfkit": "^0.13.8",

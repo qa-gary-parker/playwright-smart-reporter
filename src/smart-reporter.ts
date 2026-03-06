@@ -570,6 +570,12 @@ class SmartReporter implements Reporter {
       }
     }
 
+    // AI accessibility analysis (Starter+ feature)
+    let aiA11ySummary: string | undefined;
+    if (hasProForAI && a11ySuiteScore.testsScanned > 0 && options.enableAIRecommendations !== false) {
+      aiA11ySummary = await this.aiAnalyzer.analyzeAccessibility(a11ySuiteScore, this.results);
+    }
+
     // Get comparison data if enabled
     let comparison: RunComparison | undefined;
     if (options.enableComparison !== false) {
@@ -736,6 +742,7 @@ class SmartReporter implements Reporter {
 	      quarantineThreshold: this.options.quarantine?.threshold,
 	      aiSuiteHealthSummary,
 	      a11ySuiteScore: a11ySuiteScore.testsScanned > 0 ? a11ySuiteScore : undefined,
+	      aiA11ySummary,
 	    };
 
     // Generate and save HTML report (with optional companion CSS/JS for CSP-safe mode)
@@ -985,4 +992,4 @@ export function mergeHistories(
 
 export default SmartReporter;
 
-export { withAccessibility } from './accessibility';
+export { test as accessibilityTest } from './accessibility';
