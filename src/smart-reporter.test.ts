@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import { mergeHistories } from './smart-reporter';
-import type { TestHistory } from './types';
+import type { TestHistory, TestResultData } from './types';
 import { A11yCollector } from './collectors';
 import { A11yAnalyzer } from './analyzers';
 
@@ -271,9 +271,9 @@ describe('accessibility integration', () => {
 
     // Verify A11yAnalyzer scores it
     const analyzer = new A11yAnalyzer();
-    const testData = {
+    const testData: TestResultData = {
       testId: 'test-1', title: 'Test 1', file: 'test.spec.ts',
-      status: 'passed' as const, duration: 1000, retry: 0, steps: [], history: [],
+      status: 'passed', duration: 1000, retry: 0, steps: [], history: [],
     };
     analyzer.analyze(testData, result);
     expect(testData.accessibility).toBeDefined();
