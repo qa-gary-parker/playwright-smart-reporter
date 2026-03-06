@@ -156,6 +156,54 @@ describe('A11yCollector', () => {
       expect(result!.timestamp).toBeDefined();
     });
 
+    it('handles violations with missing or null fields gracefully', () => {
+      const collector = new A11yCollector();
+      const a11yData = {
+        violations: [
+          { id: 'color-contrast', impact: 'serious' },
+          { id: null, impact: 'invalid-impact', description: 123 },
+          null,
+          'not-an-object',
+          { impact: 'critical', nodes: [{ target: null, html: 42 }, null] },
+        ],
+        passes: 5,
+        incomplete: 0,
+        inapplicable: 2,
+        timestamp: '2026-03-06T12:00:00Z',
+        standard: 'WCAG2AA',
+      };
+
+      const result = collector.collect({
+        attachments: [
+          makeAttachment('smart-reporter-a11y', 'application/json', Buffer.from(JSON.stringify(a11yData))),
+        ],
+      });
+
+      expect(result).toBeDefined();
+      // null and 'not-an-object' are filtered out
+      expect(result!.violations).toHaveLength(3);
+
+      // First violation: valid id/impact, missing other fields get defaults
+      expect(result!.violations[0].id).toBe('color-contrast');
+      expect(result!.violations[0].impact).toBe('serious');
+      expect(result!.violations[0].description).toBe('');
+      expect(result!.violations[0].helpUrl).toBe('');
+      expect(result!.violations[0].wcagTags).toEqual([]);
+      expect(result!.violations[0].nodes).toEqual([]);
+
+      // Second violation: invalid fields get defaults
+      expect(result!.violations[1].id).toBe('unknown');
+      expect(result!.violations[1].impact).toBe('moderate');
+      expect(result!.violations[1].description).toBe('');
+
+      // Third violation: nodes with missing/bad fields
+      expect(result!.violations[2].impact).toBe('critical');
+      expect(result!.violations[2].nodes).toHaveLength(2);
+      expect(result!.violations[2].nodes[0].target).toEqual([]);
+      expect(result!.violations[2].nodes[0].html).toBe('');
+      expect(result!.violations[2].nodes[1].target).toEqual([]);
+    });
+
     it('returns undefined when parsed JSON has no violations array', () => {
       const collector = new A11yCollector();
       const invalid = { passes: 10, standard: 'WCAG2AA' };

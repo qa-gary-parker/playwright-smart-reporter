@@ -149,6 +149,15 @@ class SmartReporter implements Reporter {
       this.options = { ...this.options, branding: undefined };
     }
 
+    // Gate failOnSeverity behind Starter tier
+    if (options.accessibility?.failOnSeverity && !LicenseValidator.hasFeature(this.license, 'pro')) {
+      console.warn('Smart Reporter: accessibility.failOnSeverity requires a Starter or Pro license. Ignoring threshold.');
+      this.options = {
+        ...this.options,
+        accessibility: this.options.accessibility ? { ...this.options.accessibility, failOnSeverity: undefined } : undefined,
+      };
+    }
+
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     // Issue #22: Pass filterPwApiSteps option to StepCollector
     this.stepCollector = new StepCollector({
@@ -975,3 +984,5 @@ export function mergeHistories(
 }
 
 export default SmartReporter;
+
+export { withAccessibility } from './accessibility';

@@ -1100,7 +1100,7 @@ ${!hasPro ? `            </div>` : ''}
             <span class="live-nav-dot" id="live-nav-indicator"></span>
           </button>
           ` : ''}
-          ${data.a11ySuiteScore ? `
+          ${data.a11ySuiteScore && hasStarter ? `
           <button class="nav-item" data-view="accessibility" onclick="switchView('accessibility')" role="tab" aria-selected="false" aria-controls="view-accessibility">
             <span class="nav-icon" aria-hidden="true">${icon('accessibility')}</span>
             <span class="nav-label">Accessibility</span>
@@ -1428,7 +1428,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
         </div>
       </section>
       ` : ''}
-      ${data.a11ySuiteScore ? `
+      ${data.a11ySuiteScore && hasStarter ? `
       <section class="view-panel" id="view-accessibility" style="display: none;" role="tabpanel" aria-label="Accessibility">
         ${generateA11yTab(data.results, data.a11ySuiteScore)}
       </section>
