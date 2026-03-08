@@ -31,8 +31,6 @@ export interface HtmlGeneratorData {
   failureClusters?: FailureCluster[];
   ciInfo?: CIInfo;
   licenseTier?: LicenseTier;
-  licenseTrial?: boolean;
-  licenseTrialDaysRemaining?: number;
   outputBasename?: string;
   qualityGateResult?: QualityGateResult;
   quarantinedTestIds?: Set<string>;
@@ -229,8 +227,6 @@ function generateOverviewContent(
   quarantineThreshold?: number,
   licenseTier?: LicenseTier,
   aiSuiteHealthSummary?: string,
-  isTrial?: boolean,
-  trialDaysRemaining?: number,
 ): string {
   // Calculate deltas from comparison
   const prevPassed = comparison?.baselineRun.passed ?? passed;
@@ -470,27 +466,8 @@ function generateOverviewContent(
     </div>
   ` : '');
 
-  // Trial banner for starter trial users
-  const trialDays = trialDaysRemaining ?? 0;
-  const trialUrgency = trialDays <= 1 ? 'urgent' : trialDays <= 3 ? 'warning' : 'healthy';
-  const trialDaysLabel = trialDays === 1 ? '1 day' : `${trialDays} days`;
-  const trialBannerHtml = isTrial ? `
-    <div class="trial-banner trial-banner--${trialUrgency}" id="trialBanner">
-      <div class="trial-banner-content">
-        <div class="trial-banner-text">
-          <span class="trial-banner-icon">${icon('clock', 18)}</span>
-          <span><strong>Starter trial</strong> — ${trialDaysLabel} remaining (100 free AI requests). Subscribe to keep AI analysis, exports, quality gates, and all Starter features.</span>
-        </div>
-        <div class="trial-banner-actions">
-          <a class="trial-banner-btn" href="https://stagewright.dev/#pricing" target="_blank" rel="noopener">Subscribe Now</a>
-          <button class="trial-banner-dismiss" onclick="dismissTrialBanner()" title="Dismiss" aria-label="Dismiss trial banner">&times;</button>
-        </div>
-      </div>
-    </div>
-  ` : '';
-
-  // Upgrade CTA banner for Local (free) tier (hidden for trial users who already have access)
-  const upgradeBannerHtml = !hasPro && !isTrial ? `
+  // Upgrade CTA banner for Local (free) tier
+  const upgradeBannerHtml = !hasPro ? `
     <div class="upgrade-banner" id="upgradeBanner">
       <div class="upgrade-banner-content">
         <div class="upgrade-banner-text">
@@ -545,7 +522,6 @@ function generateOverviewContent(
   ` : '';
 
   return `
-    ${trialBannerHtml}
     ${upgradeBannerHtml}
 
     <!-- Hero Stats Row -->
@@ -802,8 +778,6 @@ export function generateHtml(data: HtmlGeneratorData): GeneratedReport {
   // Starter = any non-community tier (starter|pro|team). Identical to hasPro today;
   // kept separate so Live gating can diverge from Pro gating if tiers evolve.
   const hasStarter = licenseTier !== 'community';
-  const isTrial = data.licenseTrial === true;
-  const trialDaysRemaining = data.licenseTrialDaysRemaining ?? 0;
   const quarantinedTestIds = data.quarantinedTestIds;
   const quarantineCount = quarantinedTestIds?.size ?? 0;
   const outputBasename = escapeHtml(data.outputBasename ?? 'smart-report');
@@ -1214,7 +1188,7 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
           <h2 class="view-title">Overview</h2>
         </div>
         <div class="overview-content">
-          ${generateOverviewContent(results, comparison, failureClusters, passed, failed, skipped, flaky, slow, newTests, total, passRate, totalDuration, history, data.qualityGateResult, data.quarantineEntries, data.quarantineThreshold, licenseTier, data.aiSuiteHealthSummary, isTrial, trialDaysRemaining)}
+          ${generateOverviewContent(results, comparison, failureClusters, passed, failed, skipped, flaky, slow, newTests, total, passRate, totalDuration, history, data.qualityGateResult, data.quarantineEntries, data.quarantineThreshold, licenseTier, data.aiSuiteHealthSummary)}
         </div>
       </section>
 
@@ -5610,74 +5584,6 @@ ${highContrastOverride}${customOverrides}
     .gated-clickable:hover { opacity: 0.6; }
 
     /* ============================================
-       TRIAL BANNER
-    ============================================ */
-    .trial-banner {
-      border-radius: 12px;
-      padding: 0.75rem 1.25rem;
-      margin-bottom: 1.25rem;
-      animation: upgradeBannerSlideIn 0.4s ease-out;
-    }
-    .trial-banner--healthy {
-      background: linear-gradient(135deg, #059669, #10b981);
-    }
-    .trial-banner--warning {
-      background: linear-gradient(135deg, #d97706, #f59e0b);
-    }
-    .trial-banner--urgent {
-      background: linear-gradient(135deg, #dc2626, #ef4444);
-    }
-    .trial-banner-content {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .trial-banner-text {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      color: #fff;
-      font-size: 0.85rem;
-      line-height: 1.4;
-    }
-    .trial-banner-icon { flex-shrink: 0; color: #fff; }
-    .trial-banner-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-shrink: 0;
-    }
-    .trial-banner-btn {
-      display: inline-block;
-      background: #fff;
-      color: #059669;
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 0.4rem 1rem;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background 0.2s;
-    }
-    .trial-banner--warning .trial-banner-btn { color: #d97706; }
-    .trial-banner--urgent .trial-banner-btn { color: #dc2626; }
-    .trial-banner-btn:hover { background: #f0fdf4; }
-    .trial-banner-dismiss {
-      background: none;
-      border: none;
-      color: rgba(255,255,255,0.7);
-      font-size: 1.25rem;
-      cursor: pointer;
-      font-weight: 300;
-      padding: 0 0.25rem;
-      line-height: 1;
-    }
-    .trial-banner-dismiss:hover { color: #fff; }
-
-    /* ============================================
        UPGRADE CTA BANNER
     ============================================ */
     .upgrade-banner {
@@ -7845,19 +7751,6 @@ ${highContrastOverride}${customOverrides}
         font-size: 1rem;
       }
 
-      .trial-banner {
-        padding: 0.5rem 0.75rem;
-        margin-bottom: 1rem;
-      }
-      .trial-banner-content {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.75rem;
-      }
-      .trial-banner-text { font-size: 0.78rem; }
-      .trial-banner-actions { width: 100%; }
-      .trial-banner-btn { flex: 1; text-align: center; }
-
       .upgrade-banner {
         padding: 0.5rem 0.75rem;
         margin-bottom: 1rem;
@@ -9704,29 +9597,6 @@ function generateScripts(
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.style.display !== 'none') closeUpgradeModal();
       });
-    })();
-
-    // Trial banner dismiss
-    function dismissTrialBanner() {
-      var banner = document.getElementById('trialBanner');
-      if (banner) {
-        banner.style.transition = 'opacity 0.3s, max-height 0.3s';
-        banner.style.opacity = '0';
-        banner.style.maxHeight = '0';
-        banner.style.overflow = 'hidden';
-        banner.style.marginBottom = '0';
-        banner.style.padding = '0';
-        setTimeout(function() { banner.remove(); }, 300);
-        try { sessionStorage.setItem('sw-trial-dismissed', '1'); } catch(e) {}
-      }
-    }
-    (function() {
-      try {
-        if (sessionStorage.getItem('sw-trial-dismissed') === '1') {
-          var b = document.getElementById('trialBanner');
-          if (b) b.remove();
-        }
-      } catch(e) {}
     })();
 
     // Upgrade banner dismiss

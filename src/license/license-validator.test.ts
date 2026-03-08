@@ -284,71 +284,6 @@ describe('LicenseValidator', () => {
     });
   });
 
-  describe('trial licenses', () => {
-    it('returns trial=true and days remaining for a trial JWT', () => {
-      const validator = new LicenseValidator(PUBLIC_KEY);
-      const now = Math.floor(Date.now() / 1000);
-      const token = signJwt(
-        { tier: 'starter', org: 'Trial Org', iat: now, exp: now + 7 * 86400, trial: true },
-        PRIVATE_KEY
-      );
-
-      const result = validator.validate(token);
-
-      expect(result.tier).toBe('starter');
-      expect(result.valid).toBe(true);
-      expect(result.trial).toBe(true);
-      expect(result.trialDaysRemaining).toBeGreaterThanOrEqual(6);
-      expect(result.trialDaysRemaining).toBeLessThanOrEqual(7);
-    });
-
-    it('returns trialDaysRemaining=0 for an expired trial', () => {
-      const validator = new LicenseValidator(PUBLIC_KEY);
-      const now = Math.floor(Date.now() / 1000);
-      // Trial that expired 1 hour ago — validator will reject it as expired
-      const token = signJwt(
-        { tier: 'starter', org: 'Expired Trial', iat: now - 86400, exp: now - 3600, trial: true },
-        PRIVATE_KEY
-      );
-
-      const result = validator.validate(token);
-
-      expect(result.valid).toBe(false);
-      expect(result.tier).toBe('community');
-      expect(result.error).toBe('License key has expired');
-    });
-
-    it('does not set trial fields when trial claim is absent', () => {
-      const validator = new LicenseValidator(PUBLIC_KEY);
-      const now = Math.floor(Date.now() / 1000);
-      const token = signJwt(
-        { tier: 'starter', org: 'Paid Starter', iat: now, exp: now + 30 * 86400 },
-        PRIVATE_KEY
-      );
-
-      const result = validator.validate(token);
-
-      expect(result.tier).toBe('starter');
-      expect(result.valid).toBe(true);
-      expect(result.trial).toBeUndefined();
-      expect(result.trialDaysRemaining).toBeUndefined();
-    });
-
-    it('returns trial with 1 day remaining when expiry is within 24 hours', () => {
-      const validator = new LicenseValidator(PUBLIC_KEY);
-      const now = Math.floor(Date.now() / 1000);
-      const token = signJwt(
-        { tier: 'starter', org: 'Last Day', iat: now, exp: now + 3600, trial: true },
-        PRIVATE_KEY
-      );
-
-      const result = validator.validate(token);
-
-      expect(result.trial).toBe(true);
-      expect(result.trialDaysRemaining).toBe(1);
-    });
-  });
-
   describe('generateLicense integration', () => {
     it('generates a pro license that validates correctly', () => {
       const token = generateLicense(
@@ -412,33 +347,6 @@ describe('LicenseValidator', () => {
       const oneYearFromNow = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
       const diffMs = Math.abs(expiryDate.getTime() - oneYearFromNow.getTime());
       expect(diffMs).toBeLessThan(60000); // within 1 minute
-    });
-
-    it('generates a starter license that validates correctly', () => {
-      const token = generateLicense(
-        { tier: 'starter', org: 'Starter Org' },
-        PRIVATE_KEY_PATH
-      );
-      const validator = new LicenseValidator(PUBLIC_KEY);
-      const result = validator.validate(token);
-
-      expect(result.tier).toBe('starter');
-      expect(result.valid).toBe(true);
-      expect(result.trial).toBeUndefined();
-    });
-
-    it('generates a starter trial license with trial claim', () => {
-      const token = generateLicense(
-        { tier: 'starter', org: 'Trial Org', expiry: '2026-03-15', trial: true },
-        PRIVATE_KEY_PATH
-      );
-      const validator = new LicenseValidator(PUBLIC_KEY);
-      const result = validator.validate(token);
-
-      expect(result.tier).toBe('starter');
-      expect(result.valid).toBe(true);
-      expect(result.trial).toBe(true);
-      expect(result.trialDaysRemaining).toBeGreaterThan(0);
     });
   });
 });

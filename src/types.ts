@@ -11,8 +11,6 @@ export interface LicenseInfo {
   valid: boolean;
   org?: string;
   expiry?: string;
-  trial?: boolean;
-  trialDaysRemaining?: number;
   error?: string;
 }
 
