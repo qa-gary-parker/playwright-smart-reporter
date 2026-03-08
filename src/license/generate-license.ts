@@ -5,9 +5,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 interface LicenseOptions {
-  tier: 'pro' | 'team';
+  tier: 'starter' | 'pro' | 'team';
   org: string;
   expiry?: string;
+  trial?: boolean;
 }
 
 function base64UrlEncode(data: Buffer): string {
@@ -31,12 +32,16 @@ export function generateLicense(options: LicenseOptions, privateKeyPath: string)
   }
 
   const header = { alg: 'ES256', typ: 'JWT' };
-  const payload = {
+  const payload: Record<string, unknown> = {
     tier: options.tier,
     org: options.org,
     iat: now,
     exp,
   };
+
+  if (options.trial) {
+    payload.trial = true;
+  }
 
   const headerB64 = base64UrlEncode(Buffer.from(JSON.stringify(header)));
   const payloadB64 = base64UrlEncode(Buffer.from(JSON.stringify(payload)));
@@ -53,6 +58,7 @@ function parseArgs(args: string[]): LicenseOptions {
   let tier: string | undefined;
   let org: string | undefined;
   let expiry: string | undefined;
+  let trial = false;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -65,11 +71,14 @@ function parseArgs(args: string[]): LicenseOptions {
       case '--expiry':
         expiry = args[++i];
         break;
+      case '--trial':
+        trial = true;
+        break;
     }
   }
 
-  if (!tier || !['pro', 'team'].includes(tier)) {
-    console.error('Error: --tier must be "pro" or "team"');
+  if (!tier || !['starter', 'pro', 'team'].includes(tier)) {
+    console.error('Error: --tier must be "starter", "pro", or "team"');
     process.exit(1);
   }
 
@@ -78,7 +87,7 @@ function parseArgs(args: string[]): LicenseOptions {
     process.exit(1);
   }
 
-  return { tier: tier as 'pro' | 'team', org, expiry };
+  return { tier: tier as 'starter' | 'pro' | 'team', org, expiry, trial: trial || undefined };
 }
 
 // CJS guard — works because tsconfig targets CommonJS
