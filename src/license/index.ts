@@ -19,6 +19,7 @@ interface LicensePayload {
   exp?: number;
   iat?: number;
   sub?: string;
+  trial?: boolean;
 }
 
 function decodeJwt(token: string): { header: Record<string, unknown>; payload: LicensePayload; signatureInput: string; signature: Buffer } | null {
@@ -98,12 +99,20 @@ export class LicenseValidator {
     const validTiers: LicenseTier[] = ['starter', 'pro', 'team'];
     const tier = validTiers.includes(payload.tier) ? payload.tier : 'community';
 
-    return {
+    const result: LicenseInfo = {
       tier,
       valid: true,
       org: payload.org,
       expiry: payload.exp ? new Date(payload.exp * 1000).toISOString() : undefined,
     };
+
+    if (payload.trial === true) {
+      result.trial = true;
+      const msRemaining = (payload.exp! * 1000) - Date.now();
+      result.trialDaysRemaining = Math.max(0, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
+    }
+
+    return result;
   }
 
   static hasFeature(license: LicenseInfo, requiredTier: LicenseTier): boolean {

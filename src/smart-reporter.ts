@@ -709,6 +709,8 @@ class SmartReporter implements Reporter {
 	      failureClusters,
 	      ciInfo: this.ciInfo,
 	      licenseTier: this.license.tier,
+	      licenseTrial: this.license.trial,
+	      licenseTrialDaysRemaining: this.license.trialDaysRemaining,
 	      outputBasename: path.basename(outputPath, '.html'),
 	      qualityGateResult,
 	      quarantinedTestIds,
@@ -855,8 +857,12 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Gentle upsell for community tier
-    if (this.license.tier === 'community') {
+    // Trial status or gentle upsell
+    if (this.license.trial) {
+      const days = this.license.trialDaysRemaining ?? 0;
+      const label = days === 1 ? '1 day' : `${days} days`;
+      console.log(`\n   Starter trial — ${label} remaining (100 free AI requests). Subscribe at stagewright.dev/#pricing`);
+    } else if (this.license.tier === 'community') {
       console.log(`\n   Starter features available — see stagewright.dev/#pricing`);
     }
   }
