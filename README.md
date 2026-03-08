@@ -35,7 +35,7 @@ Run your tests and open the generated `smart-report.html`.
 
 The free tier includes everything you need for local test reporting. Paid plans add AI failure analysis, premium themes, PDF exports, quality gates, and more — activated with a license key.
 
-> **Free trial** — Try Starter free for 7 days with 100 AI requests. No credit card required. [Start your trial](https://stagewright.dev/#pricing)
+> **Free trial** — Try Starter free for 7 days with 100 AI requests. [Start your trial](https://stagewright.dev/#pricing)
 
 | Feature | Local (Free) | Starter (£5/mo) | Pro (£9/mo) |
 |---|:---:|:---:|:---:|
@@ -597,7 +597,7 @@ Visit [stagewright.dev](https://stagewright.dev) to purchase a Starter (£5/mo) 
 
 ### Is there a free trial?
 
-Yes. The Starter plan includes a 7-day free trial with 100 AI requests and full access to all Starter features — exports, quality gates, themes, and more. No credit card required. [Start your trial](https://stagewright.dev/#pricing)
+Yes. The Starter plan includes a 7-day free trial with 100 AI requests and full access to all Starter features — exports, quality gates, themes, and more. [Start your trial](https://stagewright.dev/#pricing)
 
 ### Does Smart Reporter work without a license key?
 
