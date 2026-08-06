@@ -1,4 +1,5 @@
 import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
+import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
 
 /**
  * AI-powered analysis for test failures and recommendations.
@@ -81,7 +82,7 @@ export class AIAnalyzer {
 
     console.log('\n   Generating AI suite health summary...');
 
-    const flakyTests = results.filter(r => r.flakinessScore !== undefined && r.flakinessScore >= 0.3);
+    const flakyTests = results.filter(r => isFlakyScore(r.flakinessScore));
     const slowTests = results.filter(r => r.performanceTrend?.startsWith('↑'));
     const retryTests = results.filter(r => r.retryInfo?.needsAttention);
 
@@ -107,7 +108,7 @@ export class AIAnalyzer {
     const recommendations: TestRecommendation[] = [];
 
     // Flakiness recommendations
-    const flakyTests = results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3);
+    const flakyTests = results.filter(r => isFlakyScore(r.flakinessScore));
     if (flakyTests.length > 0) {
       recommendations.push({
         type: 'flakiness',
@@ -117,6 +118,21 @@ export class AIAnalyzer {
         action: 'Review test isolation, add proper waits, investigate race conditions',
         affectedTests: flakyTests.map(t => t.testId),
         icon: '🔴',
+      });
+    }
+
+    // Consistently failing tests (fail on every historical run) are a
+    // different, more urgent problem than flakiness.
+    const failingTests = results.filter(r => isConsistentlyFailingScore(r.flakinessScore) && r.outcome !== 'flaky');
+    if (failingTests.length > 0) {
+      recommendations.push({
+        type: 'flakiness',
+        priority: 92,
+        title: 'Fix Consistently Failing Tests',
+        description: `${failingTests.length} test(s) fail on every run — likely broken tests or real regressions`,
+        action: 'Fix the underlying bug or update the test; do not quarantine these',
+        affectedTests: failingTests.map(t => t.testId),
+        icon: '❌',
       });
     }
 

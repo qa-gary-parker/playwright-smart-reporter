@@ -47,6 +47,20 @@ describe('QuarantineGenerator', () => {
       expect(result!.entries[0].testId).toBe('flaky-1');
     });
 
+    it('does not quarantine consistently failing tests (score of 1)', () => {
+      const generator = new QuarantineGenerator({ enabled: true, threshold: 0.3 });
+      const results = [
+        createTestResult({ testId: 'always-fails', title: 'Broken test', flakinessScore: 1 }),
+        createTestResult({ testId: 'flaky-1', title: 'Flaky test', flakinessScore: 0.5 }),
+      ];
+
+      const result = generator.generate(results, '/output');
+
+      expect(result).not.toBeNull();
+      expect(result!.entries).toHaveLength(1);
+      expect(result!.entries[0].testId).toBe('flaky-1');
+    });
+
     it('excludes tests below threshold', () => {
       const generator = new QuarantineGenerator({ enabled: true, threshold: 0.3 });
       const results = [

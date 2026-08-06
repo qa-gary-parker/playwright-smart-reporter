@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-08-06
+
+### Added
+- **Copy AI Prompt** button on failed tests — copies a ready-to-paste, Playwright-style prompt (error, call log, code frame) for use with any AI assistant. No API key needed.
+- `Failing` badge for consistently failing tests, distinct from `Flaky`.
+
+### Fixed
+- **Flaky classification**: tests that fail on every historical run are now classified as `Failing` instead of `Flaky`. Flakiness requires mixed pass/fail results. This corrects the flaky counts in the overview, sidebar filters, AI prompts, suite stability score, and the "Most Flaky Test" insight (which previously could highlight a test with a 100% failure rate).
+- **Failure cluster names**: Playwright assertion failures now cluster by matcher (e.g. `Assertion: toBeVisible`) instead of producing a meaningless `Error` cluster.
+- **Network logs summary**: shows the true request total with "(showing N)" when the list is capped, and status groups render as `2xx`/`4xx` instead of `200xx`/`400xx`.
+- **Breadcrumbs**: now reflect the active view (previously always rooted at "Tests") and the test-title crumb only appears when a test is selected.
+- **Pass-rate trend bars** (Overview quick insight) are colour-coded by rate instead of always green.
+- The duration-trend chip (`→ Stable`, `↑ 20%`) is now labelled with a timer icon and tooltip so it isn't mistaken for a stability verdict.
+
 ## [2.0.0] - 2026-08-06
 
 ### Changed

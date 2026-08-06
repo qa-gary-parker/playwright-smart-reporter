@@ -124,6 +124,72 @@ describe('FailureClusterer', () => {
 
       expect(clusters[0].errorType).toBe('CustomError');
     });
+
+    it('clusters Playwright expect failures by matcher name', () => {
+      const results = [
+        createTestResult({ testId: 't1', status: 'failed', error: "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#a')" }),
+        createTestResult({ testId: 't2', status: 'failed', error: "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#b')" }),
+        createTestResult({ testId: 't3', status: 'failed', error: 'Error: expect(locator).toHaveText(expected) failed' }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      const visible = clusters.find(c => c.errorType === 'Assertion: toBeVisible');
+      const haveText = clusters.find(c => c.errorType === 'Assertion: toHaveText');
+      expect(visible?.count).toBe(2);
+      expect(haveText?.count).toBe(1);
+    });
+
+    it('never produces a bare "Error" cluster name', () => {
+      const results = [
+        createTestResult({ status: 'failed', error: 'Error: something exploded in the fixture' }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      expect(clusters[0].errorType).toBe('something exploded in the fixture');
+    });
+
+    it('clusters negated assertions by matcher, not "not"', () => {
+      const results = [
+        createTestResult({ status: 'failed', error: 'Error: expect(locator).not.toBeVisible() failed' }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      expect(clusters[0].errorType).toBe('Assertion: toBeVisible');
+    });
+
+    it('clusters soft assertions by matcher', () => {
+      const results = [
+        createTestResult({ status: 'failed', error: 'Error: expect.soft(locator).toHaveText(expected) failed' }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      expect(clusters[0].errorType).toBe('Assertion: toHaveText');
+    });
+
+    it('falls back to Unknown Error for empty bare Error messages', () => {
+      for (const error of ['Error:', 'Error:   ', 'Error']) {
+        const clusters = clusterer.clusterFailures([
+          createTestResult({ status: 'failed', error }),
+        ]);
+        expect(clusters[0].errorType).toBe('Unknown Error');
+      }
+    });
+
+    it('truncates long bare error messages used as cluster names', () => {
+      const longMessage = 'x'.repeat(80);
+      const results = [
+        createTestResult({ status: 'failed', error: `Error: ${longMessage}` }),
+      ];
+
+      const clusters = clusterer.clusterFailures(results);
+
+      expect(clusters[0].errorType.length).toBeLessThanOrEqual(60);
+      expect(clusters[0].errorType.endsWith('...')).toBe(true);
+    });
   });
 
   describe('assignClusters', () => {

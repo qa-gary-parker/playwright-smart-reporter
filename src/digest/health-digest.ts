@@ -220,7 +220,9 @@ export class HealthDigest {
       if (inPeriod.length === 0) continue;
 
       const currentScore = inPeriod.filter(e => !e.passed).length / inPeriod.length;
-      if (currentScore < FLAKY_THRESHOLD) continue;
+      // Flaky requires mixed results — a test failing every run in the period
+      // is consistently failing, not newly flaky.
+      if (currentScore < FLAKY_THRESHOLD || currentScore >= 1) continue;
 
       // Check if was already flaky before the period
       if (beforePeriod.length > 0) {

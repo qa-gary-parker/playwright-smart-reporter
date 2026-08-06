@@ -410,6 +410,22 @@ describe('AIAnalyzer', () => {
   });
 
   describe('generateRecommendations', () => {
+    it('recommends fixing consistently failing tests separately from flaky ones', () => {
+      const analyzer = new AIAnalyzer();
+      const results = [
+        createTestResult({ testId: 'broken-1', flakinessScore: 1, outcome: 'unexpected' }),
+        createTestResult({ testId: 'flaky-1', flakinessScore: 0.5 }),
+      ];
+      const stats = createSuiteStats();
+
+      const recommendations = analyzer.generateRecommendations(results, stats);
+
+      const failingRec = recommendations.find(r => r.title === 'Fix Consistently Failing Tests');
+      const flakyRec = recommendations.find(r => r.title === 'Fix Flaky Tests');
+      expect(failingRec?.affectedTests).toEqual(['broken-1']);
+      expect(flakyRec?.affectedTests).toEqual(['flaky-1']);
+    });
+
     it('generates flakiness recommendations for flaky tests', () => {
       const analyzer = new AIAnalyzer();
       const results = [

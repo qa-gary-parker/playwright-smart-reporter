@@ -552,6 +552,75 @@ describe('card-generator', () => {
       expect(card).toContain('expand-icon');
     });
 
+    it('renders Copy AI Prompt button when aiPrompt is present', () => {
+      const test = createMinimalTestResult({
+        status: 'failed',
+        error: 'Expected true but got false',
+        aiPrompt: 'Fix this Playwright test failure...',
+      });
+      const card = generateTestCard(test, false);
+
+      expect(card).toContain('copy-ai-prompt-btn');
+      expect(card).toContain("copyAiPrompt('test_1'");
+    });
+
+    it('does not render Copy AI Prompt button without aiPrompt', () => {
+      const test = createMinimalTestResult({
+        status: 'failed',
+        error: 'Expected true but got false',
+      });
+      const card = generateTestCard(test, false);
+
+      expect(card).not.toContain('copy-ai-prompt-btn');
+    });
+
+    it('shows Failing badge (not Flaky) for a consistently failing test', () => {
+      const test = createMinimalTestResult({
+        status: 'failed',
+        outcome: 'unexpected',
+        flakinessScore: 1,
+        flakinessIndicator: '🔴 Failing',
+      });
+      const card = generateTestCard(test, false);
+
+      expect(card).toContain('data-flaky="false"');
+      expect(card).toContain('badge failing');
+      expect(card).toContain('Failing');
+    });
+
+    it('shows Flaky badge for a genuinely flaky test', () => {
+      const test = createMinimalTestResult({
+        status: 'passed',
+        flakinessScore: 0.5,
+        flakinessIndicator: '🔴 Flaky',
+      });
+      const card = generateTestCard(test, false);
+
+      expect(card).toContain('data-flaky="true"');
+      expect(card).toContain('badge flaky');
+    });
+
+    it('renders network summary with true total and group status labels', () => {
+      const test = createMinimalTestResult({
+        status: 'failed',
+        error: 'boom',
+        networkLogs: {
+          entries: [
+            { url: '/a', urlPath: '/a', method: 'GET', status: 200, statusText: 'OK', duration: 10, timestamp: '2026-01-01T00:00:00Z', requestSize: 1, responseSize: 2, contentType: 'text/html' },
+          ],
+          totalRequests: 5,
+          totalDuration: 10,
+          summary: { byStatus: { 200: 4, 400: 1 }, byMethod: { GET: 5 }, slowest: null, errors: [] },
+        },
+      });
+      const details = generateTestDetails(test, 'test_1', false);
+
+      expect(details).toContain('5 requests (showing 1)');
+      expect(details).toContain('2xx: 4');
+      expect(details).toContain('4xx: 1');
+      expect(details).not.toContain('200xx');
+    });
+
     it('handles test with stability score', () => {
       const test = createMinimalTestResult({
         stabilityScore: {

@@ -6,7 +6,7 @@
  */
 
 import type { TestResultData, TestHistory, RunComparison, RunSnapshotFile, SmartReporterOptions, FailureCluster, CIInfo, ThemeConfig, BrandingConfig, QualityGateResult, QualityGateRuleResult, QuarantineEntry } from '../types';
-import { formatDuration, escapeHtml, escapeJsString, sanitizeId, renderMarkdownLite } from '../utils';
+import { formatDuration, escapeHtml, escapeJsString, sanitizeId, renderMarkdownLite, isFlakyTest, isFlakyScore, isConsistentlyFailingScore } from '../utils';
 import { generateTrendChart } from './chart-generator';
 import { generateGroupedTests, generateTestCard, AttentionSets } from './card-generator';
 import { generateGallery, generateGalleryScript } from './gallery-generator';
@@ -78,7 +78,8 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
   return results.map(test => {
     const cardId = sanitizeId(test.testId);
     const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
-    const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
+    const isFlaky = isFlakyTest(test);
+    const isFailing = isConsistentlyFailingScore(test.flakinessScore) && test.outcome !== 'flaky';
     const isSlow = test.performanceTrend?.startsWith('↑') || false;
     const isNew = test.flakinessIndicator?.includes('New') || false;
     const isQuarantined = quarantinedTestIds?.has(test.testId) ?? false;
@@ -135,6 +136,7 @@ function generateTestListItems(results: TestResultData[], showTraceSection: bool
           ${stabilityBadge}
           <span class="test-item-duration">${formatDuration(test.duration)}</span>
           ${isFlaky ? '<span class="test-item-badge flaky">Flaky</span>' : ''}
+          ${isFailing ? '<span class="test-item-badge failing">Failing</span>' : ''}
           ${isSlow ? '<span class="test-item-badge slow">Slow</span>' : ''}
           ${isNew ? '<span class="test-item-badge new">New</span>' : ''}
         </div>
@@ -251,7 +253,11 @@ function generateOverviewContent(
 
   // Find slowest test and most flaky test
   const slowestTest = [...results].sort((a, b) => b.duration - a.duration)[0];
-  const mostFlakyTest = [...results].filter(r => r.flakinessScore !== undefined).sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0))[0];
+  // Only genuinely flaky tests (mixed pass/fail) qualify — a test failing every
+  // run is consistently failing, not flaky.
+  const mostFlakyTest = [...results]
+    .filter(r => r.flakinessScore !== undefined && r.flakinessScore > 0 && r.flakinessScore < 1)
+    .sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0))[0];
 
   // Pass rate sparkline from history + current run
   const passRateHistory = [
@@ -538,7 +544,7 @@ function generateOverviewContent(
             <div class="mini-sparkline">
               ${passRateHistory.length > 0 ? passRateHistory.map((h, i) => `
                 <div class="spark-col" title="Run ${i + 1}: ${h.rate}%">
-                  <div class="spark-bar" style="height: ${h.rate}%"></div>
+                  <div class="spark-bar ${h.rate >= 90 ? 'spark-good' : h.rate >= 70 ? 'spark-warn' : 'spark-bad'}" style="height: ${h.rate}%"></div>
                 </div>
               `).join('') : '<span class="no-data">No history available</span>'}
             </div>
@@ -571,8 +577,8 @@ export function generateHtml(data: HtmlGeneratorData): GeneratedReport {
     (r.status === 'failed' || r.status === 'timedOut')
   ).length;
   const skipped = results.filter((r) => r.status === 'skipped').length;
-  // Flaky: tests that are flaky by either outcome (retry-based) OR history (flakinessScore >= 0.3)
-  const flaky = results.filter((r) => r.outcome === 'flaky' || (r.flakinessScore !== undefined && r.flakinessScore >= 0.3)).length;
+  // Flaky: tests that are flaky by either outcome (retry-based) OR history (mixed pass/fail)
+  const flaky = results.filter((r) => isFlakyTest(r)).length;
   const slow = results.filter((r) =>
     r.performanceTrend?.startsWith('↑')
   ).length;
@@ -794,10 +800,10 @@ ${branding?.logo ? `          <img class="logo-image" src="${escapeHtml(branding
 ${reportSubtitle ? `            <span class="logo-subtitle">${escapeHtml(reportSubtitle)}</span>` : ''}
           </div>
         </div>
-        <nav class="breadcrumbs">
-          <span class="breadcrumb active" data-view="tests">Tests</span>
-          <span class="breadcrumb-separator">›</span>
-          <span class="breadcrumb" id="breadcrumb-detail"></span>
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+          <span class="breadcrumb active" id="breadcrumb-root" role="button" tabindex="0" onclick="breadcrumbHome()" onkeydown="if(event.key==='Enter')breadcrumbHome()">Overview</span>
+          <span class="breadcrumb-separator" id="breadcrumb-separator" style="display:none">›</span>
+          <span class="breadcrumb" id="breadcrumb-detail" style="display:none"></span>
         </nav>
       </div>
       <div class="top-bar-right">
@@ -1136,6 +1142,13 @@ ${quarantineCount > 0 ? `            <button class="filter-chip attention-quaran
               <div class="placeholder-hint">Click on any test in the list</div>
             </div>
           </div>
+          <template id="detail-placeholder-template">
+            <div class="detail-placeholder">
+              <div class="placeholder-icon">${icon('test-tube', 32)}</div>
+              <div class="placeholder-text">Select a test to view details</div>
+              <div class="placeholder-hint">Click on any test in the list</div>
+            </div>
+          </template>
         </div>
       </section>
 
@@ -3700,6 +3713,30 @@ ${highContrastOverride}${customOverrides}
       min-height: 3px;
       transition: height 0.3s ease;
     }
+    .spark-bar.spark-good { background: var(--accent-green); }
+    .spark-bar.spark-warn { background: var(--accent-yellow); }
+    .spark-bar.spark-bad { background: var(--accent-red); }
+
+    .copy-ai-prompt-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      padding: 2px 8px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--accent-blue);
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 5px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .copy-ai-prompt-btn:hover {
+      border-color: var(--accent-blue);
+      background: rgba(0, 170, 255, 0.08);
+    }
 
     .mini-sparkline .no-data {
       font-size: 0.7rem;
@@ -3878,6 +3915,7 @@ ${highContrastOverride}${customOverrides}
     }
 
     .test-item-badge.flaky { background: rgba(255, 204, 0, 0.15); color: var(--accent-yellow); }
+    .test-item-badge.failing { background: rgba(255, 68, 102, 0.15); color: var(--accent-red); }
     .test-item-badge.slow { background: rgba(255, 136, 68, 0.15); color: var(--accent-orange); }
     .test-item-badge.new { background: rgba(0, 170, 255, 0.15); color: var(--accent-blue); }
     .test-item-badge.quarantined { background: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); font-weight: 600; }
@@ -5458,6 +5496,12 @@ ${highContrastOverride}${customOverrides}
     }
 
     .badge.flaky {
+      color: var(--accent-yellow);
+      border-color: var(--accent-yellow-dim);
+      background: rgba(255, 204, 0, 0.1);
+    }
+
+    .badge.failing {
       color: var(--accent-red);
       border-color: var(--accent-red-dim);
       background: rgba(255, 68, 102, 0.1);
@@ -8243,13 +8287,39 @@ function generateScripts(
         viewPanel.style.animation = '';
       }
 
-      // Update breadcrumb
-      const breadcrumbDetail = document.getElementById('breadcrumb-detail');
-      if (breadcrumbDetail) {
-        breadcrumbDetail.textContent = view.charAt(0).toUpperCase() + view.slice(1);
+      // Update breadcrumb: root shows the active view; the detail crumb only
+      // appears in the Tests view when a test is selected.
+      const breadcrumbRoot = document.getElementById('breadcrumb-root');
+      if (breadcrumbRoot) {
+        breadcrumbRoot.textContent = view.charAt(0).toUpperCase() + view.slice(1);
       }
+      const showDetail = view === 'tests' && typeof selectedTestId !== 'undefined' && selectedTestId;
+      setBreadcrumbDetailVisible(!!showDetail);
 
       currentView = view;
+    }
+
+    function setBreadcrumbDetailVisible(visible) {
+      const sep = document.getElementById('breadcrumb-separator');
+      const detail = document.getElementById('breadcrumb-detail');
+      if (sep) sep.style.display = visible ? '' : 'none';
+      if (detail) detail.style.display = visible ? '' : 'none';
+    }
+
+    // Clicking the root crumb returns to the current view's top level:
+    // in the Tests view it clears the selected test back to the placeholder.
+    function breadcrumbHome() {
+      if (selectedTestId) {
+        selectedTestId = null;
+        document.querySelectorAll('.test-list-item.selected').forEach(item => item.classList.remove('selected'));
+        const detailPanel = document.getElementById('test-detail-panel');
+        const placeholder = document.getElementById('detail-placeholder-template');
+        if (detailPanel && placeholder) {
+          detailPanel.innerHTML = placeholder.innerHTML;
+        }
+      }
+      setBreadcrumbDetailVisible(false);
+      switchView(currentView || 'overview');
     }
 
     // Track global historical run selection
@@ -8467,6 +8537,7 @@ function generateScripts(
         if (breadcrumbDetail) {
           breadcrumbDetail.textContent = test.title;
         }
+        setBreadcrumbDetailVisible(true);
       } else {
         // Fallback: render basic details if card not found
         const detailPanel = document.getElementById('test-detail-panel');
@@ -9025,6 +9096,20 @@ function generateScripts(
         entry.classList.toggle('expanded');
         details.style.display = details.style.display === 'none' ? 'block' : 'none';
       }
+    }
+
+    function copyAiPrompt(testId, event) {
+      if (event) event.stopPropagation();
+      const test = tests.find(t => String(t.testId || '').replace(/[^a-zA-Z0-9]/g, '_') === testId);
+      if (!test || !test.aiPrompt) {
+        showToast('No AI prompt available for this test', 'error');
+        return;
+      }
+      navigator.clipboard.writeText(test.aiPrompt).then(() => {
+        showToast('AI prompt copied — paste it into your assistant', 'success');
+      }).catch(() => {
+        showToast('Failed to copy AI prompt', 'error');
+      });
     }
 
     function copyCode(codeId, btn) {

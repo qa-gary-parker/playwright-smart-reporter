@@ -59,16 +59,34 @@ export class FailureClusterer {
     if (firstLine.includes('ElementNotFound')) return 'Element Not Found';
     if (firstLine.includes('Selector')) return 'Selector Error';
 
-    // Look for "Error:" pattern
+    // Playwright assertion failures: "Error: expect(locator).toBeVisible() failed",
+    // including soft (expect.soft(...)) and negated (.not.toBeVisible) forms.
+    // Cluster by matcher so similar assertion failures group together.
+    const expectMatch = firstLine.match(/expect(?:\.\w+)?\(.*?\)\s*\.\s*(?:not\s*\.\s*)?(\w+)/);
+    if (expectMatch) return `Assertion: ${expectMatch[1]}`;
+
+    // Look for a named error class ("TypeError:", "AxeError:", ...) —
+    // a bare "Error:" carries no information, so skip it here.
     const errorMatch = firstLine.match(/(\w+Error):/);
-    if (errorMatch) return errorMatch[1];
+    if (errorMatch && errorMatch[1] !== 'Error') return errorMatch[1];
+
+    // Bare "Error: <message>" — use the message itself as the cluster name.
+    const bareError = firstLine.match(/^Error:\s*(.+)/);
+    if (bareError) {
+      const message = bareError[1].trim();
+      if (message.length > 0) {
+        return message.length > 60 ? `${message.slice(0, 57)}...` : message;
+      }
+      return 'Unknown Error';
+    }
+    if (/^Error:?\s*$/.test(firstLine)) return 'Unknown Error';
 
     // Look for "expected" pattern (assertions)
     if (firstLine.includes('expected')) return 'Assertion Error';
 
     // Extract first meaningful word
     const words = firstLine.split(/\s+/);
-    if (words.length > 0) {
+    if (words.length > 0 && words[0].length > 0) {
       return words[0].length > 50 ? 'Unknown Error' : words[0];
     }
 

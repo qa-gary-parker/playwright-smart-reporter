@@ -3,7 +3,7 @@
  */
 
 import type { TestResultData, NetworkLogData, NetworkLogEntry } from '../types';
-import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite } from '../utils';
+import { formatDuration, escapeHtml, sanitizeId, renderMarkdownLite, isFlakyTest, isConsistentlyFailingScore } from '../utils';
 import { icon } from './icon-provider';
 
 /**
@@ -51,7 +51,7 @@ function getAnnotationIcon(type: string): string {
  * Generate a single test card
  */
 export function generateTestCard(test: TestResultData, showTraceSection: boolean, quarantinedTestIds?: Set<string>): string {
-  const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
+  const isFlaky = isFlakyTest(test);
   const isUnstable = test.flakinessScore !== undefined && test.flakinessScore >= 0.1 && test.flakinessScore < 0.3;
   const isSlow = test.performanceTrend?.startsWith('↑') || false;
   const isFaster = test.performanceTrend?.startsWith('↓') || false;
@@ -63,6 +63,7 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
   let badgeClass = 'new';
   if (test.flakinessIndicator?.includes('Stable')) badgeClass = 'stable';
   else if (test.flakinessIndicator?.includes('Unstable')) badgeClass = 'unstable';
+  else if (test.flakinessIndicator?.includes('Failing')) badgeClass = 'failing';
   else if (test.flakinessIndicator?.includes('Flaky')) badgeClass = 'flaky';
   else if (test.flakinessIndicator?.includes('Skipped')) badgeClass = 'skipped';
 
@@ -157,7 +158,7 @@ export function generateTestCard(test: TestResultData, showTraceSection: boolean
           <span class="test-duration">${formatDuration(test.duration)}</span>
           ${test.stabilityScore ? `<span class="badge ${stabilityClass}" title="Stability Score: ${test.stabilityScore.overall}/100 (Flakiness: ${test.stabilityScore.flakiness}, Performance: ${test.stabilityScore.performance}, Reliability: ${test.stabilityScore.reliability})">${test.stabilityScore.grade} (${test.stabilityScore.overall})</span>` : ''}
           ${test.flakinessIndicator ? `<span class="badge ${badgeClass}">${test.flakinessIndicator.replace(/[🟢🟡🔴⚪]\s*/g, '')}</span>` : ''}
-          ${test.performanceTrend ? `<span class="trend ${trendClass}">${test.performanceTrend}</span>` : ''}
+          ${test.performanceTrend ? `<span class="trend ${trendClass}" title="Duration trend vs. recent runs">${icon('timer', 12)} ${test.performanceTrend}</span>` : ''}
           ${hasDetails ? `<span class="expand-icon">${icon('chevron-right', 14)}</span>` : ''}
         </div>
       </div>
@@ -312,9 +313,15 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
       `;
     }
 
+    // "Copy AI Prompt" gives users without an AI API key a one-click way to
+    // paste the full failure context (error, steps, code frame) into any assistant.
+    const copyPromptHtml = test.aiPrompt
+      ? `<button type="button" class="copy-ai-prompt-btn" onclick="copyAiPrompt('${cardId}', event)" title="Copy a ready-to-paste AI prompt with the full failure context">${icon('clipboard', 13)} Copy AI Prompt</button>`
+      : '';
+
     bodyDetails += `
       <div class="detail-section">
-        <div class="detail-label"><span class="icon">${icon('alert-triangle')}</span> Error</div>
+        <div class="detail-label"><span class="icon">${icon('alert-triangle')}</span> Error ${copyPromptHtml}</div>
         ${diffHtml}
         <div class="error-box">${escapeHtml(test.error)}</div>
       </div>
@@ -464,7 +471,8 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
     const testListItems = tests.map(test => {
       const cardId = sanitizeId(test.testId);
       const statusClass = test.status === 'passed' ? 'passed' : test.status === 'skipped' ? 'skipped' : 'failed';
-      const isFlaky = (test.flakinessScore !== undefined && test.flakinessScore >= 0.3) || test.outcome === 'flaky';
+      const isFlaky = isFlakyTest(test);
+      const isFailing = isConsistentlyFailingScore(test.flakinessScore) && test.outcome !== 'flaky';
       const isSlow = test.performanceTrend?.startsWith('↑') || false;
       const isNew = test.flakinessIndicator?.includes('New') || false;
       
@@ -512,6 +520,7 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
             ${stabilityBadge}
             <span class="test-item-duration">${formatDuration(test.duration)}</span>
             ${isFlaky ? '<span class="test-item-badge flaky">Flaky</span>' : ''}
+            ${isFailing ? '<span class="test-item-badge failing">Failing</span>' : ''}
             ${isSlow ? '<span class="test-item-badge slow">Slow</span>' : ''}
             ${isNew ? '<span class="test-item-badge new">New</span>' : ''}
           </div>
@@ -543,16 +552,19 @@ export function generateGroupedTests(results: TestResultData[], showTraceSection
 function generateNetworkLogsSection(networkLogs: NetworkLogData, cardId: string): string {
   const { entries, summary } = networkLogs;
 
-  // Summary stats
-  const totalRequests = entries.length;
+  // Summary stats — totalRequests counts everything captured; entries may be
+  // capped by maxEntries, so surface both when they differ.
+  const totalRequests = networkLogs.totalRequests ?? entries.length;
+  const shownCount = entries.length;
   const errorCount = summary.errors.length;
   const slowestEntry = summary.slowest;
 
-  // Status breakdown
+  // Status breakdown — byStatus keys are status groups (200, 300, ...); label as "2xx"
   const statusBreakdown = Object.entries(summary.byStatus)
     .map(([status, count]) => {
-      const statusClass = parseInt(status) >= 400 ? 'error' : parseInt(status) >= 300 ? 'redirect' : 'success';
-      return `<span class="network-status-badge ${statusClass}">${status}xx: ${count}</span>`;
+      const group = parseInt(status);
+      const statusClass = group >= 400 ? 'error' : group >= 300 ? 'redirect' : 'success';
+      return `<span class="network-status-badge ${statusClass}">${Math.floor(group / 100)}xx: ${count}</span>`;
     })
     .join('');
 
@@ -643,7 +655,7 @@ function generateNetworkLogsSection(networkLogs: NetworkLogData, cardId: string)
       <div class="detail-label">
         <span class="icon">${icon('globe')}</span> Network Logs
         <span class="network-summary">
-          ${totalRequests} requests
+          ${totalRequests} request${totalRequests === 1 ? '' : 's'}${shownCount < totalRequests ? ` (showing ${shownCount})` : ''}
           ${errorCount > 0 ? `<span class="network-error-count">${errorCount} errors</span>` : ''}
           ${slowestEntry ? `<span class="network-slowest">slowest: ${slowestEntry.duration}ms</span>` : ''}
         </span>

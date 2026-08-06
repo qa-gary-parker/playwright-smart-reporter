@@ -63,7 +63,7 @@ import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlakyTest } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
@@ -493,7 +493,7 @@ class SmartReporter implements Reporter {
         const passed = this.results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
         const failed = this.results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
         const skipped = this.results.filter(r => r.status === 'skipped').length;
-        const flakyCount = this.results.filter(r => r.outcome === 'flaky' || (r.flakinessScore !== undefined && r.flakinessScore >= 0.3)).length;
+        const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
         const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
         const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
         const total = this.results.length;
