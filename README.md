@@ -1,6 +1,6 @@
 # playwright-smart-reporter
 
-An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and a modern interactive dashboard. Free + Starter + Pro tiers — same npm package, paid features unlock with a license key.
+An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, performance regression alerts, and a modern interactive dashboard. Free and open source (MIT) — every feature included.
 
 ![Report Overview](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/report-overview-dark.png)
 *Dashboard with quality gates, quarantine, suite health grade, attention alerts, and failure clusters*
@@ -31,59 +31,26 @@ export default defineConfig({
 
 Run your tests and open the generated `smart-report.html`.
 
-## Free vs Paid
+## At a Glance
 
-The free tier includes everything you need for local test reporting. Paid plans add AI failure analysis, premium themes, PDF exports, quality gates, and more — activated with a license key.
-
-> **Free trial** — Try Starter free for 7 days with 100 AI requests. [Start your trial](https://stagewright.dev/#pricing)
-
-| Feature | Local (Free) | Starter (£5/mo) | Pro (£9/mo) |
-|---|:---:|:---:|:---:|
-| Stability grades (A–F) so you know which tests to trust | ✅ | ✅ | ✅ |
-| Flakiness detection across retries and history | ✅ | ✅ | ✅ |
-| Run-to-run comparison — catch regressions before they ship | ✅ | ✅ | ✅ |
-| Screenshot, video, and trace gallery for every failure | ✅ | ✅ | ✅ |
-| Network request logs to pinpoint API issues | ✅ | ✅ | ✅ |
-| CI auto-detection & notifications | ✅ | ✅ | ✅ |
-| Live progress dashboard — watch results as tests execute | ✅ | ✅ | ✅ |
-| 4 built-in themes to match your workflow | ✅ | ✅ | ✅ |
-| Run, cancel, and filter tests from the live dashboard | | ✅ | ✅ |
-| AI-powered root cause analysis | | 2,000/mo | 5,000/mo |
-| 6 premium themes (Ocean, Sunset, Dracula, and more) | | ✅ | ✅ |
-| Share polished PDF reports with stakeholders | | ✅ | ✅ |
-| Export to JSON and JUnit XML for CI/CD pipelines | | ✅ | ✅ |
-| Quality gates — block merges when quality drops | | ✅ | ✅ |
-| Auto-quarantine unreliable tests to keep CI green | | ✅ | ✅ |
-| Brand reports with your logo and team name | | ✅ | ✅ |
-| Fully custom theme colours to match your brand | | | ✅ |
-| AI health summary — executive overview of suite quality | | ✅ | ✅ |
-| Priority email support — direct access to the team | | | ✅ |
-
-**Get a license at [stagewright.dev](https://stagewright.dev)**
-
-### Activating a License
-
-Set your license key via environment variable or config:
-
-```bash
-# Environment variable
-export SMART_REPORTER_LICENSE_KEY=your-license-key
-```
-
-```typescript
-// Or in playwright.config.ts
-reporter: [
-  ['playwright-smart-reporter', {
-    outputFile: 'smart-report.html',
-    licenseKey: 'your-license-key',
-  }],
-]
-```
+- Stability grades (A–F) so you know which tests to trust
+- Flakiness detection across retries and history
+- Run-to-run comparison — catch regressions before they ship
+- Screenshot, video, and trace gallery for every failure
+- Network request logs to pinpoint API issues
+- CI auto-detection & notifications
+- Live progress dashboard — run, cancel, and filter tests as they execute
+- AI-powered root cause analysis (bring your own Anthropic, OpenAI, or Gemini API key)
+- 10 themes plus fully custom theme colours
+- PDF, JSON, and JUnit XML exports
+- Quality gates — block merges when quality drops
+- Auto-quarantine unreliable tests to keep CI green
+- Custom report branding (logo, title, footer)
 
 ## Features
 
 ### Core Analysis
-- **AI Failure Analysis** — AI-powered fix suggestions via managed proxy — no API keys required
+- **AI Failure Analysis** — AI-powered fix suggestions using your own Anthropic, OpenAI, or Gemini API key
 - **Flakiness Detection** — Historical tracking to identify unreliable tests (not single-run retries)
 - **Performance Regression Alerts** — Warns when tests get significantly slower than average
 - **Stability Scoring** — Composite health metrics (0-100 with grades A to F)
@@ -145,7 +112,7 @@ Smart Reporter tracks flakiness **across runs**, not within a single run:
 Indicators:
 - **Stable** (<10% failure rate) — **Unstable** (10-30%) — **Flaky** (>30%) — **New** (no history)
 
-## Starter Features
+## More Features
 
 ### Themes
 
@@ -155,7 +122,6 @@ Indicators:
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
     theme: { preset: 'dracula' },  // ocean, sunset, dracula, cyberpunk, forest, rose
   }],
 ]
@@ -169,7 +135,6 @@ Generate professional PDF reports in 3 themed variants: **Corporate**, **Minimal
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
     exportPdf: true,
   }],
 ]
@@ -183,7 +148,6 @@ Fail CI builds when test results don't meet your thresholds:
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
     qualityGates: {
       minPassRate: 95,
       maxFlakyRate: 5,
@@ -209,7 +173,6 @@ Automatically detect and quarantine chronically flaky tests. Quarantined tests a
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
     quarantine: {
       enabled: true,
       outputFile: '.smart-quarantine.json',
@@ -227,7 +190,6 @@ Customise the report title, footer, and theme colours:
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
     branding: {
       title: 'Acme Corp Test Report',
       footer: 'Generated by QA Team',
@@ -251,7 +213,6 @@ Export test results in structured formats for external tools:
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
     exportJson: true,
     exportJunit: true,
   }],
@@ -260,16 +221,15 @@ reporter: [
 
 ### AI Suite Health Summary
 
-An AI-generated executive summary appears at the top of the Overview tab, combining failure clusters, flakiness trends, performance regressions, and historical pass rate data into natural-language insights. Enabled by default for Starter and Pro users.
+An AI-generated executive summary appears at the top of the Overview tab, combining failure clusters, flakiness trends, performance regressions, and historical pass rate data into natural-language insights. Enabled by default when an AI API key is set (see [AI Analysis](#ai-analysis)).
 
-To disable (e.g., to preserve AI quota):
+To disable (e.g., to save one AI request per run):
 
 ```typescript
 reporter: [
   ['playwright-smart-reporter', {
     outputFile: 'smart-report.html',
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
-    enableAISuiteHealth: false,  // Disable AI health summary (saves 1 AI request per run)
+    enableAISuiteHealth: false,  // Disable AI health summary
   }],
 ]
 ```
@@ -287,9 +247,6 @@ reporter: [
     maxHistoryRuns: 10,
     performanceThreshold: 0.2,
 
-    // Pro license
-    licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
-
     // Notifications
     slackWebhook: process.env.SLACK_WEBHOOK_URL,
     teamsWebhook: process.env.TEAMS_WEBHOOK_URL,
@@ -304,7 +261,7 @@ reporter: [
     enableTrendsView: true,
     enableTraceViewer: true,
     enableHistoryDrilldown: false,
-    enableAISuiteHealth: true,      // AI health summary in Overview tab (Starter+, uses 1 AI request)
+    enableAISuiteHealth: true,      // AI health summary in Overview tab (uses 1 AI request)
     enableNetworkLogs: true,
 
     // Step and path options
@@ -337,7 +294,7 @@ reporter: [
       gradeD: 60,
     },
 
-    // Pro features
+    // Report customisation & exports
     theme: { preset: 'default' },  // default, light, dark, high-contrast, ocean, sunset, dracula, cyberpunk, forest, rose
     exportPdf: false,
     exportJson: false,
@@ -355,18 +312,17 @@ reporter: [
 
 ### AI Analysis
 
-AI failure analysis is a managed service powered by GPT-4o-mini via the StageWright proxy — no API keys required. To enable it, set your license key (Starter or Pro plan):
+AI failure analysis uses your own API key. Set one of the following environment variables:
 
 ```bash
-export SMART_REPORTER_LICENSE_KEY=your-license-key
+export ANTHROPIC_API_KEY=your-key    # Claude (used first if multiple are set)
+export OPENAI_API_KEY=your-key       # OpenAI
+export GEMINI_API_KEY=your-key       # Google Gemini
 ```
 
-Or add `licenseKey` to your reporter config. When a test fails, the reporter automatically sends the failure context to `https://stagewright.dev/api/ai/analyze` and returns fix suggestions in the report. Analysis quota depends on your plan:
+When a test fails, the reporter sends the failure context to your chosen provider and includes fix suggestions in the report. Costs are billed by your provider — the reporter uses small, fast models (`claude-haiku-4-5`, `gpt-4o-mini`, `gemini-2.5-flash`) with short prompts, so per-run cost is minimal.
 
-- **Starter** (£5/mo): 2,000 AI analyses/month
-- **Pro** (£9/mo): 5,000 AI analyses/month
-
-The free tier does not include AI analysis.
+If no API key is set, AI analysis is skipped and everything else works as normal.
 
 ## Stability Grades
 
@@ -591,17 +547,9 @@ export default defineConfig({
 
 ## FAQ
 
-### How do I get a license?
+### Is this really free?
 
-Visit [stagewright.dev](https://stagewright.dev) to purchase a Starter (£5/mo) or Pro (£9/mo) plan. Your license key is delivered via email immediately after purchase.
-
-### Is there a free trial?
-
-Yes. The Starter plan includes a 7-day free trial with 100 AI requests and full access to all Starter features — exports, quality gates, themes, and more. [Start your trial](https://stagewright.dev/#pricing)
-
-### Does Smart Reporter work without a license key?
-
-Yes. All core features (flakiness detection, stability grades, trend analytics, trace viewer, gallery, etc.) are free. AI failure analysis, premium themes, and other paid features unlock when you add a license key.
+Yes. Everything is MIT-licensed and included — no tiers, no license keys. AI analysis is the only feature with an external cost, and that's billed directly by your AI provider via your own API key.
 
 ### RangeError with large test suites?
 
@@ -621,9 +569,8 @@ Enable `cspSafe: true` to save attachments as files instead of embedding, or red
 |---|---|---|
 | No history data | History file missing or wrong path | Check `historyFile` path, use CI caching |
 | No network logs | Tracing not enabled | Add `trace: 'retain-on-failure'` to config |
-| No AI suggestions | Missing or invalid license key | Set `SMART_REPORTER_LICENSE_KEY` env var or add `licenseKey` to config (Starter or Pro plan required) |
+| No AI suggestions | No AI API key set | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
 | Mixed project metrics | Shared history file | Use `projectName` to isolate |
-| Starter features not showing | License key missing or expired | Check `SMART_REPORTER_LICENSE_KEY` env var or `licenseKey` config |
 | Quality gate not failing CI | Gate not run as separate step | Run `npx playwright-smart-reporter gate` as its own CI step |
 
 ## Development
@@ -631,7 +578,7 @@ Enable `cspSafe: true` to save attachments as files instead of embedding, or red
 ```bash
 npm install
 npm run build
-npm test        # 666 tests
+npm test
 npm run test:demo
 ```
 
@@ -643,4 +590,4 @@ npm run test:demo
 
 ## License
 
-MIT — free and paid features in one package. Starter and Pro features require a valid license key from [stagewright.dev](https://stagewright.dev).
+MIT

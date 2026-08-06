@@ -286,7 +286,6 @@ describe('html-generator', () => {
         history: createTestHistory(),
         startTime: Date.now(),
         options: {},
-        licenseTier: 'pro',
         aiSuiteHealthSummary: 'Your suite is healthy with a 90% pass rate.',
       };
 
@@ -295,48 +294,14 @@ describe('html-generator', () => {
       expect(html).toContain('AI Health Summary');
       expect(html).toContain('Your suite is healthy with a 90% pass rate.');
       expect(html).toContain('ai-health-card');
-      expect(html).toContain('>Starter</span>');
     });
 
-    it('renders AI suite health summary for starter tier', () => {
+    it('does not render AI health section without a summary', () => {
       const data: HtmlGeneratorData = {
         results: [createMinimalTestResult()],
         history: createTestHistory(),
         startTime: Date.now(),
         options: {},
-        licenseTier: 'starter',
-        aiSuiteHealthSummary: 'Suite looks good.',
-      };
-
-      const { html } = generateHtml(data);
-
-      expect(html).toContain('AI Health Summary');
-      expect(html).toContain('Suite looks good.');
-      expect(html).toContain('>Starter</span>');
-    });
-
-    it('shows placeholder for community tier without AI summary', () => {
-      const data: HtmlGeneratorData = {
-        results: [createMinimalTestResult()],
-        history: createTestHistory(),
-        startTime: Date.now(),
-        options: {},
-        licenseTier: 'community',
-      };
-
-      const { html } = generateHtml(data);
-
-      expect(html).toContain('ai-health-card pro-feature-placeholder');
-      expect(html).toContain('AI-powered executive summary');
-    });
-
-    it('does not render AI health section for pro tier without summary', () => {
-      const data: HtmlGeneratorData = {
-        results: [createMinimalTestResult()],
-        history: createTestHistory(),
-        startTime: Date.now(),
-        options: {},
-        licenseTier: 'pro',
       };
 
       const { html } = generateHtml(data);
@@ -506,50 +471,33 @@ describe('flaky filter', () => {
     expect(html).toContain('data-flaky="false"');
   });
 
-  describe('live section tier gating', () => {
-    it('adds live-section-gated class to section for community tier', () => {
+  describe('live section', () => {
+    it('renders live section ungated when live is enabled', () => {
       const data: HtmlGeneratorData = {
         results: [],
         history: createTestHistory(),
         startTime: Date.now(),
         options: { live: { enabled: true } },
-        licenseTier: 'community',
-      };
-
-      const { html } = generateHtml(data);
-
-      expect(html).toContain('view-panel live-section-gated');
-      expect(html).toContain('Starter');
-    });
-
-    it('does not add live-section-gated to section for starter tier', () => {
-      const data: HtmlGeneratorData = {
-        results: [],
-        history: createTestHistory(),
-        startTime: Date.now(),
-        options: { live: { enabled: true } },
-        licenseTier: 'starter',
-      };
-
-      const { html } = generateHtml(data);
-
-      // The section element should not have the gated class (CSS definition will still contain the string)
-      expect(html).not.toContain('view-panel live-section-gated');
-    });
-
-    it('renders live section with gated class when live is not configured', () => {
-      const data: HtmlGeneratorData = {
-        results: [],
-        history: createTestHistory(),
-        startTime: Date.now(),
-        options: {},
-        licenseTier: 'community',
       };
 
       const { html } = generateHtml(data);
 
       expect(html).toContain('view-live');
-      expect(html).toContain('live-section-gated');
+      expect(html).not.toContain('live-section-gated');
+      expect(html).not.toContain('showUpgradeModal');
+    });
+
+    it('renders live section when live is not configured', () => {
+      const data: HtmlGeneratorData = {
+        results: [],
+        history: createTestHistory(),
+        startTime: Date.now(),
+        options: {},
+      };
+
+      const { html } = generateHtml(data);
+
+      expect(html).toContain('view-live');
     });
 
     it('does not render live section when live is explicitly disabled', () => {
@@ -558,7 +506,6 @@ describe('flaky filter', () => {
         history: createTestHistory(),
         startTime: Date.now(),
         options: { live: { enabled: false } },
-        licenseTier: 'community',
       };
 
       const { html } = generateHtml(data);
@@ -566,30 +513,12 @@ describe('flaky filter', () => {
       expect(html).not.toContain('view-live');
     });
 
-    it('renders Starter badge on nav tab for community tier', () => {
+    it('does not render any Starter badge on the live nav tab', () => {
       const data: HtmlGeneratorData = {
         results: [],
         history: createTestHistory(),
         startTime: Date.now(),
         options: { live: { enabled: true } },
-        licenseTier: 'community',
-      };
-
-      const { html } = generateHtml(data);
-
-      // The nav button for Live should contain the Starter badge
-      const navMatch = html.match(/data-view="live"[\s\S]*?<\/button>/);
-      expect(navMatch).toBeTruthy();
-      expect(navMatch![0]).toContain('Starter');
-    });
-
-    it('does not render Starter badge on nav tab for pro tier', () => {
-      const data: HtmlGeneratorData = {
-        results: [],
-        history: createTestHistory(),
-        startTime: Date.now(),
-        options: { live: { enabled: true } },
-        licenseTier: 'pro',
       };
 
       const { html } = generateHtml(data);

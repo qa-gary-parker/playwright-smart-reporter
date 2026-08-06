@@ -1,6 +1,6 @@
 {
   "name": "playwright-smart-reporter",
-  "version": "1.7.0",
+  "version": "2.0.0",
   "description": "An intelligent Playwright HTML reporter with AI-powered failure analysis, flakiness detection, and performance regression alerts",
   "main": "dist/smart-reporter.js",
   "types": "dist/smart-reporter.d.ts",
@@ -24,8 +24,7 @@
     "dist",
     "!dist/**/*.test.js",
     "!dist/**/*.test.d.ts",
-    "!dist/**/*.test.js.map",
-    "!dist/license/generate-license.*"
+    "!dist/**/*.test.js.map"
   ],
   "scripts": {
     "build": "tsc",

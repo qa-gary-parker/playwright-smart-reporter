@@ -40,16 +40,12 @@ jobs:
       #
       #    Optional env vars:
       #    - OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY: enables AI failure analysis
-      #    - SMART_REPORTER_LICENSE_KEY: unlocks Pro features (PDF export, notifications, etc.)
       - run: npx playwright test
         env:
           # AI-powered failure analysis (set these in GitHub repo Settings > Secrets)
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-
-          # Pro license (optional - enables PDF export, notifications, quality gates)
-          # SMART_REPORTER_LICENSE_KEY: ${{ secrets.SMART_REPORTER_LICENSE_KEY }}
 
       # 6. Upload the Smart Reporter HTML report as a build artifact
       #    The report is available in the Actions tab under "Artifacts"

@@ -1,23 +1,7 @@
 import type { TestCase, TestResult } from '@playwright/test/reporter';
 
 // ============================================================================
-// Licensing
-// ============================================================================
-
-export type LicenseTier = 'community' | 'starter' | 'pro' | 'team';
-
-export interface LicenseInfo {
-  tier: LicenseTier;
-  valid: boolean;
-  org?: string;
-  expiry?: string;
-  trial?: boolean;
-  trialDaysRemaining?: number;
-  error?: string;
-}
-
-// ============================================================================
-// Premium Configuration
+// Report Customisation
 // ============================================================================
 
 export interface ThemeConfig {
@@ -134,43 +118,33 @@ export interface SmartReporterOptions {
   // Report size optimization
   maxEmbeddedSize?: number;        // Max bytes for inline base64 (default: 5MB). Traces larger are file-referenced.
 
-  // Cloud upload options (for StageWright cloud service)
-  apiKey?: string;                 // API key for cloud service
-  projectId?: string;              // Project ID in cloud service
-  uploadToCloud?: boolean;         // Enable cloud upload (default: false)
-  cloudEndpoint?: string;          // Custom cloud endpoint URL
-  uploadArtifacts?: boolean;       // Upload attachments to cloud (default: true)
-
   // Issue #26: External run ID for consistent IDs across CI shards
   runId?: string;                  // Unique identifier for this test run (e.g. GITHUB_RUN_ID)
 
-  // Premium: License key (also from SMART_REPORTER_LICENSE_KEY env var)
-  licenseKey?: string;
-
-  // Premium: Export options (Starter tier)
+  // Export options
   exportJson?: boolean;            // Write smart-report-data.json alongside HTML
   exportPdf?: boolean;             // Generate PDF executive summary
   exportJunit?: boolean;           // Generate JUnit XML output
 
-  // Premium: Custom themes (Starter tier)
+  // Custom themes
   theme?: ThemeConfig;
 
-  // Premium: Advanced notifications (Starter tier)
+  // Advanced notifications
   notifications?: NotificationConfig[];
 
-  // Premium: Report branding (Starter tier)
+  // Report branding
   branding?: BrandingConfig;
 
-  // Premium: Quality gates (Starter tier) - CI pipeline pass/fail rules
+  // Quality gates - CI pipeline pass/fail rules
   qualityGates?: QualityGateConfig;
 
-  // Premium: Flakiness quarantine (Starter tier) - auto-quarantine flaky tests
+  // Flakiness quarantine - auto-quarantine flaky tests
   quarantine?: QuarantineConfig;
 
   // Live reporting: stream results during execution
   live?: LiveConfig;
 
-  // Premium: Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
+  // Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
   exportPdfFull?: boolean;
 }
 
@@ -452,7 +426,7 @@ export interface SuiteStats {
 }
 
 // ============================================================================
-// Quality Gates (Starter+)
+// Quality Gates
 // ============================================================================
 
 export interface QualityGateConfig {
@@ -477,7 +451,7 @@ export interface QualityGateResult {
 }
 
 // ============================================================================
-// Quarantine (Starter+)
+// Quarantine
 // ============================================================================
 
 export interface QuarantineConfig {
@@ -509,7 +483,7 @@ export interface LiveConfig {
   enabled: boolean;
   outputFile?: string;        // Default: .smart-live-results.jsonl
   dashboard?: boolean;        // Generate smart-live.html alongside report (default: true)
-  notifyOnFirstFailure?: boolean; // Starter tier: send Slack/Teams on first failure
+  notifyOnFirstFailure?: boolean; // Send Slack/Teams on first failure
 }
 
 export interface LiveEvent {

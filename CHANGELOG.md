@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-08-06
+
+### Changed
+- **Fully open source again.** All licensing, tiers, trials, and paid gating removed — every feature (AI analysis, exports, quality gates, quarantine, themes, branding, notifications, live run controls) is now available to everyone under MIT.
+- AI failure analysis is bring-your-own-key again: set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`. The StageWright managed AI proxy is gone.
+- Report branding defaults to "Playwright Smart Reporter" (custom `branding.title` still supported).
+
+### Removed
+- `licenseKey` option and `SMART_REPORTER_LICENSE_KEY` env var (now ignored — safe to delete from configs).
+- StageWright Cloud upload (`uploadToCloud`, `apiKey`, `projectId`, `cloudEndpoint`, `uploadArtifacts` options).
+- Trial/upgrade banners, upgrade modal, and "Starter" badges in the HTML report.
+
+### Migration from 1.x
+- Remove `licenseKey` and any cloud upload options from your reporter config.
+- To keep AI analysis, set one of the AI provider API keys above.
+- Everything else is backwards compatible.
+
 ## [1.6.4] - 2026-03-05
 
 ### Added

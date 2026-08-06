@@ -1,26 +1,22 @@
-import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, LicenseTier, RunSummary } from '../types';
+import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
 
-export interface AIAnalyzerConfig {
-  licenseKey?: string;
-  tier?: LicenseTier;
-  proxyUrl?: string;
-}
-
+/**
+ * AI-powered analysis for test failures and recommendations.
+ * Bring your own API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.
+ */
 export class AIAnalyzer {
-  private licenseKey?: string;
-  private tier: LicenseTier;
-  private proxyUrl: string;
-  private quotaLogged = false;
-  private rateLimited = false;
+  private anthropicKey?: string;
+  private openaiKey?: string;
+  private geminiKey?: string;
 
-  constructor(config?: AIAnalyzerConfig) {
-    this.licenseKey = config?.licenseKey;
-    this.tier = config?.tier ?? 'community';
-    this.proxyUrl = config?.proxyUrl ?? 'https://stagewright.dev/api/ai/analyze';
+  constructor() {
+    this.anthropicKey = process.env.ANTHROPIC_API_KEY;
+    this.openaiKey = process.env.OPENAI_API_KEY;
+    this.geminiKey = process.env.GEMINI_API_KEY;
   }
 
   isAvailable(): boolean {
-    return !!this.licenseKey && (this.tier === 'starter' || this.tier === 'pro' || this.tier === 'team');
+    return !!(this.anthropicKey || this.openaiKey || this.geminiKey);
   }
 
   async analyzeFailed(results: TestResultData[]): Promise<void> {
@@ -31,6 +27,7 @@ export class AIAnalyzer {
     if (failedTests.length === 0) return;
 
     if (!this.isAvailable()) {
+      console.log('💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis');
       return;
     }
 
@@ -38,60 +35,38 @@ export class AIAnalyzer {
 
     const BATCH_SIZE = 3;
     for (let i = 0; i < failedTests.length; i += BATCH_SIZE) {
-      if (this.rateLimited) break;
-
       const batch = failedTests.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(failedTests.length / BATCH_SIZE);
       console.log(`   Batch ${batchNum}/${totalBatches} (${batch.length} tests)...`);
 
       const promises = batch.map(async (test) => {
-        if (this.rateLimited) return;
         try {
           const prompt = test.aiPrompt ?? this.buildFailurePrompt(test);
-          const result = await this.callProxy(prompt, 'failure');
-          test.aiSuggestion = result.suggestion;
-
-          if (!this.quotaLogged) {
-            this.quotaLogged = true;
-            console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt).toISOString()})`);
-          }
+          test.aiSuggestion = await this.callAI(prompt);
         } catch (err) {
-          if (!this.rateLimited) {
-            console.error(`Failed to get AI suggestion for "${test.title}":`, err);
-          }
+          console.error(`Failed to get AI suggestion for "${test.title}":`, err);
         }
       });
 
       await Promise.all(promises);
     }
 
-    if (!this.rateLimited) {
-      console.log(`   AI analysis complete`);
-    }
+    console.log(`   AI analysis complete`);
   }
 
   async analyzeClusters(clusters: FailureCluster[]): Promise<void> {
     if (clusters.length === 0) return;
-    if (!this.isAvailable() || this.rateLimited) return;
+    if (!this.isAvailable()) return;
 
     console.log(`\n   Analyzing ${clusters.length} failure cluster(s) with AI...`);
 
     for (const cluster of clusters) {
-      if (this.rateLimited) break;
       try {
         const prompt = this.buildClusterPrompt(cluster);
-        const result = await this.callProxy(prompt, 'cluster');
-        cluster.aiSuggestion = result.suggestion;
-
-        if (!this.quotaLogged) {
-          this.quotaLogged = true;
-          console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt).toISOString()})`);
-        }
+        cluster.aiSuggestion = await this.callAI(prompt);
       } catch (err) {
-        if (!this.rateLimited) {
-          console.error(`Failed to get AI suggestion for cluster "${cluster.errorType}":`, err);
-        }
+        console.error(`Failed to get AI suggestion for cluster "${cluster.errorType}":`, err);
       }
     }
   }
@@ -102,7 +77,7 @@ export class AIAnalyzer {
     failureClusters: FailureCluster[],
     historySummaries: RunSummary[],
   ): Promise<string | undefined> {
-    if (!this.isAvailable() || this.rateLimited) return undefined;
+    if (!this.isAvailable()) return undefined;
 
     console.log('\n   Generating AI suite health summary...');
 
@@ -119,17 +94,11 @@ export class AIAnalyzer {
     const prompt = this.buildSuiteHealthPrompt(stats, failureClusters, flakyTests, slowTests, retryTests, trendLine);
 
     try {
-      const result = await this.callProxy(prompt, 'suite-health');
-      if (!this.quotaLogged) {
-        this.quotaLogged = true;
-        console.log(`   AI quota remaining: ${result.remaining} (resets ${new Date(result.resetAt).toISOString()})`);
-      }
+      const summary = await this.callAI(prompt);
       console.log('   Suite health summary generated');
-      return result.suggestion;
+      return summary;
     } catch (err) {
-      if (!this.rateLimited) {
-        console.error('Failed to generate suite health summary:', err);
-      }
+      console.error('Failed to generate suite health summary:', err);
       return undefined;
     }
   }
@@ -208,32 +177,91 @@ export class AIAnalyzer {
     return recommendations.sort((a, b) => b.priority - a.priority);
   }
 
-  private async callProxy(prompt: string, type: 'failure' | 'cluster' | 'suite-health'): Promise<{ suggestion: string; remaining: number; resetAt: number }> {
-    const response = await fetch(this.proxyUrl, {
+  private async callAI(prompt: string): Promise<string> {
+    if (this.anthropicKey) {
+      return this.callAnthropic(prompt);
+    } else if (this.openaiKey) {
+      return this.callOpenAI(prompt);
+    } else if (this.geminiKey) {
+      return this.callGemini(prompt);
+    }
+    return 'AI analysis not available';
+  }
+
+  private async callAnthropic(prompt: string): Promise<string> {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.licenseKey}`,
+        'x-api-key': this.anthropicKey!,
+        'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ prompt, type }),
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      }),
     });
 
-    if (response.status === 429) {
-      this.rateLimited = true;
-      const data = await response.json() as { resetAt: number };
-      console.warn(`AI analysis rate limit reached. Resets at ${new Date(data.resetAt).toISOString()}`);
-      throw new Error('Rate limit exceeded');
+    if (!response.ok) {
+      throw new Error(`Anthropic API error: ${response.status}`);
     }
 
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`AI proxy auth error: ${response.status}`);
-    }
+    const data = (await response.json()) as {
+      content: Array<{ type: string; text?: string }>;
+    };
+    return data.content[0]?.text || 'No suggestion available';
+  }
+
+  private async callOpenAI(prompt: string): Promise<string> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
 
     if (!response.ok) {
-      throw new Error(`AI proxy error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
-    return response.json() as Promise<{ suggestion: string; remaining: number; resetAt: number }>;
+    const data = (await response.json()) as {
+      choices: Array<{ message: { content: string } }>;
+    };
+    return data.choices[0]?.message?.content || 'No suggestion available';
+  }
+
+  private async callGemini(prompt: string): Promise<string> {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': this.geminiKey!,
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }],
+        }],
+        generationConfig: {
+          maxOutputTokens: 512,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      candidates: Array<{ content: { parts: Array<{ text: string }> }; role: string }>;
+    };
+    return data.candidates[0]?.content?.parts[0]?.text || 'No suggestion available';
   }
 
   private buildFailurePrompt(test: TestResultData): string {

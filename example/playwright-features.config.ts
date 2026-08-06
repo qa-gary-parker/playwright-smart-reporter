@@ -1,10 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Premium features demo — custom theme, branding, JSON + JUnit exports
+ * All-features demo — custom theme, branding, quality gates, quarantine, exports
  *
  * Run with:
- *   SMART_REPORTER_DEV_LICENSE=true npx playwright test --config=example/playwright-premium.config.ts
+ *   npx playwright test --config=example/playwright-features.config.ts
  */
 export default defineConfig({
   testDir: './',
@@ -29,15 +29,11 @@ export default defineConfig({
   reporter: [
     ['list'],
     ['../dist/smart-reporter.js', {
-      outputFile: 'premium-report.html',
-      historyFile: 'test-history-premium.json',
+      outputFile: 'features-report.html',
+      historyFile: 'test-history-features.json',
       maxHistoryRuns: 10,
 
-      // License key — set via SMART_REPORTER_LICENSE_KEY env var or inline here
-      // Generate with: node dist/license/generate-license.js --tier pro --org "Demo Corp"
-      licenseKey: process.env.SMART_REPORTER_LICENSE_KEY,
-
-      // Premium: Custom theme — a teal/cyan accent instead of the default green
+      // Custom theme — a teal/cyan accent instead of the default green
       theme: {
         preset: 'dark' as const,
         primary: '#00e5ff',
@@ -47,13 +43,13 @@ export default defineConfig({
         warning: '#ffc400',
       },
 
-      // Premium: Report branding
+      // Report branding
       branding: {
         title: 'Demo Corp QA',
         footer: 'Demo Corp — Internal QA Report — Confidential',
       },
 
-      // Premium: Quality Gates
+      // Quality Gates
       qualityGates: {
         maxFailures: 5,
         minPassRate: 60,
@@ -61,13 +57,13 @@ export default defineConfig({
         noNewFailures: true,
       },
 
-      // Premium: Quarantine
+      // Quarantine
       quarantine: {
         enabled: true,
         threshold: 0.3,
       },
 
-      // Premium: Exports
+      // Exports
       exportJson: true,
       exportJunit: true,
       exportPdf: true,

@@ -22,7 +22,6 @@ import type {
   TestHistoryEntry,
   RunSummary,
   RunSnapshotFile,
-  LicenseInfo,
   QualityGateResult,
   QuarantineFile,
 } from './types';
@@ -61,8 +60,6 @@ import { exportJsonData } from './generators/json-exporter';
 import { exportJunitXml } from './generators/junit-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
-import { CloudUploader } from './cloud/uploader';
-import { LicenseValidator } from './license';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
@@ -102,12 +99,6 @@ class SmartReporter implements Reporter {
   // Notifiers
   private slackNotifier!: SlackNotifier;
   private teamsNotifier!: TeamsNotifier;
-
-  // Cloud
-  private cloudUploader: CloudUploader;
-
-  // License
-  private license: LicenseInfo;
   private notificationManager?: NotificationManager;
 
   // State
@@ -125,25 +116,6 @@ class SmartReporter implements Reporter {
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
 
-    // Validate license
-    const validator = new LicenseValidator();
-    this.license = validator.validate(options.licenseKey);
-    if (this.license.error) {
-      console.warn(`⚠️  License: ${this.license.error}`);
-    }
-
-    // Gate theme behind Starter tier
-    if (options.theme && !LicenseValidator.hasFeature(this.license, 'pro')) {
-      console.warn('Smart Reporter: Custom themes require a Starter or Pro license. Using defaults.');
-      this.options = { ...this.options, theme: undefined };
-    }
-
-    // Gate branding behind Starter tier
-    if (options.branding && !LicenseValidator.hasFeature(this.license, 'pro')) {
-      console.warn('Smart Reporter: Custom branding requires a Starter or Pro license. Using defaults.');
-      this.options = { ...this.options, branding: undefined };
-    }
-
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     // Issue #22: Pass filterPwApiSteps option to StepCollector
     this.stepCollector = new StepCollector({
@@ -160,11 +132,7 @@ class SmartReporter implements Reporter {
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
-    this.aiAnalyzer = new AIAnalyzer({
-      licenseKey: options.licenseKey || process.env.SMART_REPORTER_LICENSE_KEY,
-      tier: this.license.tier,
-    });
-    this.cloudUploader = new CloudUploader(options);
+    this.aiAnalyzer = new AIAnalyzer();
 
     // Initialize live writer (defaults to disabled no-op)
     if (options.live?.enabled) {
@@ -174,8 +142,8 @@ class SmartReporter implements Reporter {
       this.liveWriter = LiveWriter.disabled();
     }
 
-    // Initialize advanced notification manager if configured (Starter feature)
-    if (options.notifications && LicenseValidator.hasFeature(this.license, 'pro')) {
+    // Initialize advanced notification manager if configured
+    if (options.notifications) {
       this.notificationManager = new NotificationManager(options.notifications);
     }
   }
@@ -472,12 +440,11 @@ class SmartReporter implements Reporter {
       error: testData.error,
     });
 
-    // Live: send notification on first failure (Starter+ tier)
+    // Live: send notification on first failure
     if (
       this.options.live?.notifyOnFirstFailure &&
       !this.liveFirstFailureSent &&
-      (result.status === 'failed' || result.status === 'timedOut') &&
-      (LicenseValidator.hasFeature(this.license, 'starter') || LicenseValidator.hasFeature(this.license, 'pro'))
+      (result.status === 'failed' || result.status === 'timedOut')
     ) {
       this.liveFirstFailureSent = true;
       const msg = `First failure detected: "${test.title}" in ${file}`;
@@ -513,17 +480,16 @@ class SmartReporter implements Reporter {
     // Get failure clusters
     const failureClusters = this.failureClusterer.clusterFailures(this.results);
 
-    // Run AI analysis on failures and clusters if enabled (Starter feature)
+    // Run AI analysis on failures and clusters if enabled
     const options = this.historyCollector.getOptions();
-    const hasProForAI = LicenseValidator.hasFeature(this.license, 'pro');
     let aiSuiteHealthSummary: string | undefined;
-    if (hasProForAI && options.enableAIRecommendations !== false) {
+    if (options.enableAIRecommendations !== false) {
       await this.aiAnalyzer.analyzeFailed(this.results);
       if (failureClusters.length > 0) {
         await this.aiAnalyzer.analyzeClusters(failureClusters);
       }
-      // AI Suite Health Summary (Starter feature, opt-out with enableAISuiteHealth: false)
-      if (options.enableAISuiteHealth !== false) {
+      // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
+      if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
         const passed = this.results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
         const failed = this.results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
         const skipped = this.results.filter(r => r.status === 'skipped').length;
@@ -542,11 +508,6 @@ class SmartReporter implements Reporter {
         aiSuiteHealthSummary = await this.aiAnalyzer.analyzeSuiteHealth(
           this.results, suiteStats, failureClusters, historySummaries,
         );
-      }
-    } else if (!hasProForAI && options.enableAIRecommendations !== false) {
-      const failedCount = this.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
-      if (failedCount > 0) {
-        console.log('\n   AI analysis requires a Starter or Pro license — see stagewright.dev/#pricing');
       }
     }
 
@@ -669,13 +630,11 @@ class SmartReporter implements Reporter {
 	      }
 	    }
 
-    // Premium feature flags (needed before HTML generation)
-    const hasPro = LicenseValidator.hasFeature(this.license, 'pro');
     const exportDir = path.dirname(outputPath);
 
-    // Quality gates (Starter feature) - evaluate BEFORE HTML generation so results embed in report
+    // Quality gates - evaluate BEFORE HTML generation so results embed in report
     let qualityGateResult: QualityGateResult | undefined;
-    if (this.options.qualityGates && hasPro) {
+    if (this.options.qualityGates) {
       try {
         const evaluator = new QualityGateEvaluator();
         qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison);
@@ -684,10 +643,10 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Quarantine (Starter feature) - evaluate BEFORE HTML generation so badges/cards embed in report
+    // Quarantine - evaluate BEFORE HTML generation so badges/cards embed in report
     let quarantineResult: QuarantineFile | null = null;
     let quarantinedTestIds: Set<string> | undefined;
-    if (this.options.quarantine?.enabled && hasPro) {
+    if (this.options.quarantine?.enabled) {
       try {
         const generator = new QuarantineGenerator(this.options.quarantine);
         quarantineResult = generator.generate(this.results, exportDir);
@@ -708,9 +667,6 @@ class SmartReporter implements Reporter {
 	      historyRunSnapshots,
 	      failureClusters,
 	      ciInfo: this.ciInfo,
-	      licenseTier: this.license.tier,
-	      licenseTrial: this.license.trial,
-	      licenseTrialDaysRemaining: this.license.trialDaysRemaining,
 	      outputBasename: path.basename(outputPath, '.html'),
 	      qualityGateResult,
 	      quarantinedTestIds,
@@ -739,7 +695,7 @@ class SmartReporter implements Reporter {
     console.log(`   Or open directly: open "${outputPath}"`);
 
 
-    if (this.options.exportJson && hasPro) {
+    if (this.options.exportJson) {
       try {
         const jsonPath = exportJsonData(
           this.results,
@@ -755,22 +711,18 @@ class SmartReporter implements Reporter {
       } catch (err) {
         console.warn('⚠️  JSON export failed:', err);
       }
-    } else if (this.options.exportJson && !hasPro) {
-      console.log('   JSON export requires a Starter or Pro license — see stagewright.dev/#pricing');
     }
 
-    if (this.options.exportJunit && hasPro) {
+    if (this.options.exportJunit) {
       try {
         const junitPath = exportJunitXml(this.results, this.options, exportDir, htmlData.outputBasename);
         console.log(`   JUnit XML: ${junitPath}`);
       } catch (err) {
         console.warn('⚠️  JUnit export failed:', err);
       }
-    } else if (this.options.exportJunit && !hasPro) {
-      console.log('   JUnit export requires a Starter or Pro license — see stagewright.dev/#pricing');
     }
 
-    if (this.options.exportPdf && hasPro) {
+    if (this.options.exportPdf) {
       try {
         if (this.options.exportPdfFull) {
           // Legacy: full HTML-to-PDF dump via playwright-core
@@ -803,8 +755,6 @@ class SmartReporter implements Reporter {
       } catch (err) {
         console.warn('⚠️  PDF export failed:', err);
       }
-    } else if (this.options.exportPdf && !hasPro) {
-      console.log('   PDF export requires a Starter or Pro license — see stagewright.dev/#pricing');
     }
 
     // Update history
@@ -816,54 +766,31 @@ class SmartReporter implements Reporter {
       (r.status === 'failed' || r.status === 'timedOut')
     ).length;
 
-    // Advanced notification manager (Starter feature) takes precedence
+    // Advanced notification manager takes precedence
     if (this.notificationManager) {
       await this.notificationManager.notify(this.results, this.startTime, comparison);
     } else {
-      // Legacy notification path (free tier)
+      // Legacy webhook notification path
       if (failed > 0) {
         await this.slackNotifier.notify(this.results);
         await this.teamsNotifier.notify(this.results);
       }
     }
 
-    // Quality gates (Starter feature) - log results and set exitCode
+    // Quality gates - log results and set exitCode
     if (qualityGateResult) {
       console.log(formatGateReport(qualityGateResult));
       if (!qualityGateResult.passed) {
         process.exitCode = 1;
       }
-    } else if (this.options.qualityGates && !hasPro) {
-      console.log('   Quality gates require a Starter or Pro license — see stagewright.dev/#pricing');
     }
 
-    // Quarantine (Starter feature) - log results (file already written above)
+    // Quarantine - log results (file already written above)
     if (quarantineResult) {
       const qPath = new QuarantineGenerator(this.options.quarantine!).getOutputPath(exportDir);
       console.log(`   Quarantine: ${quarantineResult.entries.length} test(s) quarantined -> ${qPath}`);
-    } else if (this.options.quarantine?.enabled && hasPro) {
+    } else if (this.options.quarantine?.enabled) {
       console.log('   Quarantine: no tests exceed flakiness threshold');
-    } else if (this.options.quarantine?.enabled && !hasPro) {
-      console.log('   Quarantine requires a Starter or Pro license — see stagewright.dev/#pricing');
-    }
-
-    // Upload to StageWright Cloud if enabled
-    if (this.cloudUploader.isEnabled()) {
-      const uploadResult = await this.cloudUploader.upload(this.results, this.startTime);
-      if (uploadResult.success) {
-        console.log(`\n☁️  Cloud Report: ${uploadResult.url}`);
-      } else {
-        console.warn(`\n⚠️  Cloud upload failed: ${uploadResult.error}`);
-      }
-    }
-
-    // Trial status or gentle upsell
-    if (this.license.trial) {
-      const days = this.license.trialDaysRemaining ?? 0;
-      const label = days === 1 ? '1 day' : `${days} days`;
-      console.log(`\n   Starter trial — ${label} remaining (100 free AI requests). Subscribe at stagewright.dev/#pricing`);
-    } else if (this.license.tier === 'community') {
-      console.log(`\n   Starter features available — see stagewright.dev/#pricing`);
     }
   }
 

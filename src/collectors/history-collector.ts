@@ -9,8 +9,8 @@ import { sanitizeFilename } from '../utils/sanitizers';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'apiKey' | 'projectId' | 'cloudEndpoint' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'licenseKey' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -55,12 +55,6 @@ export class HistoryCollector {
       slackWebhook: options.slackWebhook,
       teamsWebhook: options.teamsWebhook,
       baselineRunId: options.baselineRunId,
-      // Cloud options
-      apiKey: options.apiKey,
-      projectId: options.projectId,
-      uploadToCloud: options.uploadToCloud ?? false,
-      cloudEndpoint: options.cloudEndpoint,
-      uploadArtifacts: options.uploadArtifacts ?? true,
       // Issue #21: Store project name for reference
       projectName: options.projectName,
       // Issue #22: Step filtering
@@ -69,8 +63,7 @@ export class HistoryCollector {
       relativeToCwd: options.relativeToCwd ?? false,
       // Issue #26: External run ID (sanitized for safe use in filenames and HTML)
       runId: options.runId ? sanitizeFilename(options.runId.trim(), 100) : undefined,
-      // Premium options (pass through for reference)
-      licenseKey: options.licenseKey,
+      // Pass-through options (for reference)
       exportJson: options.exportJson,
       exportPdf: options.exportPdf,
       exportJunit: options.exportJunit,

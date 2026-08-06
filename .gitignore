@@ -35,8 +35,6 @@ example/premium-report.html
 .smart-reporter-data.json
 .playwright-mcp/
 
-# License keys
-keys/
 
 # Benchmark outputs
 benchmark/results/
@@ -45,3 +43,6 @@ benchmark/specs/
 
 # Worktrees
 .worktrees/
+
+# Coverage output
+coverage/
