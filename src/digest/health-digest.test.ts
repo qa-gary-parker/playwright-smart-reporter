@@ -170,6 +170,31 @@ describe('HealthDigest', () => {
       expect(result.newFlakyTests[0].flakinessScore).toBeGreaterThanOrEqual(0.3);
     });
 
+    it('does not report a consistently failing test as newly flaky', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {
+          'test-broken': [
+            // Before period: stable
+            createEntry({ passed: true, timestamp: timestamp(14) }),
+            createEntry({ passed: true, timestamp: timestamp(12) }),
+            // In period: fails every run — consistently failing, not flaky
+            createEntry({ passed: false, timestamp: timestamp(6) }),
+            createEntry({ passed: false, timestamp: timestamp(4) }),
+            createEntry({ passed: false, timestamp: timestamp(2) }),
+          ],
+        },
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6) }),
+          createSummary({ runId: 'r2', timestamp: timestamp(3) }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.newFlakyTests.length).toBe(0);
+    });
+
     it('detects recovered tests (was flaky, now stable for 3+ runs)', () => {
       const history: TestHistory = {
         runs: [],

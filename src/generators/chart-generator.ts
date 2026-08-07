@@ -3,7 +3,7 @@
  */
 
 import type { TestResultData, TestHistory, RunSummary } from '../types';
-import { formatDuration, formatShortDate } from '../utils';
+import { formatDuration, formatShortDate, isFlakyScore } from '../utils';
 import { escapeHtml } from '../utils/sanitizers';
 import { icon } from './icon-provider';
 
@@ -38,7 +38,7 @@ export function generateTrendChart(data: ChartData): string {
   const passed = data.results.filter(r => r.status === 'passed').length;
   const failed = data.results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
   const skipped = data.results.filter(r => r.status === 'skipped').length;
-  const currentFlaky = data.results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3).length;
+  const currentFlaky = data.results.filter(r => isFlakyScore(r.flakinessScore)).length;
   const currentSlow = data.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
   const total = data.results.length;
   const currentDuration = Date.now() - data.startTime;

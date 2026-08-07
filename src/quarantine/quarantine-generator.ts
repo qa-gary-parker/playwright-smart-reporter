@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestResultData, QuarantineConfig, QuarantineFile, QuarantineEntry } from '../types';
+import { isFlakyScore } from '../utils';
 
 export class QuarantineGenerator {
   private config: Required<Pick<QuarantineConfig, 'threshold' | 'maxQuarantined' | 'outputFile'>>;
@@ -18,7 +19,9 @@ export class QuarantineGenerator {
 
     const entries: QuarantineEntry[] = results
       .filter(r => r.outcome !== 'skipped')
-      .filter(r => r.flakinessScore !== undefined && r.flakinessScore >= this.config.threshold)
+      // Quarantine is for flaky tests (mixed pass/fail). A test failing every
+      // run is consistently failing — it should fail CI, not be hidden.
+      .filter(r => isFlakyScore(r.flakinessScore, this.config.threshold))
       .sort((a, b) => b.flakinessScore! - a.flakinessScore!)
       .slice(0, this.config.maxQuarantined)
       .map(r => ({

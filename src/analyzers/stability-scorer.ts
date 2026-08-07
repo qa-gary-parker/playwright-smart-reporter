@@ -1,4 +1,5 @@
 import type { TestResultData, StabilityScore, SuiteStats, ThresholdConfig } from '../types';
+import { isFlakyScore } from '../utils';
 
 /**
  * Calculates comprehensive stability scores for tests and test suites
@@ -133,7 +134,7 @@ export class StabilityScorer {
     const passed = results.filter(r => r.status === 'passed').length;
     const failed = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
     const skipped = results.filter(r => r.status === 'skipped').length;
-    const flaky = results.filter(r => r.flakinessScore && r.flakinessScore >= 0.3).length;
+    const flaky = results.filter(r => isFlakyScore(r.flakinessScore)).length;
     const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
     const needsRetry = results.filter(r => r.retryInfo?.needsAttention).length;
 

@@ -322,7 +322,7 @@ export GEMINI_API_KEY=your-key       # Google Gemini
 
 When a test fails, the reporter sends the failure context to your chosen provider and includes fix suggestions in the report. Costs are billed by your provider — the reporter uses small, fast models (`claude-haiku-4-5`, `gpt-4o-mini`, `gemini-2.5-flash`) with short prompts, so per-run cost is minimal.
 
-If no API key is set, AI analysis is skipped and everything else works as normal.
+If no API key is set, AI analysis is skipped and everything else works as normal — every failed test still gets a **Copy AI Prompt** button in the report, which copies a ready-to-paste prompt (error, call log, code frame) for use with any AI assistant.
 
 ## Stability Grades
 

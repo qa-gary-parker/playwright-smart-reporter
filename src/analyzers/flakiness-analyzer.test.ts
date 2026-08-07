@@ -115,6 +115,44 @@ describe('FlakinessAnalyzer', () => {
       expect(test.flakinessIndicator).toBe('🟢 Stable');
     });
 
+    it('marks consistently failing tests as Failing, not Flaky', () => {
+      const test = createTestResult();
+      const history: TestHistoryEntry[] = [
+        createHistoryEntry(false),
+        createHistoryEntry(false),
+        createHistoryEntry(false),
+      ];
+
+      analyzer.analyze(test, history);
+
+      expect(test.flakinessScore).toBe(1);
+      expect(test.flakinessIndicator).toBe('🔴 Failing');
+    });
+
+    it('marks a single failed historical run as Failing', () => {
+      const test = createTestResult();
+      const history: TestHistoryEntry[] = [createHistoryEntry(false)];
+
+      analyzer.analyze(test, history);
+
+      expect(test.flakinessIndicator).toBe('🔴 Failing');
+    });
+
+    it('never rounds a mixed pass/fail history up to a score of 1', () => {
+      const test = createTestResult();
+      // 199 failures + 1 pass would round to 1.00 — must stay below 1 so
+      // score-based consumers still treat the test as flaky.
+      const history: TestHistoryEntry[] = [
+        createHistoryEntry(true),
+        ...Array.from({ length: 199 }, () => createHistoryEntry(false)),
+      ];
+
+      analyzer.analyze(test, history);
+
+      expect(test.flakinessScore).toBeLessThan(1);
+      expect(test.flakinessIndicator).toBe('🔴 Flaky');
+    });
+
     it('marks as skipped if all history entries are skipped', () => {
       const test = createTestResult();
       const history: TestHistoryEntry[] = [
@@ -145,10 +183,14 @@ describe('FlakinessAnalyzer', () => {
       expect(analyzer.getStatus(0.29)).toBe('unstable');
     });
 
-    it('returns flaky for scores 0.3+', () => {
+    it('returns flaky for scores 0.3 up to (but not including) 1', () => {
       expect(analyzer.getStatus(0.3)).toBe('flaky');
       expect(analyzer.getStatus(0.5)).toBe('flaky');
-      expect(analyzer.getStatus(1.0)).toBe('flaky');
+      expect(analyzer.getStatus(0.99)).toBe('flaky');
+    });
+
+    it('returns failing when every run failed (score of 1)', () => {
+      expect(analyzer.getStatus(1.0)).toBe('failing');
     });
   });
 });
