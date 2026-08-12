@@ -296,7 +296,6 @@ export function generateTestDetails(test: TestResultData, cardId: string, showTr
     bodyDetails += generateNetworkLogsSection(test.networkLogs, cardId);
   }
 
-  // Accessibility section
   bodyDetails += generateTestA11ySection(test, licenseTier);
 
   if (test.error) {

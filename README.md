@@ -341,11 +341,13 @@ Add accessibility thresholds to your quality gates:
 
 ```typescript
 qualityGates: {
-  maxA11yViolations: 10,
-  maxA11yCritical: 0,
-  minA11yRating: 'fair',  // excellent, good, fair, poor, critical
+  maxA11yCritical: 0,   // fail on any critical violation
+  maxA11ySerious: 3,
+  maxA11yTotal: 10,
 },
 ```
+
+Each gate is skipped (and reported as `N/A`) when no test in the run produced accessibility results.
 
 ## Configuration
 

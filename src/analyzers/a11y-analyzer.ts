@@ -1,4 +1,36 @@
-import type { TestResultData, A11yResult, A11ySuiteScore } from '../types';
+import type { TestResultData, A11yResult, A11ySuiteScore, A11yImpact, A11yNode } from '../types';
+
+export interface A11yViolationGroup {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  count: number;
+  nodes: Array<A11yNode & { testTitle: string }>;
+}
+
+/**
+ * Groups the same violation rule across every scanned test, most frequent first.
+ */
+export function groupA11yViolations(results: TestResultData[]): A11yViolationGroup[] {
+  const groups = new Map<string, A11yViolationGroup>();
+
+  for (const test of results) {
+    for (const v of test.accessibility?.violations ?? []) {
+      const nodes = v.nodes.map(n => ({ ...n, testTitle: test.title }));
+      const group = groups.get(v.id);
+      if (group) {
+        group.count++;
+        group.nodes.push(...nodes);
+      } else {
+        groups.set(v.id, { ...v, count: 1, nodes });
+      }
+    }
+  }
+
+  return [...groups.values()].sort((a, b) => b.count - a.count);
+}
 
 export class A11yAnalyzer {
   analyze(test: TestResultData, a11y: A11yResult | undefined): void {
@@ -13,7 +45,6 @@ export class A11yAnalyzer {
     let minor = 0;
     let testsScanned = 0;
     let testsWithViolations = 0;
-    const violationCounts = new Map<string, number>();
 
     for (const test of results) {
       if (!test.accessibility) continue;
@@ -31,16 +62,8 @@ export class A11yAnalyzer {
           case 'moderate': moderate++; break;
           case 'minor': minor++; break;
         }
-        violationCounts.set(v.id, (violationCounts.get(v.id) ?? 0) + 1);
       }
     }
-
-    const totalViolations = critical + serious + moderate + minor;
-
-    const topViolationIds = [...violationCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([id]) => id);
 
     let rating: A11ySuiteScore['rating'];
     if (critical > 0) {
@@ -54,7 +77,7 @@ export class A11yAnalyzer {
     }
 
     return {
-      totalViolations,
+      totalViolations: critical + serious + moderate + minor,
       critical,
       serious,
       moderate,
@@ -62,7 +85,7 @@ export class A11yAnalyzer {
       testsWithViolations,
       testsScanned,
       rating,
-      topViolationIds,
+      topViolationIds: groupA11yViolations(results).slice(0, 5).map(g => g.id),
     };
   }
 }

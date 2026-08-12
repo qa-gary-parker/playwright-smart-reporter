@@ -4,6 +4,7 @@ import type {
   QualityGateResult,
   QualityGateRuleResult,
   RunComparison,
+  A11yImpact,
 } from '../types';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
@@ -38,13 +39,13 @@ export class QualityGateEvaluator {
     }
 
     if (config.maxA11yCritical !== undefined) {
-      rules.push(this.evaluateMaxA11yCritical(config.maxA11yCritical, results));
+      rules.push(this.evaluateMaxA11y('maxA11yCritical', config.maxA11yCritical, results, 'critical'));
     }
     if (config.maxA11ySerious !== undefined) {
-      rules.push(this.evaluateMaxA11ySerious(config.maxA11ySerious, results));
+      rules.push(this.evaluateMaxA11y('maxA11ySerious', config.maxA11ySerious, results, 'serious'));
     }
     if (config.maxA11yTotal !== undefined) {
-      rules.push(this.evaluateMaxA11yTotal(config.maxA11yTotal, results));
+      rules.push(this.evaluateMaxA11y('maxA11yTotal', config.maxA11yTotal, results));
     }
 
     const passed = rules.every(r => r.passed);
@@ -144,35 +145,15 @@ export class QualityGateEvaluator {
     };
   }
 
-  private evaluateMaxA11yCritical(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const a11yResults = results.filter(r => r.accessibility);
-    if (a11yResults.length === 0) {
-      return { rule: 'maxA11yCritical', passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
+  private evaluateMaxA11y(rule: string, threshold: number, results: TestResultData[], impact?: A11yImpact): QualityGateRuleResult {
+    const scanned = results.filter(r => r.accessibility);
+    if (scanned.length === 0) {
+      return { rule, passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
     }
-    const critical = a11yResults.reduce(
-      (sum, r) => sum + r.accessibility!.violations.filter(v => v.impact === 'critical').length, 0,
+    const count = scanned.reduce(
+      (sum, r) => sum + r.accessibility!.violations.filter(v => !impact || v.impact === impact).length, 0,
     );
-    return { rule: 'maxA11yCritical', passed: critical <= threshold, actual: String(critical), threshold: `≤ ${threshold}` };
-  }
-
-  private evaluateMaxA11ySerious(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const a11yResults = results.filter(r => r.accessibility);
-    if (a11yResults.length === 0) {
-      return { rule: 'maxA11ySerious', passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
-    }
-    const serious = a11yResults.reduce(
-      (sum, r) => sum + r.accessibility!.violations.filter(v => v.impact === 'serious').length, 0,
-    );
-    return { rule: 'maxA11ySerious', passed: serious <= threshold, actual: String(serious), threshold: `≤ ${threshold}` };
-  }
-
-  private evaluateMaxA11yTotal(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const a11yResults = results.filter(r => r.accessibility);
-    if (a11yResults.length === 0) {
-      return { rule: 'maxA11yTotal', passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
-    }
-    const total = a11yResults.reduce((sum, r) => sum + r.accessibility!.violations.length, 0);
-    return { rule: 'maxA11yTotal', passed: total <= threshold, actual: String(total), threshold: `≤ ${threshold}` };
+    return { rule, passed: count <= threshold, actual: String(count), threshold: `≤ ${threshold}` };
   }
 
   private evaluateNoNewFailures(comparison?: RunComparison): QualityGateRuleResult {

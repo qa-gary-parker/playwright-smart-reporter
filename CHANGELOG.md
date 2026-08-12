@@ -6,16 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **WCAG Accessibility Scanning** (Starter+): Integrated axe-core-powered WCAG compliance scanning via a custom Playwright test fixture
+- **WCAG Accessibility Scanning** (all tiers; node-level detail, tree viewer, AI analysis and `failOnSeverity` are Starter+): Integrated axe-core-powered WCAG compliance scanning via a custom Playwright test fixture
   - Per-test accessibility violation cards with impact severity badges (critical, serious, moderate, minor)
   - Dedicated Accessibility tab with suite-wide score rating, severity breakdown bar, top issues, and worst offenders
   - WCAG criterion links (e.g., "WCAG 1.4.3") linking to W3C documentation for each violation
   - Copy Prompt button on each violation to generate AI-ready fix prompts for quick remediation
   - Accessibility tree viewer for visual tree snapshot inspection (when tree data is present)
   - AI-powered accessibility analysis summary (Starter+ with AI quota)
-  - Accessibility quality gates: `maxA11yViolations`, `maxA11yCritical`, `minA11yRating`
+  - Accessibility quality gates: `maxA11yCritical`, `maxA11ySerious`, `maxA11yTotal`
   - Configurable scanning: WCAG standard level, rule include/exclude lists, CSS selector scoping
-- New package exports: `playwright-smart-reporter/accessibility` and `playwright-smart-reporter/a11y`
+- New package export: `playwright-smart-reporter/accessibility`
 
 ### Changed
 

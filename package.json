@@ -19,10 +19,6 @@
       "types": "./dist/quarantine/quarantine-helper.d.ts",
       "default": "./dist/quarantine/quarantine-helper.js"
     },
-    "./a11y": {
-      "types": "./dist/accessibility/index.d.ts",
-      "default": "./dist/accessibility/index.js"
-    },
     "./accessibility": {
       "types": "./dist/accessibility/index.d.ts",
       "default": "./dist/accessibility/index.js"

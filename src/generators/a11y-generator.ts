@@ -2,18 +2,23 @@
  * Accessibility Generator - UI components for a11y results in HTML reports
  */
 
-import type { TestResultData, A11ySuiteScore, A11yViolation, A11yNode, A11yTreeSnapshot, LicenseTier } from '../types';
-import { escapeHtml, renderMarkdownLite } from '../utils';
+import type { TestResultData, A11ySuiteScore, A11yImpact, A11yNode, A11yTreeSnapshot, LicenseTier } from '../types';
+import { groupA11yViolations, type A11yViolationGroup } from '../analyzers/a11y-analyzer';
+import { escapeHtml, renderMarkdownLite, sanitizeId } from '../utils';
 import { icon } from './icon-provider';
 
-const IMPACT_COLORS: Record<string, string> = {
+const IMPACT_COLORS: Record<A11yImpact, string> = {
   critical: 'var(--accent-red, #e74c3c)',
   serious: 'var(--accent-orange, #e67e22)',
   moderate: 'var(--accent-yellow, #f39c12)',
   minor: 'var(--accent-blue, #3498db)',
 };
 
-const RATING_COLORS: Record<string, string> = {
+const SEVERITIES: A11yImpact[] = ['critical', 'serious', 'moderate', 'minor'];
+
+const MAX_NODES_PER_ISSUE = 20;
+
+const RATING_COLORS: Record<A11ySuiteScore['rating'], string> = {
   excellent: 'var(--accent-green, #27ae60)',
   good: 'var(--accent-blue, #3498db)',
   fair: 'var(--accent-orange, #e67e22)',
@@ -38,58 +43,86 @@ const WCAG_CRITERIA_URLS: Record<string, string> = {
   'wcag412': 'https://www.w3.org/WAI/WCAG21/Understanding/name-role-value.html',
 };
 
+/** Anything renderable as a violation row: a single result or a cross-test group. */
+interface ViolationLike {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  nodes: A11yNode[];
+}
+
+type A11yNodeWithTest = A11yNode & { testTitle?: string };
+
 function isStarterPlus(tier?: LicenseTier): boolean {
   return tier === 'starter' || tier === 'pro' || tier === 'team';
 }
 
-function impactBadge(impact: string): string {
-  const color = IMPACT_COLORS[impact] || IMPACT_COLORS.minor;
-  return `<span class="a11y-impact-badge" style="background:${color}">${escapeHtml(impact)}</span>`;
+function titleCase(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function impactBadge(impact: A11yImpact): string {
+  return `<span class="a11y-impact-badge" style="background:${IMPACT_COLORS[impact]}">${escapeHtml(impact)}</span>`;
 }
 
 function getWcagLink(wcagTags: string[]): string {
   for (const tag of wcagTags) {
-    const normalized = tag.replace(/[^a-z0-9]/gi, '').toLowerCase();
-    if (WCAG_CRITERIA_URLS[normalized]) {
+    const url = WCAG_CRITERIA_URLS[tag.replace(/[^a-z0-9]/gi, '').toLowerCase()];
+    if (url) {
       const criterion = tag.replace(/^wcag/, '').replace(/(\d)(\d)(\d)/, '$1.$2.$3');
-      return `<a class="a11y-help-link a11y-wcag-link" href="${WCAG_CRITERIA_URLS[normalized]}" target="_blank" rel="noopener">WCAG ${criterion}</a>`;
+      return `<a class="a11y-help-link a11y-wcag-link" href="${url}" target="_blank" rel="noopener">WCAG ${criterion}</a>`;
     }
   }
   return '';
 }
 
-function renderHelpLinks(v: A11yViolation): string {
-  const links: string[] = [];
-  const wcagLink = getWcagLink(v.wcagTags);
-  if (wcagLink) links.push(wcagLink);
-  if (v.helpUrl) {
-    links.push(`<a class="a11y-help-link" href="${escapeHtml(v.helpUrl)}" target="_blank" rel="noopener">Docs</a>`);
-  }
-  return links.length > 0 ? `<span class="a11y-help-links">${links.join('')}</span>` : '';
+function renderHelpLinks(v: ViolationLike): string {
+  const links = getWcagLink(v.wcagTags);
+  const docs = v.helpUrl
+    ? `<a class="a11y-help-link" href="${escapeHtml(v.helpUrl)}" target="_blank" rel="noopener">Docs</a>`
+    : '';
+  return links || docs ? `<span class="a11y-help-links">${links}${docs}</span>` : '';
 }
 
-function buildPromptData(v: A11yViolation, context?: string): string {
+function copyPromptButton(v: ViolationLike, context?: string): string {
   const nodes = v.nodes.slice(0, 5).map(n => ({
     selector: n.target.join(', '),
     html: n.html,
     fix: n.failureSummary,
   }));
-  return escapeHtml(JSON.stringify({ rule: v.id, impact: v.impact, desc: v.description, wcag: v.wcagTags, nodes, context }));
+  const prompt = escapeHtml(JSON.stringify({ rule: v.id, impact: v.impact, desc: v.description, wcag: v.wcagTags, nodes, context }));
+  return `<button class="a11y-copy-prompt-btn" onclick="event.stopPropagation();copyA11yPrompt(this)" data-a11y-prompt="${prompt}" title="Copy fix prompt to clipboard">${icon('clipboard', 12)} Copy Prompt</button>`;
 }
 
-function copyPromptButton(v: A11yViolation, context?: string): string {
-  return `<button class="a11y-copy-prompt-btn" onclick="event.stopPropagation();copyA11yPrompt(this)" data-a11y-prompt="${buildPromptData(v, context)}" title="Copy fix prompt to clipboard">${icon('clipboard', 12)} Copy Prompt</button>`;
+function violationLabels(v: ViolationLike, context?: string): string {
+  return `${impactBadge(v.impact)}
+    <code class="a11y-rule-id">${escapeHtml(v.id)}</code>
+    ${renderHelpLinks(v)}
+    ${copyPromptButton(v, context)}`;
 }
 
-function renderNodeDetails(nodes: A11yNode[]): string {
+function chevron(id: string): string {
+  return `<span class="a11y-detail-chevron" id="${id}-chevron">${icon('chevron-down', 12)}</span>`;
+}
+
+function collapsibleBody(id: string, content: string): string {
+  return `<div class="a11y-detail-body" id="${id}-body" style="display:none">${content}</div>`;
+}
+
+function renderNodes(nodes: A11yNodeWithTest[], limit = nodes.length): string {
   if (nodes.length === 0) return '';
-  return `<div class="a11y-node-list">${nodes.map(n => `
+  const hidden = nodes.length - limit;
+  const rows = nodes.slice(0, limit).map(n => `
     <div class="a11y-node">
+      ${n.testTitle ? `<div class="a11y-node-meta"><span class="a11y-node-test-label">Test:</span> ${escapeHtml(n.testTitle)}</div>` : ''}
       <code class="a11y-node-target">${escapeHtml(n.target.join(', '))}</code>
       <pre class="a11y-node-html">${escapeHtml(n.html)}</pre>
       ${n.failureSummary ? `<div class="a11y-node-fix">${escapeHtml(n.failureSummary)}</div>` : ''}
-    </div>`).join('')}
-  </div>`;
+    </div>`).join('');
+  const more = hidden > 0 ? `<div class="a11y-node-more">... and ${hidden} more affected elements</div>` : '';
+  return `<div class="a11y-node-list">${rows}${more}</div>`;
 }
 
 function renderTreeNode(node: A11yTreeSnapshot, depth: number = 0): string {
@@ -113,47 +146,40 @@ export function generateTestA11ySection(test: TestResultData, licenseTier?: Lice
   const a11y = test.accessibility;
   if (!a11y || a11y.violations.length === 0) return '';
 
-  const violations = a11y.violations;
   const hasStarter = isStarterPlus(licenseTier);
-  const sectionId = `a11y-${escapeHtml(test.testId).replace(/[^a-zA-Z0-9-_]/g, '_')}`;
+  const sectionId = `a11y-${sanitizeId(test.testId)}`;
+  const context = `Test: ${test.title} (${test.file})`;
 
-  let violationList = violations.map((v, idx) => {
+  const violationList = a11y.violations.map((v, idx) => {
     const violationId = `${sectionId}-v${idx}`;
     const hasNodes = hasStarter && v.nodes.length > 0;
-    const nodeDetails = hasNodes ? renderNodeDetails(v.nodes) : '';
 
-    return `<div class="a11y-violation" style="border-left-color: ${IMPACT_COLORS[v.impact] || IMPACT_COLORS.minor}">
-      <div class="a11y-violation-header${hasNodes ? ' a11y-collapsible' : ''}" ${hasNodes ? `onclick="toggleA11yDetail('${violationId}')"` : ''}>
-        ${impactBadge(v.impact)}
-        <code class="a11y-rule-id">${escapeHtml(v.id)}</code>
-        ${renderHelpLinks(v)}
-        ${copyPromptButton(v, `Test: ${test.title} (${test.file})`)}
-        ${hasNodes ? `<span class="a11y-detail-chevron" id="${violationId}-chevron">${icon('chevron-down', 12)}</span>` : ''}
+    return `<div class="a11y-violation" style="border-left-color: ${IMPACT_COLORS[v.impact]}">
+      <div class="a11y-violation-header${hasNodes ? ' a11y-collapsible' : ''}" ${hasNodes ? `onclick="toggleA11y('${violationId}-body', '${violationId}-chevron')"` : ''}>
+        ${violationLabels(v, context)}
+        ${hasNodes ? chevron(violationId) : ''}
         <span class="a11y-violation-desc">${escapeHtml(v.description)}</span>
       </div>
-      ${hasNodes ? `<div class="a11y-detail-body" id="${violationId}-body" style="display:none">${nodeDetails}</div>` : ''}
+      ${hasNodes ? collapsibleBody(violationId, renderNodes(v.nodes)) : ''}
     </div>`;
   }).join('');
 
-  let treeViewer = '';
-  if (hasStarter && a11y.tree) {
-    treeViewer = `
+  const treeViewer = hasStarter && a11y.tree ? `
       <div class="a11y-tree-section">
-        <div class="a11y-tree-header" onclick="toggleA11yTree('${sectionId}')">
+        <div class="a11y-tree-header" onclick="toggleA11y('${sectionId}-tree', '${sectionId}-tree-chevron')">
           <span>${icon('git-branch', 14)} Accessibility Tree</span>
           <span class="a11y-tree-chevron" id="${sectionId}-tree-chevron">${icon('chevron-down', 12)}</span>
         </div>
         <div class="a11y-tree-content" id="${sectionId}-tree" style="display:none">
           ${renderTreeNode(a11y.tree)}
         </div>
-      </div>`;
-  }
+      </div>` : '';
 
   return `
     <div class="detail-section a11y-section">
-      <div class="a11y-section-header" onclick="toggleA11ySection('${sectionId}')">
+      <div class="a11y-section-header" onclick="toggleA11y('${sectionId}-body', '${sectionId}-chevron')">
         <span class="icon">${icon('accessibility')}</span> Accessibility
-        <span class="a11y-count-badge">${violations.length}</span>
+        <span class="a11y-count-badge">${a11y.violations.length}</span>
         <span class="a11y-section-chevron" id="${sectionId}-chevron">${icon('chevron-down', 12)}</span>
       </div>
       <div class="a11y-section-body" id="${sectionId}-body" style="display:none">
@@ -163,11 +189,8 @@ export function generateTestA11ySection(test: TestResultData, licenseTier?: Lice
     </div>`;
 }
 
-export function generateA11yTab(results: TestResultData[], suiteScore: A11ySuiteScore, aiSummary?: string): string {
-  const ratingColor = RATING_COLORS[suiteScore.rating] || RATING_COLORS.fair;
-
-  // AI Analysis section
-  const aiSection = aiSummary ? `
+function renderAiSummary(aiSummary: string): string {
+  return `
     <div class="a11y-ai-section">
       <div class="a11y-ai-card">
         <div class="a11y-ai-header">
@@ -176,157 +199,124 @@ export function generateA11yTab(results: TestResultData[], suiteScore: A11ySuite
         </div>
         <div class="a11y-ai-body ai-markdown">${renderMarkdownLite(aiSummary)}</div>
       </div>
-    </div>` : '';
-
-  // Summary cards
-  const summaryCards = `
-    <div class="a11y-summary-cards">
-      <div class="a11y-summary-card">
-        <div class="a11y-summary-value" style="color:${ratingColor}">${escapeHtml(suiteScore.rating.charAt(0).toUpperCase() + suiteScore.rating.slice(1))}</div>
-        <div class="a11y-summary-label">Rating</div>
-      </div>
-      <div class="a11y-summary-card">
-        <div class="a11y-summary-value">${suiteScore.totalViolations}</div>
-        <div class="a11y-summary-label">Total Violations</div>
-      </div>
-      <div class="a11y-summary-card">
-        <div class="a11y-summary-value">${suiteScore.testsScanned}</div>
-        <div class="a11y-summary-label">Tests Scanned</div>
-      </div>
-      <div class="a11y-summary-card">
-        <div class="a11y-summary-value">${suiteScore.testsWithViolations}</div>
-        <div class="a11y-summary-label">Tests With Issues</div>
-      </div>
     </div>`;
+}
 
-  // Severity breakdown bar
-  const total = suiteScore.critical + suiteScore.serious + suiteScore.moderate + suiteScore.minor;
-  const pct = (n: number) => total > 0 ? ((n / total) * 100).toFixed(1) : '0';
-  const severityBar = `
+function summaryCard(value: string | number, label: string, color?: string): string {
+  return `
+      <div class="a11y-summary-card">
+        <div class="a11y-summary-value"${color ? ` style="color:${color}"` : ''}>${value}</div>
+        <div class="a11y-summary-label">${label}</div>
+      </div>`;
+}
+
+function renderSummaryCards(score: A11ySuiteScore): string {
+  return `
+    <div class="a11y-summary-cards">
+      ${summaryCard(titleCase(score.rating), 'Rating', RATING_COLORS[score.rating])}
+      ${summaryCard(score.totalViolations, 'Total Violations')}
+      ${summaryCard(score.testsScanned, 'Tests Scanned')}
+      ${summaryCard(score.testsWithViolations, 'Tests With Issues')}
+    </div>`;
+}
+
+function renderSeverityBreakdown(score: A11ySuiteScore): string {
+  const total = score.totalViolations;
+  const segment = (impact: A11yImpact) => {
+    if (score[impact] === 0) return '';
+    const width = total > 0 ? ((score[impact] / total) * 100).toFixed(1) : '0';
+    return `<div class="a11y-severity-seg" style="width:${width}%;background:${IMPACT_COLORS[impact]}" title="${titleCase(impact)}: ${score[impact]}"></div>`;
+  };
+  const legendItem = (impact: A11yImpact) =>
+    `<span class="a11y-legend-item"><span class="a11y-legend-dot" style="background:${IMPACT_COLORS[impact]}"></span>${titleCase(impact)}: ${score[impact]}</span>`;
+
+  return `
     <div class="a11y-severity-section">
       <h3 class="a11y-section-title">Severity Breakdown</h3>
       <div class="a11y-severity-bar">
-        ${suiteScore.critical > 0 ? `<div class="a11y-severity-seg" style="width:${pct(suiteScore.critical)}%;background:${IMPACT_COLORS.critical}" title="Critical: ${suiteScore.critical}"></div>` : ''}
-        ${suiteScore.serious > 0 ? `<div class="a11y-severity-seg" style="width:${pct(suiteScore.serious)}%;background:${IMPACT_COLORS.serious}" title="Serious: ${suiteScore.serious}"></div>` : ''}
-        ${suiteScore.moderate > 0 ? `<div class="a11y-severity-seg" style="width:${pct(suiteScore.moderate)}%;background:${IMPACT_COLORS.moderate}" title="Moderate: ${suiteScore.moderate}"></div>` : ''}
-        ${suiteScore.minor > 0 ? `<div class="a11y-severity-seg" style="width:${pct(suiteScore.minor)}%;background:${IMPACT_COLORS.minor}" title="Minor: ${suiteScore.minor}"></div>` : ''}
+        ${SEVERITIES.map(segment).join('')}
       </div>
       <div class="a11y-severity-legend">
-        <span class="a11y-legend-item"><span class="a11y-legend-dot" style="background:${IMPACT_COLORS.critical}"></span>Critical: ${suiteScore.critical}</span>
-        <span class="a11y-legend-item"><span class="a11y-legend-dot" style="background:${IMPACT_COLORS.serious}"></span>Serious: ${suiteScore.serious}</span>
-        <span class="a11y-legend-item"><span class="a11y-legend-dot" style="background:${IMPACT_COLORS.moderate}"></span>Moderate: ${suiteScore.moderate}</span>
-        <span class="a11y-legend-item"><span class="a11y-legend-dot" style="background:${IMPACT_COLORS.minor}"></span>Minor: ${suiteScore.minor}</span>
+        ${SEVERITIES.map(legendItem).join('')}
       </div>
     </div>`;
+}
 
-  // Most common issues - aggregate across all tests with full node details
-  const violationAgg = new Map<string, { count: number; impact: string; description: string; helpUrl: string; wcagTags: string[]; nodes: { target: string[]; html: string; failureSummary: string; testTitle: string }[] }>();
-  for (const test of results) {
-    if (!test.accessibility) continue;
-    for (const v of test.accessibility.violations) {
-      const existing = violationAgg.get(v.id);
-      const nodeEntries = v.nodes.map(n => ({ target: n.target, html: n.html, failureSummary: n.failureSummary, testTitle: test.title }));
-      if (existing) {
-        existing.count++;
-        existing.nodes.push(...nodeEntries);
-      } else {
-        violationAgg.set(v.id, { count: 1, impact: v.impact, description: v.description, helpUrl: v.helpUrl, wcagTags: v.wcagTags, nodes: [...nodeEntries] });
-      }
-    }
-  }
-  const topIssues = Array.from(violationAgg.entries())
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 10);
+function renderTopIssues(groups: A11yViolationGroup[]): string {
+  if (groups.length === 0) return '';
 
-  const commonIssues = topIssues.length > 0 ? `
+  const items = groups.slice(0, 10).map((group, idx) => {
+    const itemId = `a11y-tab-issue-${idx}`;
+    return `
+          <div class="a11y-common-item-wrap">
+            <div class="a11y-common-item a11y-collapsible" onclick="toggleA11y('${itemId}-body', '${itemId}-chevron')">
+              ${violationLabels(group)}
+              <span class="a11y-common-count">${group.nodes.length} elements across ${group.count} ${group.count === 1 ? 'test' : 'tests'}</span>
+              ${chevron(itemId)}
+              <span class="a11y-common-desc">${escapeHtml(group.description)}</span>
+            </div>
+            ${collapsibleBody(itemId, renderNodes(group.nodes, MAX_NODES_PER_ISSUE))}
+          </div>`;
+  }).join('');
+
+  return `
     <div class="a11y-common-section">
       <h3 class="a11y-section-title">Top Issues</h3>
-      <div class="a11y-common-list">
-        ${topIssues.map(([ruleId, info], idx) => {
-          const itemId = `a11y-tab-issue-${idx}`;
-          const wcagLink = getWcagLink(info.wcagTags);
-          const dequeLink = info.helpUrl ? `<a class="a11y-help-link" href="${escapeHtml(info.helpUrl)}" target="_blank" rel="noopener">Docs</a>` : '';
-          const nodeDetails = info.nodes.slice(0, 20).map(n => `
-            <div class="a11y-node">
-              <div class="a11y-node-meta"><span class="a11y-node-test-label">Test:</span> ${escapeHtml(n.testTitle)}</div>
-              <code class="a11y-node-target">${escapeHtml(n.target.join(', '))}</code>
-              <pre class="a11y-node-html">${escapeHtml(n.html)}</pre>
-              ${n.failureSummary ? `<div class="a11y-node-fix">${escapeHtml(n.failureSummary)}</div>` : ''}
-            </div>`).join('');
-          const moreNodes = info.nodes.length > 20 ? `<div class="a11y-node-more">... and ${info.nodes.length - 20} more affected elements</div>` : '';
-
-          return `
-          <div class="a11y-common-item-wrap">
-            <div class="a11y-common-item a11y-collapsible" onclick="toggleA11yDetail('${itemId}')">
-              ${impactBadge(info.impact)}
-              <code class="a11y-rule-id">${escapeHtml(ruleId)}</code>
-              <span class="a11y-help-links">${wcagLink}${dequeLink}</span>
-              ${copyPromptButton({ id: ruleId, impact: info.impact as A11yViolation['impact'], description: info.description, helpUrl: info.helpUrl, wcagTags: info.wcagTags, nodes: info.nodes.map(n => ({ target: n.target, html: n.html, failureSummary: n.failureSummary })) })}
-              <span class="a11y-common-count">${info.nodes.length} elements across ${info.count} ${info.count === 1 ? 'test' : 'tests'}</span>
-              <span class="a11y-detail-chevron" id="${itemId}-chevron">${icon('chevron-down', 12)}</span>
-              <span class="a11y-common-desc">${escapeHtml(info.description)}</span>
-            </div>
-            <div class="a11y-detail-body" id="${itemId}-body" style="display:none">
-              <div class="a11y-node-list">
-                ${nodeDetails}
-                ${moreNodes}
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
+      <div class="a11y-common-list">${items}
       </div>
-    </div>` : '';
+    </div>`;
+}
 
-  // Worst offenders - tests with most violations
-  const testViolations = results
+function renderWorstOffenders(results: TestResultData[]): string {
+  const offenders = results
     .filter(t => t.accessibility && t.accessibility.violations.length > 0)
-    .map(t => ({ testId: t.testId, title: t.title, count: t.accessibility!.violations.length, violations: t.accessibility!.violations }))
-    .sort((a, b) => b.count - a.count)
+    .map(t => ({ title: t.title, violations: t.accessibility!.violations }))
+    .sort((a, b) => b.violations.length - a.violations.length)
     .slice(0, 10);
 
-  const worstOffenders = testViolations.length > 0 ? `
-    <div class="a11y-offenders-section">
-      <h3 class="a11y-section-title">Worst Offenders</h3>
-      <div class="a11y-offenders-list">
-        ${testViolations.map((t, idx) => {
-          const itemId = `a11y-tab-offender-${idx}`;
-          const violationSummary = t.violations.map(v => `
-            <div class="a11y-violation" style="border-left-color: ${IMPACT_COLORS[v.impact] || IMPACT_COLORS.minor}">
+  if (offenders.length === 0) return '';
+
+  const items = offenders.map((offender, idx) => {
+    const itemId = `a11y-tab-offender-${idx}`;
+    const violations = offender.violations.map(v => `
+            <div class="a11y-violation" style="border-left-color: ${IMPACT_COLORS[v.impact]}">
               <div class="a11y-violation-header">
-                ${impactBadge(v.impact)}
-                <code class="a11y-rule-id">${escapeHtml(v.id)}</code>
-                ${renderHelpLinks(v)}
-                ${copyPromptButton(v, `Test: ${t.title}`)}
+                ${violationLabels(v, `Test: ${offender.title}`)}
                 <span class="a11y-violation-desc">${escapeHtml(v.description)}</span>
               </div>
-              ${renderNodeDetails(v.nodes)}
+              ${renderNodes(v.nodes)}
             </div>`).join('');
 
-          return `
+    return `
           <div class="a11y-offender-wrap">
-            <div class="a11y-offender-item a11y-collapsible" onclick="toggleA11yDetail('${itemId}')">
-              <span class="a11y-offender-title">${escapeHtml(t.title)}</span>
-              <span class="a11y-offender-count">${t.count} violations</span>
-              <span class="a11y-detail-chevron" id="${itemId}-chevron">${icon('chevron-down', 12)}</span>
+            <div class="a11y-offender-item a11y-collapsible" onclick="toggleA11y('${itemId}-body', '${itemId}-chevron')">
+              <span class="a11y-offender-title">${escapeHtml(offender.title)}</span>
+              <span class="a11y-offender-count">${offender.violations.length} violations</span>
+              ${chevron(itemId)}
             </div>
-            <div class="a11y-detail-body" id="${itemId}-body" style="display:none">
-              ${violationSummary}
-            </div>
+            ${collapsibleBody(itemId, violations)}
           </div>`;
-        }).join('')}
-      </div>
-    </div>` : '';
+  }).join('');
 
+  return `
+    <div class="a11y-offenders-section">
+      <h3 class="a11y-section-title">Worst Offenders</h3>
+      <div class="a11y-offenders-list">${items}
+      </div>
+    </div>`;
+}
+
+export function generateA11yTab(results: TestResultData[], suiteScore: A11ySuiteScore, aiSummary?: string): string {
   return `
     <div class="view-header">
       <h2 class="view-title">${icon('accessibility')} Accessibility</h2>
     </div>
     <div class="a11y-tab-content">
-      ${aiSection}
-      ${summaryCards}
-      ${severityBar}
-      ${commonIssues}
-      ${worstOffenders}
+      ${aiSummary ? renderAiSummary(aiSummary) : ''}
+      ${renderSummaryCards(suiteScore)}
+      ${renderSeverityBreakdown(suiteScore)}
+      ${renderTopIssues(groupA11yViolations(results))}
+      ${renderWorstOffenders(results)}
     </div>`;
 }
 
@@ -747,34 +737,12 @@ export function generateA11yStyles(): string {
 
 export function generateA11yScript(): string {
   return `
-    function toggleA11ySection(sectionId) {
-      var body = document.getElementById(sectionId + '-body');
-      var chevron = document.getElementById(sectionId + '-chevron');
+    function toggleA11y(bodyId, chevronId) {
+      var body = document.getElementById(bodyId);
       if (!body) return;
       var isHidden = body.style.display === 'none';
       body.style.display = isHidden ? 'block' : 'none';
-      if (chevron) {
-        chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
-      }
-    }
-
-    function toggleA11yTree(sectionId) {
-      var tree = document.getElementById(sectionId + '-tree');
-      var chevron = document.getElementById(sectionId + '-tree-chevron');
-      if (!tree) return;
-      var isHidden = tree.style.display === 'none';
-      tree.style.display = isHidden ? 'block' : 'none';
-      if (chevron) {
-        chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
-      }
-    }
-
-    function toggleA11yDetail(detailId) {
-      var body = document.getElementById(detailId + '-body');
-      var chevron = document.getElementById(detailId + '-chevron');
-      if (!body) return;
-      var isHidden = body.style.display === 'none';
-      body.style.display = isHidden ? 'block' : 'none';
+      var chevron = document.getElementById(chevronId);
       if (chevron) {
         chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
       }

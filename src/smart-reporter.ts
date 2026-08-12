@@ -154,7 +154,7 @@ class SmartReporter implements Reporter {
       console.warn('Smart Reporter: accessibility.failOnSeverity requires a Starter or Pro license. Ignoring threshold.');
       this.options = {
         ...this.options,
-        accessibility: this.options.accessibility ? { ...this.options.accessibility, failOnSeverity: undefined } : undefined,
+        accessibility: { ...options.accessibility, failOnSeverity: undefined },
       };
     }
 
@@ -991,5 +991,3 @@ export function mergeHistories(
 }
 
 export default SmartReporter;
-
-export { test as accessibilityTest } from './accessibility';

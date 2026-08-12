@@ -74,9 +74,6 @@ export interface ThresholdConfig {
   gradeC?: number;                 // Default: 70
   gradeD?: number;                 // Default: 60
 
-  // Accessibility thresholds
-  a11yCriticalMax?: number;          // Default: 0 (any critical = needs attention)
-  a11ySeriousMax?: number;           // Default: 3
 }
 
 export interface SmartReporterOptions {

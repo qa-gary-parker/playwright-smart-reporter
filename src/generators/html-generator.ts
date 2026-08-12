@@ -12,7 +12,7 @@ import { generateGroupedTests, generateTestCard, AttentionSets } from './card-ge
 import { generateGallery, generateGalleryScript } from './gallery-generator';
 import { icon } from './icon-provider';
 import { generateComparison, generateComparisonScript } from './comparison-generator';
-import { generateTestA11ySection, generateA11yTab, generateA11yStyles, generateA11yScript } from './a11y-generator';
+import { generateA11yTab, generateA11yStyles, generateA11yScript } from './a11y-generator';
 // Issue #13: Inline trace viewer integration
 import { generateJSZipScript, generateTraceViewerHtml, generateTraceViewerStyles, generateTraceViewerScript } from './trace-viewer-generator';
 

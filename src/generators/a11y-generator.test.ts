@@ -274,10 +274,27 @@ describe('generateA11yStyles', () => {
 });
 
 describe('generateA11yScript', () => {
-  it('returns JavaScript with toggle functions', () => {
+  it('returns JavaScript with the toggle and copy-prompt handlers', () => {
     const js = generateA11yScript();
-    expect(js).toContain('toggleA11ySection');
-    expect(js).toContain('toggleA11yTree');
-    expect(js).toContain('toggleA11yDetail');
+    expect(js).toContain('function toggleA11y(bodyId, chevronId)');
+    expect(js).toContain('function copyA11yPrompt(btn)');
+  });
+
+  it('wires generated markup to the toggle handler', () => {
+    const test = makeTest({
+      accessibility: {
+        violations: [makeViolation()],
+        passes: 5,
+        incomplete: 0,
+        inapplicable: 0,
+        timestamp: new Date().toISOString(),
+        standard: 'wcag2aa',
+        tree: { role: 'document', name: 'Test Page' },
+      },
+    });
+    const section = generateTestA11ySection(test, 'starter');
+    expect(section).toContain(`toggleA11y('a11y-test_1-body', 'a11y-test_1-chevron')`);
+    expect(section).toContain(`toggleA11y('a11y-test_1-v0-body', 'a11y-test_1-v0-chevron')`);
+    expect(section).toContain(`toggleA11y('a11y-test_1-tree', 'a11y-test_1-tree-chevron')`);
   });
 });

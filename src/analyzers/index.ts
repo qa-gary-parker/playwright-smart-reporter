@@ -8,4 +8,4 @@ export { RetryAnalyzer } from './retry-analyzer';
 export { FailureClusterer } from './failure-clusterer';
 export { StabilityScorer } from './stability-scorer';
 export { AIAnalyzer } from './ai-analyzer';
-export { A11yAnalyzer } from './a11y-analyzer';
+export { A11yAnalyzer, groupA11yViolations } from './a11y-analyzer';

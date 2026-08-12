@@ -1,4 +1,5 @@
-import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, LicenseTier, RunSummary } from '../types';
+import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, LicenseTier, RunSummary, A11ySuiteScore } from '../types';
+import { groupA11yViolations } from './a11y-analyzer';
 
 export interface AIAnalyzerConfig {
   licenseKey?: string;
@@ -209,7 +210,7 @@ export class AIAnalyzer {
   }
 
   async analyzeAccessibility(
-    suiteScore: import('../types').A11ySuiteScore,
+    suiteScore: A11ySuiteScore,
     results: TestResultData[],
   ): Promise<string | undefined> {
     if (!this.isAvailable() || this.rateLimited) return undefined;
@@ -217,24 +218,9 @@ export class AIAnalyzer {
 
     console.log('\n   Generating AI accessibility analysis...');
 
-    const violationMap = new Map<string, { count: number; impact: string; description: string; wcagTags: string[]; nodeCount: number }>();
-    for (const test of results) {
-      if (!test.accessibility) continue;
-      for (const v of test.accessibility.violations) {
-        const existing = violationMap.get(v.id);
-        if (existing) {
-          existing.count++;
-          existing.nodeCount += v.nodes.length;
-        } else {
-          violationMap.set(v.id, { count: 1, impact: v.impact, description: v.description, wcagTags: v.wcagTags, nodeCount: v.nodes.length });
-        }
-      }
-    }
-
-    const topViolations = Array.from(violationMap.entries())
-      .sort((a, b) => b[1].count - a[1].count)
+    const topViolations = groupA11yViolations(results)
       .slice(0, 10)
-      .map(([id, info]) => `- [${info.impact}] ${id}: ${info.description} (${info.count} tests, ${info.nodeCount} nodes, WCAG: ${info.wcagTags.join(', ') || 'n/a'})`)
+      .map(g => `- [${g.impact}] ${g.id}: ${g.description} (${g.count} tests, ${g.nodes.length} nodes, WCAG: ${g.wcagTags.join(', ') || 'n/a'})`)
       .join('\n');
 
     const prompt = `You are an accessibility expert reviewing a Playwright test suite's WCAG compliance results. Write a concise, actionable analysis (3-5 sentences) in flowing prose. Focus on the highest-impact issues and provide specific remediation priorities. Do not use bullet points or headers.

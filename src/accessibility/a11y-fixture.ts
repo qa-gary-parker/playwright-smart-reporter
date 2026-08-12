@@ -13,7 +13,21 @@ function meetsOrExceedsSeverity(impact: A11yImpact, threshold: A11yImpact): bool
   return SEVERITY_ORDER.indexOf(impact) >= SEVERITY_ORDER.indexOf(threshold);
 }
 
+function emptyResult(page: Page, standard: string): A11yResult {
+  return {
+    violations: [],
+    passes: 0,
+    incomplete: 0,
+    inapplicable: 0,
+    timestamp: new Date().toISOString(),
+    standard,
+    url: page.url(),
+  };
+}
+
 async function runAxeAnalysis(page: Page, config: AccessibilityConfig): Promise<A11yResult> {
+  const standard = config.standard || 'WCAG2AA';
+
   let AxeBuilder: any;
   try {
     // @axe-core/playwright is an optional peer dependency
@@ -22,27 +36,13 @@ async function runAxeAnalysis(page: Page, config: AccessibilityConfig): Promise<
   } catch (err: any) {
     if (err?.code === 'MODULE_NOT_FOUND' || err?.code === 'ERR_MODULE_NOT_FOUND') {
       console.warn('[smart-reporter] @axe-core/playwright not installed. Skipping accessibility scan.');
-      return {
-        violations: [],
-        passes: 0,
-        incomplete: 0,
-        inapplicable: 0,
-        timestamp: new Date().toISOString(),
-        standard: config.standard || 'WCAG2AA',
-        url: page.url(),
-      };
+      return emptyResult(page, standard);
     }
     throw err;
   }
 
-  let builder = new AxeBuilder({ page });
-
-  const standard = config.standard || 'WCAG2AA';
-  const tags = WCAG_TAG_MAP[standard];
-  if (tags) {
-    builder = builder.withTags(tags);
-  }
-
+  // Fall back to AA if a JS caller passed a standard outside the documented set.
+  let builder = new AxeBuilder({ page }).withTags(WCAG_TAG_MAP[standard] ?? WCAG_TAG_MAP.WCAG2AA);
   if (config.include?.length) {
     builder = builder.withRules(config.include);
   }
@@ -82,13 +82,12 @@ async function runAxeAnalysis(page: Page, config: AccessibilityConfig): Promise<
 export const test = base.extend<{ smartReporterA11y: AccessibilityConfig | undefined }>({
   smartReporterA11y: [undefined, { option: true }],
 
-  page: async ({ page, smartReporterA11y }, use, testInfo) => {
+  page: async ({ page, smartReporterA11y: config }, use, testInfo) => {
     await use(page);
 
-    if (!smartReporterA11y?.enabled) return;
+    if (!config?.enabled) return;
 
-    const config = smartReporterA11y;
-    const a11yResult = await runAxeAnalysis(page, config);
+    const scan = await runAxeAnalysis(page, config);
 
     let tree;
     try {
@@ -98,7 +97,7 @@ export const test = base.extend<{ smartReporterA11y: AccessibilityConfig | undef
     }
 
     const result: A11yResult = {
-      ...a11yResult,
+      ...scan,
       tree: tree ? { role: tree.role, name: tree.name, children: tree.children as any } : undefined,
     };
 
@@ -107,18 +106,15 @@ export const test = base.extend<{ smartReporterA11y: AccessibilityConfig | undef
       contentType: 'application/json',
     });
 
-    if (config.failOnSeverity) {
-      const failingViolations = result.violations.filter(
-        (v) => meetsOrExceedsSeverity(v.impact, config.failOnSeverity!)
-      );
-      if (failingViolations.length > 0) {
-        const summary = failingViolations
-          .map((v) => `  - [${v.impact}] ${v.id}: ${v.description} (${v.nodes.length} nodes)`)
-          .join('\n');
-        throw new Error(
-          `Accessibility violations found at or above "${config.failOnSeverity}" severity:\n${summary}`
-        );
-      }
-    }
+    const failOnSeverity = config.failOnSeverity;
+    if (!failOnSeverity) return;
+
+    const failing = result.violations.filter(v => meetsOrExceedsSeverity(v.impact, failOnSeverity));
+    if (failing.length === 0) return;
+
+    const summary = failing
+      .map(v => `  - [${v.impact}] ${v.id}: ${v.description} (${v.nodes.length} nodes)`)
+      .join('\n');
+    throw new Error(`Accessibility violations found at or above "${failOnSeverity}" severity:\n${summary}`);
   },
 });
