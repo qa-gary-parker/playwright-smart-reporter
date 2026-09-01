@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- `expect()` assertion steps now appear in the Step Timeline (#41). They are shown by default and kept even when `filterPwApiSteps` is on. Set `showExpectSteps: false` to restore the previous output.
+
 ## [2.1.0] - 2026-08-06
 
 ### Added
