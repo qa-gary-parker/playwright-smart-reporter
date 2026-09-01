@@ -1,23 +1,44 @@
+import { spawn } from 'child_process';
 import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
 import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
+
+const CLAUDE_CLI_TIMEOUT_MS = 60_000;
+const NO_SUGGESTION = 'No suggestion available';
 
 /**
  * AI-powered analysis for test failures and recommendations.
  * Bring your own API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.
+ * Claude subscription users without an API key can set CLAUDE_CODE_OAUTH_TOKEN
+ * to route analysis through the locally installed Claude Code CLI instead.
  */
 export class AIAnalyzer {
   private anthropicKey?: string;
   private openaiKey?: string;
   private geminiKey?: string;
+  private useClaudeCli: boolean;
+  private oauthToken?: string;
+  private cliUnavailable = false;
 
   constructor() {
     this.anthropicKey = process.env.ANTHROPIC_API_KEY;
     this.openaiKey = process.env.OPENAI_API_KEY;
     this.geminiKey = process.env.GEMINI_API_KEY;
+    this.oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+
+    // Issue #40: subscription OAuth tokens (sk-ant-oat...) are not API keys.
+    // If one landed in ANTHROPIC_API_KEY, don't send it to the API (guaranteed 401) —
+    // reroute it to the Claude Code CLI instead.
+    if (this.anthropicKey?.startsWith('sk-ant-oat')) {
+      console.warn('⚠️  ANTHROPIC_API_KEY contains a Claude subscription OAuth token, not an API key. Routing AI analysis through the Claude Code CLI instead. Set CLAUDE_CODE_OAUTH_TOKEN (and unset ANTHROPIC_API_KEY) to silence this warning.');
+      this.oauthToken = this.oauthToken ?? this.anthropicKey;
+      this.anthropicKey = undefined;
+    }
+
+    this.useClaudeCli = !!this.oauthToken;
   }
 
   isAvailable(): boolean {
-    return !!(this.anthropicKey || this.openaiKey || this.geminiKey);
+    return !!(this.anthropicKey || this.openaiKey || this.geminiKey || this.useClaudeCli);
   }
 
   async analyzeFailed(results: TestResultData[]): Promise<void> {
@@ -28,7 +49,7 @@ export class AIAnalyzer {
     if (failedTests.length === 0) return;
 
     if (!this.isAvailable()) {
-      console.log('💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis');
+      console.log('💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis (or CLAUDE_CODE_OAUTH_TOKEN to use the Claude Code CLI)');
       return;
     }
 
@@ -200,8 +221,83 @@ export class AIAnalyzer {
       return this.callOpenAI(prompt);
     } else if (this.geminiKey) {
       return this.callGemini(prompt);
+    } else if (this.useClaudeCli) {
+      return this.callClaudeCli(prompt);
     }
     return 'AI analysis not available';
+  }
+
+  /**
+   * Issue #40: route analysis through the Claude Code CLI for subscription
+   * users (team/pro plans) that have CLAUDE_CODE_OAUTH_TOKEN but no API key.
+   * The prompt is piped via stdin to avoid argv length limits.
+   */
+  private callClaudeCli(prompt: string): Promise<string> {
+    if (this.cliUnavailable) {
+      return Promise.reject(new Error('Claude CLI unavailable (previous call failed to find the binary)'));
+    }
+    return new Promise((resolve, reject) => {
+      // --restricted --tools "" makes the CLI text-in/text-out like the HTTP providers:
+      // failure text can contain untrusted page content, so no tools may run.
+      const child = spawn('claude', ['-p', '--output-format', 'text', '--model', 'claude-haiku-4-5', '--restricted', '--tools', ''], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        // npm installs the CLI as a .cmd shim on Windows, which spawn only resolves via a shell
+        shell: process.platform === 'win32',
+        env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: this.oauthToken },
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+
+      const timer = setTimeout(() => {
+        settle(() => {
+          child.kill();
+          // escalate in case the CLI ignores SIGTERM; unref so a dead child doesn't hold the process open
+          setTimeout(() => child.kill('SIGKILL'), 5_000).unref();
+          reject(new Error(`Claude CLI timed out after ${CLAUDE_CLI_TIMEOUT_MS / 1000}s`));
+        });
+      }, CLAUDE_CLI_TIMEOUT_MS);
+
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      // EPIPE if the child exits before the prompt is fully written; 'close'/'error' report the real failure
+      child.stdin.on('error', () => {});
+
+      child.on('error', (err: NodeJS.ErrnoException) => {
+        settle(() => {
+          if (err.code === 'ENOENT') {
+            // don't spawn again — every later call this run is doomed the same way
+            this.cliUnavailable = true;
+            reject(new Error('CLAUDE_CODE_OAUTH_TOKEN is set but the "claude" CLI was not found on PATH. Install Claude Code (https://claude.com/claude-code) or use an API key instead.'));
+          } else {
+            reject(err);
+          }
+        });
+      });
+
+      child.on('close', (code) => {
+        settle(() => {
+          if (code === 0) {
+            resolve(stdout.trim() || NO_SUGGESTION);
+          } else {
+            reject(new Error(`Claude CLI exited with code ${code}: ${stderr.trim().slice(0, 300)}`));
+          }
+        });
+      });
+
+      child.stdin.write(prompt);
+      child.stdin.end();
+    });
   }
 
   private async callAnthropic(prompt: string): Promise<string> {
@@ -220,6 +316,9 @@ export class AIAnalyzer {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Anthropic API error: 401 (invalid API key). Note: Claude subscription OAuth tokens are not API keys — unset ANTHROPIC_API_KEY and set CLAUDE_CODE_OAUTH_TOKEN to use the Claude Code CLI instead.');
+      }
       throw new Error(`Anthropic API error: ${response.status}`);
     }
 
