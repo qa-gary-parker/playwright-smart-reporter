@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -110,6 +110,64 @@ describe('executive-pdf', () => {
     const result = generateExecutivePdf(createBasicData(), tmpDir);
     const stats = fs.statSync(result);
     expect(stats.size).toBeGreaterThan(1024);
+  });
+
+  describe('custom fonts (issue #42)', () => {
+    // any real TTF works; discover it by extension since the filename carries a build hash
+    const traceViewerDir = path.resolve(__dirname, '../../node_modules/playwright-core/lib/vite/traceViewer');
+    const codiconTtf = path.join(
+      traceViewerDir,
+      fs.readdirSync(traceViewerDir).find(f => f.endsWith('.ttf'))!
+    );
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('embeds a custom TTF without warnings and produces a valid PDF', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = createBasicData({ pdfFont: { regular: codiconTtf } });
+
+      const result = generateExecutivePdf(data, tmpDir);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      const buffer = fs.readFileSync(result);
+      expect(buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+      warnSpy.mockRestore();
+    });
+
+    it('falls back to Helvetica when the font path does not exist', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = createBasicData({ pdfFont: { regular: '/nonexistent/font.ttf' } });
+
+      const result = generateExecutivePdf(data, tmpDir);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to Helvetica'));
+      const buffer = fs.readFileSync(result);
+      expect(buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+      warnSpy.mockRestore();
+    });
+
+    it('falls back to the regular font when only the bold path is invalid', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const data = createBasicData({
+        pdfFont: { regular: codiconTtf, bold: '/nonexistent/bold.ttf' },
+      });
+
+      const result = generateExecutivePdf(data, tmpDir);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('using the regular font'));
+      expect(fs.existsSync(result)).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('does not leak a previous run\'s font into a run without pdfFont', () => {
+      generateExecutivePdf(createBasicData({ pdfFont: { regular: codiconTtf } }), tmpDir);
+      const result = generateExecutivePdf(createBasicData(), tmpDir, 'plain-run');
+      const buffer = fs.readFileSync(result);
+      expect(buffer.subarray(0, 5).toString('ascii')).toBe('%PDF-');
+      expect(buffer.toString('latin1')).toContain('Helvetica');
+    });
   });
 
   it('handles empty results array without throwing', () => {

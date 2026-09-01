@@ -744,10 +744,20 @@ class SmartReporter implements Reporter {
             quarantineEntries: quarantineResult?.entries,
             quarantineThreshold: this.options.quarantine?.threshold,
             branding: this.options.branding,
+            pdfFont: this.options.pdfFont,
           };
           const pdfThemes: PdfThemeName[] = ['corporate', 'dark', 'minimal'];
           for (const pdfTheme of pdfThemes) {
-            const pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+            let pdfPath: string;
+            try {
+              pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+            } catch (err) {
+              // a font can pass the register-time check but still fail during subsetting
+              if (!pdfData.pdfFont) throw err;
+              console.warn(`⚠️  PDF generation failed with the custom font (${pdfData.pdfFont.regular}); retrying without it:`, err instanceof Error ? err.message : err);
+              pdfData.pdfFont = undefined;
+              pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+            }
             if (pdfTheme === 'corporate') {
               console.log(`   PDF executive summary: ${pdfPath}`);
             }
@@ -756,6 +766,8 @@ class SmartReporter implements Reporter {
       } catch (err) {
         console.warn('⚠️  PDF export failed:', err);
       }
+    } else if (this.options.exportPdfFull) {
+      console.warn('⚠️  exportPdfFull requires exportPdf: true — no PDF was generated');
     }
 
     // Update history
