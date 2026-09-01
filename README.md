@@ -284,6 +284,7 @@ reporter: [
 
     // Step and path options
     filterPwApiSteps: false,
+    showExpectSteps: true,          // Show standalone expect() assertion steps
     relativeToCwd: false,
 
     // Multi-project
@@ -341,6 +342,8 @@ export GEMINI_API_KEY=your-key       # Google Gemini
 
 When a test fails, the reporter sends the failure context to your chosen provider and includes fix suggestions in the report. Costs are billed by your provider — the reporter uses small, fast models (`claude-haiku-4-5`, `gpt-4o-mini`, `gemini-2.5-flash`) with short prompts, so per-run cost is minimal.
 
+**Claude subscription (no API key)?** Claude Pro/Team plans issue OAuth tokens, not API keys — putting one in `ANTHROPIC_API_KEY` fails with a 401. Instead, install [Claude Code](https://claude.com/claude-code) and set `CLAUDE_CODE_OAUTH_TOKEN`: the reporter then routes analysis through the local `claude` CLI, billed to your subscription. API keys take precedence when both are set.
+
 If no API key is set, AI analysis is skipped and everything else works as normal — every failed test still gets a **Copy AI Prompt** button in the report, which copies a ready-to-paste prompt (error, call log, code frame) for use with any AI assistant.
 
 ## Stability Grades
@@ -365,7 +368,9 @@ reporter: [
 ]
 ```
 
-With filtering on, verbose `page.click()`, `page.fill()` steps are hidden — only your named `test.step()` entries appear.
+With filtering on, verbose `page.click()`, `page.fill()` steps are hidden — your named `test.step()` entries and `expect()` assertion steps remain.
+
+All `expect()` assertion steps (top-level and nested) are shown by default and are kept even when `filterPwApiSteps` is on. Set `showExpectSteps: false` to hide them.
 
 ## Multi-Project History
 
@@ -588,7 +593,8 @@ Enable `cspSafe: true` to save attachments as files instead of embedding, or red
 |---|---|---|
 | No history data | History file missing or wrong path | Check `historyFile` path, use CI caching |
 | No network logs | Tracing not enabled | Add `trace: 'retain-on-failure'` to config |
-| No AI suggestions | No AI API key set | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
+| No AI suggestions | No AI API key set | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN` with Claude Code installed) |
+| `Anthropic API error: 401` | Claude subscription OAuth token used as API key | Unset `ANTHROPIC_API_KEY`; set `CLAUDE_CODE_OAUTH_TOKEN` to use the Claude Code CLI |
 | Mixed project metrics | Shared history file | Use `projectName` to isolate |
 | Quality gate not failing CI | Gate not run as separate step | Run `npx playwright-smart-reporter gate` as its own CI step |
 

@@ -114,6 +114,9 @@ export interface SmartReporterOptions {
   // Issue #22: Step filtering - hide verbose pw:api steps
   filterPwApiSteps?: boolean;      // Default: false (show all steps for backwards compatibility)
 
+  // Issue #41: Include standalone expect() assertion steps in the step timeline
+  showExpectSteps?: boolean;       // Default: true (kept even when filterPwApiSteps is true)
+
   // Issue #20: Path resolution relative to current working directory
   // When true, outputFile and historyFile are resolved relative to process.cwd()
   // When false (default), paths are resolved relative to Playwright's rootDir

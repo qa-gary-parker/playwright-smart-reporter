@@ -46,6 +46,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Claude subscription instead of an API key? Install the Claude Code CLI in a prior step
+          # (npm install -g @anthropic-ai/claude-code) and set:
+          # CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
       # 6. Upload the Smart Reporter HTML report as a build artifact
       #    The report is available in the Actions tab under "Artifacts"

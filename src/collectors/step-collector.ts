@@ -6,12 +6,20 @@ import type { StepData } from '../types';
  */
 export interface StepCollectorOptions {
   /**
-   * When true, filters out pw:api steps and only shows test.step entries.
-   * Useful when you have custom test.step descriptions and don't want the
-   * verbose Playwright API calls cluttering the step list.
+   * When true, filters out pw:api steps so only test.step entries (and, unless
+   * showExpectSteps is false, expect() assertion steps) are shown. Useful when
+   * you have custom test.step descriptions and don't want the verbose
+   * Playwright API calls cluttering the step list.
    * Default: false (show all steps)
    */
   filterPwApiSteps?: boolean;
+
+  /**
+   * When true, includes expect() assertion steps in the step timeline.
+   * Expect steps are kept even when filterPwApiSteps is true.
+   * Default: true
+   */
+  showExpectSteps?: boolean;
 }
 
 /**
@@ -23,6 +31,7 @@ export class StepCollector {
   constructor(options: StepCollectorOptions = {}) {
     this.options = {
       filterPwApiSteps: options.filterPwApiSteps ?? false,
+      showExpectSteps: options.showExpectSteps ?? true,
     };
   }
 
@@ -34,6 +43,7 @@ export class StepCollector {
   extractSteps(result: TestResult): StepData[] {
     const steps: StepData[] = [];
     const filterPwApi = this.options.filterPwApiSteps;
+    const showExpect = this.options.showExpectSteps;
 
     // Recursively extract steps from the result
     const processStep = (step: TestResult['steps'][0]) => {
@@ -41,8 +51,10 @@ export class StepCollector {
       // Issue #22: Optionally filter out pw:api steps
       const isTestStep = step.category === 'test.step';
       const isPwApi = step.category === 'pw:api';
+      // Issue #41: Include standalone expect() assertion steps
+      const isExpect = step.category === 'expect';
 
-      if (isTestStep || (isPwApi && !filterPwApi)) {
+      if (isTestStep || (isPwApi && !filterPwApi) || (isExpect && showExpect)) {
         steps.push({
           title: step.title,
           duration: step.duration,
@@ -63,10 +75,15 @@ export class StepCollector {
     }
 
     // Mark the slowest step if we have any
+    // (single pass instead of Math.max(...spread) to avoid argument-count limits on huge step lists)
     if (steps.length > 0) {
-      const maxDuration = Math.max(...steps.map((s) => s.duration));
-      const slowestIndex = steps.findIndex((s) => s.duration === maxDuration);
-      if (slowestIndex !== -1 && maxDuration > 100) {
+      let slowestIndex = 0;
+      for (let i = 1; i < steps.length; i++) {
+        if (steps[i].duration > steps[slowestIndex].duration) {
+          slowestIndex = i;
+        }
+      }
+      if (steps[slowestIndex].duration > 100) {
         steps[slowestIndex].isSlowest = true;
       }
     }

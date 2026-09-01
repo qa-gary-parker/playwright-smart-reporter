@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `expect()` assertion steps now appear in the Step Timeline (#41). They are shown by default and kept even when `filterPwApiSteps` is on. Set `showExpectSteps: false` to restore the previous output.
+- Claude Code CLI as an AI analysis provider (#40): set `CLAUDE_CODE_OAUTH_TOKEN` (Claude Pro/Team subscription) and analysis runs through the local `claude` CLI — no Anthropic API key needed. API keys take precedence when both are set. The CLI runs with all tools disabled (`--restricted --tools ""`), so it is text-in/text-out like the HTTP providers.
+- An OAuth token mistakenly placed in `ANTHROPIC_API_KEY` is detected (`sk-ant-oat` prefix) and rerouted to the CLI provider with a warning instead of failing every request with a 401.
 - `pdfFont` option for the executive PDF export (#42): embed a custom TTF/OTF (or TTC via `family`) so non-Latin scripts render instead of tofu. Arabic letters join and pure-Arabic lines read right-to-left; mixed-direction (Arabic+Latin) strings remain a known limitation — use `exportPdfFull: true` for full bidi via Chromium. Invalid font paths warn and fall back to Helvetica.
+
+### Fixed
+- The Anthropic 401 error now explains that subscription OAuth tokens are not API keys and points to the CLI provider instead of dumping a raw stack trace context.
 
 ## [2.1.0] - 2026-08-06
 

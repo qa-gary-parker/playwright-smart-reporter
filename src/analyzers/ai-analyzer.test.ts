@@ -1,6 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
+import { spawn } from 'child_process';
 import { AIAnalyzer } from './ai-analyzer';
 import type { TestResultData, FailureCluster, SuiteStats } from '../types';
+
+vi.mock('child_process', () => ({ spawn: vi.fn() }));
+const mockSpawn = vi.mocked(spawn);
+
+function makeFakeChild() {
+  const child = new EventEmitter() as any;
+  child.stdout = new EventEmitter();
+  child.stdout.setEncoding = vi.fn();
+  child.stderr = new EventEmitter();
+  child.stderr.setEncoding = vi.fn();
+  child.stdin = new EventEmitter();
+  child.stdin.write = vi.fn();
+  child.stdin.end = vi.fn();
+  child.kill = vi.fn();
+  return child;
+}
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
   return {
@@ -72,6 +90,7 @@ function clearAiKeys() {
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
+  delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
 }
 
 describe('AIAnalyzer', () => {
@@ -100,8 +119,204 @@ describe('AIAnalyzer', () => {
       expect(new AIAnalyzer().isAvailable()).toBe(true);
     });
 
+    it('returns true with CLAUDE_CODE_OAUTH_TOKEN set', () => {
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+      expect(new AIAnalyzer().isAvailable()).toBe(true);
+    });
+
     it('returns false with no API keys set', () => {
       expect(new AIAnalyzer().isAvailable()).toBe(false);
+    });
+  });
+
+  describe('Claude Code CLI provider (issue #40)', () => {
+    it('spawns the claude CLI and pipes the prompt via stdin', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+
+      const child = makeFakeChild();
+      mockSpawn.mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          child.stdout.emit('data', 'CLI suggestion');
+          child.emit('close', 0);
+        });
+        return child;
+      });
+
+      const analyzer = new AIAnalyzer();
+      const results = [createTestResult({ status: 'failed', error: 'Element not found' })];
+
+      await analyzer.analyzeFailed(results);
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'claude',
+        expect.arrayContaining(['-p', '--output-format', 'text']),
+        expect.anything()
+      );
+      expect(child.stdin.write).toHaveBeenCalledWith(expect.stringContaining('Element not found'));
+      expect(child.stdin.end).toHaveBeenCalled();
+      expect(results[0].aiSuggestion).toBe('CLI suggestion');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('prefers an API key over the CLI when both are set', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.stubEnv('ANTHROPIC_API_KEY', 'api-key');
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+      mockFetch.mockResolvedValueOnce(mockAnthropicResponse('API suggestion'));
+
+      const analyzer = new AIAnalyzer();
+      const results = [createTestResult({ status: 'failed', error: 'Error' })];
+
+      await analyzer.analyzeFailed(results);
+
+      expect(mockSpawn).not.toHaveBeenCalled();
+      expect(results[0].aiSuggestion).toBe('API suggestion');
+    });
+
+    it('reports a helpful error when the claude binary is missing', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+
+      const child = makeFakeChild();
+      mockSpawn.mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          child.emit('error', err);
+        });
+        return child;
+      });
+
+      const analyzer = new AIAnalyzer();
+      const results = [createTestResult({ status: 'failed', error: 'Error' })];
+
+      await analyzer.analyzeFailed(results);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get AI suggestion'),
+        expect.objectContaining({ message: expect.stringContaining('not found on PATH') })
+      );
+      expect(results[0].aiSuggestion).toBeUndefined();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('reroutes an OAuth token found in ANTHROPIC_API_KEY to the CLI', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-oat01-abc123');
+
+      const child = makeFakeChild();
+      mockSpawn.mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          child.stdout.emit('data', 'CLI suggestion');
+          child.emit('close', 0);
+        });
+        return child;
+      });
+
+      const analyzer = new AIAnalyzer();
+      const results = [createTestResult({ status: 'failed', error: 'Error' })];
+
+      await analyzer.analyzeFailed(results);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('OAuth token'));
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnEnv = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
+      expect(spawnEnv.env.CLAUDE_CODE_OAUTH_TOKEN).toBe('sk-ant-oat01-abc123');
+      expect(results[0].aiSuggestion).toBe('CLI suggestion');
+
+      warnSpy.mockRestore();
+    });
+
+    it('stops spawning after the binary is reported missing', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+
+      const child = makeFakeChild();
+      mockSpawn.mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException;
+          err.code = 'ENOENT';
+          child.emit('error', err);
+        });
+        return child;
+      });
+
+      const analyzer = new AIAnalyzer();
+      const results = [
+        createTestResult({ testId: 'test-1', status: 'failed', error: 'Error 1' }),
+        createTestResult({ testId: 'test-2', status: 'failed', error: 'Error 2' }),
+        createTestResult({ testId: 'test-3', status: 'failed', error: 'Error 3' }),
+        createTestResult({ testId: 'test-4', status: 'failed', error: 'Error 4' }),
+      ];
+
+      await analyzer.analyzeFailed(results);
+
+      // batch 1 spawns up to 3 in parallel before the first ENOENT lands; batch 2 must not spawn
+      expect(mockSpawn.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(results.every(r => r.aiSuggestion === undefined)).toBe(true);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('kills the CLI and rejects when it exceeds the timeout', async () => {
+      vi.useFakeTimers();
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+
+      const child = makeFakeChild(); // never emits 'close'
+      mockSpawn.mockImplementationOnce(() => child);
+
+      const analyzer = new AIAnalyzer();
+      const results = [createTestResult({ status: 'failed', error: 'Error' })];
+
+      const pending = analyzer.analyzeFailed(results);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await pending;
+
+      expect(child.kill).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get AI suggestion'),
+        expect.objectContaining({ message: expect.stringContaining('timed out') })
+      );
+      expect(results[0].aiSuggestion).toBeUndefined();
+
+      consoleSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('rejects when the CLI exits non-zero', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
+
+      const child = makeFakeChild();
+      mockSpawn.mockImplementationOnce(() => {
+        queueMicrotask(() => {
+          child.stderr.emit('data', 'not logged in');
+          child.emit('close', 1);
+        });
+        return child;
+      });
+
+      const analyzer = new AIAnalyzer();
+      const results = [createTestResult({ status: 'failed', error: 'Error' })];
+
+      await analyzer.analyzeFailed(results);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to get AI suggestion'),
+        expect.objectContaining({ message: expect.stringContaining('exited with code 1') })
+      );
+      expect(results[0].aiSuggestion).toBeUndefined();
+
+      consoleSpy.mockRestore();
     });
   });
 
@@ -251,7 +466,7 @@ describe('AIAnalyzer', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to get AI suggestion'),
-        expect.any(Error)
+        expect.objectContaining({ message: expect.stringContaining('CLAUDE_CODE_OAUTH_TOKEN') })
       );
       expect(results[0].aiSuggestion).toBeUndefined();
 
