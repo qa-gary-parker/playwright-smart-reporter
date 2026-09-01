@@ -124,6 +124,75 @@ describe('StepCollector', () => {
       expect(steps[0].title).toBe('Login');
     });
 
+    it('includes expect steps by default', () => {
+      const result = makeTestResult([
+        makeStep('page.goto', 100, 'pw:api'),
+        makeStep('expect.toBeVisible', 40, 'expect'),
+      ]);
+      const collector = new StepCollector();
+
+      const steps = collector.extractSteps(result);
+
+      expect(steps).toHaveLength(2);
+      expect(steps[1]).toEqual({
+        title: 'expect.toBeVisible',
+        duration: 40,
+        category: 'expect',
+      });
+    });
+
+    it('keeps expect steps when filterPwApiSteps is true', () => {
+      const result = makeTestResult([
+        makeStep('Login', 100, 'test.step'),
+        makeStep('page.click', 30, 'pw:api'),
+        makeStep('expect.toHaveText', 25, 'expect'),
+      ]);
+      const collector = new StepCollector({ filterPwApiSteps: true });
+
+      const steps = collector.extractSteps(result);
+
+      expect(steps.map(s => s.category)).toEqual(['test.step', 'expect']);
+    });
+
+    it('excludes expect steps when showExpectSteps is false', () => {
+      const result = makeTestResult([
+        makeStep('page.click', 30, 'pw:api'),
+        makeStep('expect.toBeVisible', 40, 'expect'),
+      ]);
+      const collector = new StepCollector({ showExpectSteps: false });
+
+      const steps = collector.extractSteps(result);
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0].category).toBe('pw:api');
+    });
+
+    it('shows only test.step entries when both filters are on', () => {
+      const result = makeTestResult([
+        makeStep('Login', 100, 'test.step'),
+        makeStep('page.click', 30, 'pw:api'),
+        makeStep('expect.toBeVisible', 40, 'expect'),
+      ]);
+      const collector = new StepCollector({ filterPwApiSteps: true, showExpectSteps: false });
+
+      const steps = collector.extractSteps(result);
+
+      expect(steps).toHaveLength(1);
+      expect(steps[0].category).toBe('test.step');
+    });
+
+    it('includes expect steps nested inside test.step', () => {
+      const nested = makeStep('expect.toBeVisible', 15, 'expect');
+      const parent = makeStep('Verify dashboard', 60, 'test.step', [nested]);
+      const result = makeTestResult([parent]);
+      const collector = new StepCollector();
+
+      const steps = collector.extractSteps(result);
+
+      expect(steps).toHaveLength(2);
+      expect(steps[1].title).toBe('expect.toBeVisible');
+    });
+
     it('skips internal hook steps', () => {
       const result = makeTestResult([
         makeStep('Before Hooks', 10, 'hook'),

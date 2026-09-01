@@ -59,6 +59,8 @@ export class HistoryCollector {
       projectName: options.projectName,
       // Issue #22: Step filtering
       filterPwApiSteps: options.filterPwApiSteps ?? false,
+      // Issue #41: Include expect() steps
+      showExpectSteps: options.showExpectSteps ?? true,
       // Issue #20: Path resolution
       relativeToCwd: options.relativeToCwd ?? false,
       // Issue #26: External run ID (sanitized for safe use in filenames and HTML)

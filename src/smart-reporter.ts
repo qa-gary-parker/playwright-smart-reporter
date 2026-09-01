@@ -120,6 +120,7 @@ class SmartReporter implements Reporter {
     // Issue #22: Pass filterPwApiSteps option to StepCollector
     this.stepCollector = new StepCollector({
       filterPwApiSteps: options.filterPwApiSteps,
+      showExpectSteps: options.showExpectSteps,
     });
     this.attachmentCollector = new AttachmentCollector();
 

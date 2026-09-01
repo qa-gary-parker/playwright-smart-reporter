@@ -266,6 +266,7 @@ reporter: [
 
     // Step and path options
     filterPwApiSteps: false,
+    showExpectSteps: true,          // Show standalone expect() assertion steps
     relativeToCwd: false,
 
     // Multi-project
@@ -348,7 +349,9 @@ reporter: [
 ]
 ```
 
-With filtering on, verbose `page.click()`, `page.fill()` steps are hidden — only your named `test.step()` entries appear.
+With filtering on, verbose `page.click()`, `page.fill()` steps are hidden — your named `test.step()` entries and `expect()` assertion steps remain.
+
+All `expect()` assertion steps (top-level and nested) are shown by default and are kept even when `filterPwApiSteps` is on. Set `showExpectSteps: false` to hide them.
 
 ## Multi-Project History
 
