@@ -120,6 +120,10 @@ describe('executive-pdf', () => {
       fs.readdirSync(traceViewerDir).find(f => f.endsWith('.ttf'))!
     );
 
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('embeds a custom TTF without warnings and produces a valid PDF', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const data = createBasicData({ pdfFont: { regular: codiconTtf } });
