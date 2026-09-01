@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- `pdfFont` option for the executive PDF export (#42): embed a custom TTF/OTF (or TTC via `family`) so non-Latin scripts render instead of tofu. Arabic letters join and pure-Arabic lines read right-to-left; mixed-direction (Arabic+Latin) strings remain a known limitation — use `exportPdfFull: true` for full bidi via Chromium. Invalid font paths warn and fall back to Helvetica.
+
 ## [2.1.0] - 2026-08-06
 
 ### Added

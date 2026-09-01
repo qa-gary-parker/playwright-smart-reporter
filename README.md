@@ -140,6 +140,24 @@ reporter: [
 ]
 ```
 
+#### Non-Latin scripts (Arabic, CJK, ...)
+
+The built-in PDF font (Helvetica) only covers Latin. If your test titles or project name use another script, embed a font that covers it:
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    exportPdf: true,
+    pdfFont: {
+      regular: './fonts/Cairo-Regular.ttf',
+      bold: './fonts/Cairo-Bold.ttf',     // optional, falls back to regular
+    },
+  }],
+]
+```
+
+Pick a font that covers **both** your script and Latin (e.g. [Cairo](https://fonts.google.com/specimen/Cairo) for Arabic) — the report's own labels are English. Arabic renders with joined letters and right-to-left word order. Known limitation: strings mixing Arabic and Latin (e.g. an Arabic path containing `auth.spec.ts`) may display the runs in the wrong order — full bidirectional layout is not supported. `family`/`boldFamily` select a face inside a `.ttc` collection. Alternatively, `exportPdf: true` + `exportPdfFull: true` renders the whole HTML report via Chromium, which handles all scripts natively.
+
 ### Quality Gates
 
 Fail CI builds when test results don't meet your thresholds:
@@ -297,6 +315,7 @@ reporter: [
     // Report customisation & exports
     theme: { preset: 'default' },  // default, light, dark, high-contrast, ocean, sunset, dracula, cyberpunk, forest, rose
     exportPdf: false,
+    pdfFont: undefined,         // { regular, bold?, family?, boldFamily? } — custom PDF font for non-Latin scripts
     exportJson: false,
     exportJunit: false,
     qualityGates: {},           // { minPassRate, maxFlakyRate, minStabilityGrade }

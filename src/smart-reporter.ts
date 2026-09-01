@@ -743,6 +743,7 @@ class SmartReporter implements Reporter {
             quarantineEntries: quarantineResult?.entries,
             quarantineThreshold: this.options.quarantine?.threshold,
             branding: this.options.branding,
+            pdfFont: this.options.pdfFont,
           };
           const pdfThemes: PdfThemeName[] = ['corporate', 'dark', 'minimal'];
           for (const pdfTheme of pdfThemes) {
@@ -755,6 +756,8 @@ class SmartReporter implements Reporter {
       } catch (err) {
         console.warn('⚠️  PDF export failed:', err);
       }
+    } else if (this.options.exportPdfFull) {
+      console.warn('⚠️  exportPdfFull requires exportPdf: true — no PDF was generated');
     }
 
     // Update history

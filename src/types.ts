@@ -4,6 +4,15 @@ import type { TestCase, TestResult } from '@playwright/test/reporter';
 // Report Customisation
 // ============================================================================
 
+// Issue #42: custom TTF/OTF fonts so non-Latin scripts (Arabic, CJK, ...) render
+// instead of tofu. pdfkit's built-in Helvetica only covers Latin glyphs.
+export interface PdfFontConfig {
+  regular: string;      // path to a .ttf/.otf file (or .ttc with `family`)
+  bold?: string;        // optional bold variant; falls back to regular
+  family?: string;      // font name inside a .ttc/.dfont collection
+  boldFamily?: string;  // bold font name inside a .ttc/.dfont collection
+}
+
 export interface ThemeConfig {
   preset?: 'default' | 'dark' | 'light' | 'high-contrast' | 'ocean' | 'sunset' | 'dracula' | 'cyberpunk' | 'forest' | 'rose';
   primary?: string;
@@ -124,6 +133,10 @@ export interface SmartReporterOptions {
   // Export options
   exportJson?: boolean;            // Write smart-report-data.json alongside HTML
   exportPdf?: boolean;             // Generate PDF executive summary
+
+  // Issue #42: custom TTF/OTF fonts for the executive PDF so non-Latin scripts
+  // (Arabic, CJK, ...) render instead of tofu.
+  pdfFont?: PdfFontConfig;
   exportJunit?: boolean;           // Generate JUnit XML output
 
   // Custom themes
