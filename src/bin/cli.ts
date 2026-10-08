@@ -13,6 +13,8 @@ Usage: playwright-smart-reporter <command> [options]
 Commands:
   gate      Evaluate quality gates against a JSON export
   digest    Generate a test health digest from history
+  failures  Print the redacted failure bundle for coding agents
+  mcp       Serve the failure bundle to coding agents over MCP (stdio)
 
 Run playwright-smart-reporter <command> --help for command-specific help.
 `);
@@ -163,6 +165,87 @@ Options:
   }
 }
 
+const FAILURE_DATA_DEFAULTS = ['smart-report-failures.json', 'smart-report-data.json'];
+
+const FAILURE_DATA_HELP = `  --data <path>    smart-report-failures.json (exportFailures), smart-report-data.json (exportJson),
+                   or <name>-data.js (assetMode: 'external')
+                   (default: first of ${FAILURE_DATA_DEFAULTS.join(', ')} found in the current directory)`;
+
+function failureDataPath(): string | undefined {
+  return parseFlag('--data') ?? FAILURE_DATA_DEFAULTS.find((f) => fs.existsSync(f));
+}
+
+async function loadFailures() {
+  const dataPath = failureDataPath();
+  if (!dataPath || !fs.existsSync(dataPath)) {
+    console.error(`Error: Data file not found: ${dataPath ?? FAILURE_DATA_DEFAULTS.join(' or ')}`);
+    console.error('Run your tests with exportFailures: true (or exportJson: true) to generate it.');
+    process.exitCode = 1;
+    return undefined;
+  }
+  const { loadFailureBundle } = await import('../agent/failure-bundle');
+  return loadFailureBundle(dataPath, { rootDir: process.cwd() });
+}
+
+async function runFailures(): Promise<void> {
+  if (hasFlag('--help')) {
+    console.log(`
+Usage: playwright-smart-reporter failures [--json] [options]
+
+Print the failed tests with error, call log, failing step, network and console
+context, and history. Secrets are redacted.
+
+Options:
+  --json           Print the full failure bundle as JSON
+${FAILURE_DATA_HELP}
+  --help           Show this help
+`);
+    return;
+  }
+
+  const bundle = await loadFailures();
+  if (!bundle) return;
+
+  if (hasFlag('--json')) {
+    console.log(JSON.stringify(bundle, null, 2));
+    return;
+  }
+  const { summarizeFailure } = await import('../agent/failure-bundle');
+  console.log(`${bundle.failures.length} failure(s) of ${bundle.run.total} test(s)`);
+  for (const f of bundle.failures.map(summarizeFailure)) {
+    console.log(`\n${f.id}\n  ${f.location}\n  ${f.error}`);
+  }
+}
+
+async function runMcp(): Promise<void> {
+  if (hasFlag('--help')) {
+    console.log(`
+Usage: playwright-smart-reporter mcp [options]
+
+Start an MCP server on stdio with the tools list_failures, get_failure, and
+get_trace_context. Register it with Claude Code:
+
+  claude mcp add smart-reporter -- npx playwright-smart-reporter mcp --data ./smart-report-failures.json
+
+Options:
+${FAILURE_DATA_HELP}
+  --help           Show this help
+`);
+    return;
+  }
+
+  // Start even before the first test run; each tool call reads the file afresh.
+  const dataPath = path.resolve(failureDataPath() ?? FAILURE_DATA_DEFAULTS[0]);
+  const { loadFailureBundle } = await import('../agent/failure-bundle');
+  const { startFailuresMcpServer } = await import('../agent/mcp-server');
+  await startFailuresMcpServer(() => {
+    if (!fs.existsSync(dataPath)) {
+      throw new Error(`No failure data at ${dataPath}. Run your tests with exportFailures: true, then call the tool again.`);
+    }
+    return loadFailureBundle(dataPath, { rootDir: process.cwd() });
+  });
+}
+
 async function main(): Promise<void> {
   switch (command) {
     case 'gate':
@@ -170,6 +253,12 @@ async function main(): Promise<void> {
       break;
     case 'digest':
       await runDigest();
+      break;
+    case 'failures':
+      await runFailures();
+      break;
+    case 'mcp':
+      await runMcp();
       break;
     case '--help':
     case '-h':

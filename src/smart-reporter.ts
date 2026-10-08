@@ -60,6 +60,7 @@ import { buildComparison } from './report-data/comparison';
 import { buildReportData, type ReportInput } from './report-data/builder';
 import { loadUiAssets, writeReport } from './report-data/writer';
 import { exportJsonData } from './generators/json-exporter';
+import { writeFailureBundle } from './agent/failure-bundle';
 import { exportJunitXml } from './generators/junit-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
@@ -747,7 +748,8 @@ class SmartReporter implements Reporter {
       aiSuiteHealthSummary,
     };
 
-    const written = await writeReport(buildReportData(reportInput), {
+    const reportData = buildReportData(reportInput);
+    const written = await writeReport(reportData, {
       outputPath,
       assets: loadUiAssets(),
       cspSafe: this.options.cspSafe,
@@ -777,6 +779,15 @@ class SmartReporter implements Reporter {
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
         console.warn('⚠️  JSON export failed:', err);
+      }
+    }
+
+    if (this.options.exportFailures) {
+      try {
+        const failuresPath = writeFailureBundle(reportData, { outputDir: exportDir, rootDir: this.outputDir });
+        console.log(`   Failure bundle: ${failuresPath}`);
+      } catch (err) {
+        console.warn('⚠️  Failure bundle export failed:', err);
       }
     }
 

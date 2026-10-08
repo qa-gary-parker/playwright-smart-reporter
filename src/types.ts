@@ -180,6 +180,8 @@ export interface SmartReporterOptions {
   accessibility?: AccessibilityConfig;
   // Phase 4: Causal failure timeline
   enableCausalTimeline?: boolean;  // Default: true (timeline + first-anomaly suggestion on failed tests)
+  // Phase 8: agent-ready output
+  exportFailures?: boolean;        // Write redacted <name>-failures.json for coding agents (default: false)
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
