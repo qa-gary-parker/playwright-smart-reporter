@@ -55,7 +55,7 @@ function matchesToken(t: ReportTest, { key, value }: FilterToken): boolean {
     case 'signal':
       return t.signals.some((s) => s === v);
     case 'owner':
-      return ((t as ReportTest & { owners?: string[] }).owners ?? []).some((o) => o.toLowerCase() === v);
+      return (t.owners ?? []).some((o) => o.toLowerCase() === v);
   }
 }
 

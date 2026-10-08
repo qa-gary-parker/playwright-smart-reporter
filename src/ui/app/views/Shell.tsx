@@ -134,6 +134,7 @@ function Rail() {
         {(f.trends || f.comparison) && <RailItem icon="history" label="History" to={{ view: 'history', tab: f.trends ? 'trends' : 'compare' }} active={r.view === 'history'} />}
         {f.gallery && <RailItem icon="image" label="Gallery" to={{ view: 'gallery', ...run }} active={r.view === 'gallery'} />}
         {f.live && <RailItem icon="radio" label="Live" to={{ view: 'live' }} active={r.view === 'live'} />}
+        {data.value.a11y && <RailItem icon="eye" label="Accessibility" count={data.value.a11y.totalViolations} to={{ view: 'a11y' }} active={r.view === 'a11y'} />}
       </div>
       <div class="rail__foot">
         <button type="button" class="rail__keys" onClick={() => (keymapOpen.value = true)}>

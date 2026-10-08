@@ -1,5 +1,5 @@
 import { GroupHeader, ListRow, Tabs, type TestStatus } from '../../components';
-import { displayStatus, formatDate, formatDuration, location, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, location, plural, type ReportTest } from '../data';
 import type { ComparisonKey } from '../../../report-data/schema';
 import { formatRoute, type HistoryTab } from '../router';
 import { data, navigate, testsById } from '../store';
@@ -161,7 +161,7 @@ export function History({ tab }: { tab: HistoryTab }) {
     <div class="page">
       <header class="page__head">
         <h1 class="page__title">History</h1>
-        <span class="faint">{data.value.trends.length} recorded runs</span>
+        <span class="faint">{plural(data.value.trends.length, 'recorded run')}</span>
       </header>
       <Tabs label="History" value={tab} onChange={(id) => navigate({ view: 'history', tab: id as HistoryTab })} tabs={tabs} />
       <div class="page__body">{tab === 'compare' ? <Compare /> : tab === 'heatmap' ? <Heatmap /> : <Trends />}</div>

@@ -26,7 +26,7 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
   tag: { label: 'Tag', mono: true, keys: (t) => (t.tags?.length ? t.tags : [NONE]) },
   status: { label: 'Status', mono: false, keys: (t) => [isFailing(t) ? 'failed' : t.outcome === 'flaky' ? 'flaky' : t.status] },
   grade: { label: 'Grade', mono: false, keys: (t) => [t.stabilityScore ? `Grade ${t.stabilityScore.grade}` : NONE] },
-  owner: { label: 'Owner', mono: true, keys: (t) => (t as ReportTest & { owners?: string[] }).owners?.slice(0, 1) ?? ['Unowned'] },
+  owner: { label: 'Owner', mono: true, keys: (t) => t.owners?.slice(0, 1) ?? ['Unowned'] },
   none: { label: 'None', mono: false, keys: () => [''] },
 };
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'preact/hooks';
 import { EmptyState, Icon, StatusGlyph, Tabs } from '../../components';
-import { displayStatus, type ReportTest } from '../data';
+import { displayStatus, plural, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests } from '../store';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -33,7 +33,7 @@ export function Gallery() {
     <div class="page">
       <header class="page__head">
         <h1 class="page__title">Gallery</h1>
-        <span class="faint">{tiles.length} attachments</span>
+        <span class="faint">{plural(tiles.length, 'attachment')}</span>
       </header>
       <Tabs
         label="Attachment type"

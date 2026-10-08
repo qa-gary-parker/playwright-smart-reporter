@@ -15,10 +15,11 @@ import {
   statusLabel,
   type TestStatus,
 } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing, location, titlePath, type ReportTest } from '../data';
-import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, timelineOf } from '../detail-model';
+import { displayStatus, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
+import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
 import { Lightbox, type MediaItem } from './Lightbox';
+import { Violations } from './Accessibility';
 import { Markdown } from './Markdown';
 import { CausalTimeline } from './Timeline';
 
@@ -231,9 +232,9 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
   const snippet = parseSnippet(t.errorSnippet);
   const timeline = timelineOf(t);
   const net = t.networkLogs?.entries ?? [];
-  const failedReq = net.filter((n) => n.status >= 400 || n.status === 0).length;
-  const owners = (t as ReportTest & { owners?: string[] }).owners ?? [];
-  const ai = data.value.ai as { suiteHealthSummary?: string; model?: string; provider?: string };
+  const failedReq = net.filter((n) => requestFailed(n.status)).length;
+  const owners = t.owners ?? [];
+  const ai = data.value.ai;
 
   const addFilter = (key: string, value: string) => {
     const r = route.value;
@@ -338,21 +339,21 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
         </S>
       )}
       {t.steps.length > 0 && (
-        <S title="Steps" meta={`${t.steps.length} steps`}>
+        <S title="Steps" meta={plural(t.steps.length, 'step')}>
           <Steps t={t} />
         </S>
       )}
       {net.length > 0 && (
-        <S title="Network" meta={`${net.length} requests${failedReq ? ` · ${failedReq} failed` : ''}`}>
+        <S title="Network" meta={`${plural(net.length, 'request')}${failedReq ? ` · ${failedReq} failed` : ''}`}>
           <div class="net" role="table" aria-label="Network requests">
             {net.map((e) => (
-              <div class="net__row" role="row" data-failed={e.status >= 400 || e.status === 0 ? '' : undefined} title={e.url}>
+              <div class="net__row" role="row" data-failed={requestFailed(e.status) ? '' : undefined} title={e.url}>
                 <span role="cell" class="mono faint">
                   {e.method}
                 </span>
                 <span role="cell" class="net__status mono">
-                  {(e.status >= 400 || e.status === 0) && <StatusGlyph status="failed" size={12} />}
-                  {e.status || 'ERR'}
+                  {requestFailed(e.status) && <StatusGlyph status="failed" size={12} />}
+                  {e.status > 0 ? e.status : 'ERR'}
                 </span>
                 <span role="cell" class="net__url mono">
                   {e.urlPath || e.url}
@@ -366,7 +367,7 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
         </S>
       )}
       {timeline && timeline.lanes.console.length > 0 && (
-        <S title="Console" meta={`${timeline.lanes.console.filter((c) => c.level === 'error').length} error`}>
+        <S title="Console" meta={plural(timeline.lanes.console.filter((c) => c.level === 'error').length, 'error')}>
           <ul class="console">
             {timeline.lanes.console.map((c) => (
               <li class="console__line mono" data-level={c.level}>
@@ -378,13 +379,18 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
         </S>
       )}
       {attachmentCount(t) > 0 && (
-        <S title="Attachments" meta={`${attachmentCount(t)} files`}>
+        <S title="Attachments" meta={plural(attachmentCount(t), 'file')}>
           <Attachments t={t} />
         </S>
       )}
       {t.history.length > 0 && (
-        <S title="History" meta={`last ${t.history.length} runs`}>
+        <S title="History" meta={`last ${plural(t.history.length, 'run')}`}>
           <History t={t} />
+        </S>
+      )}
+      {t.a11y && (
+        <S title="Accessibility" meta={`${plural(t.a11y.violations.length, 'violation')} · ${t.a11y.standard}`}>
+          {t.a11y.violations.length ? <Violations violations={t.a11y.violations} /> : <p class="muted">No violations on {t.a11y.url ?? 'the scanned page'}.</p>}
         </S>
       )}
       {(t.annotations?.length ?? 0) > 0 && (

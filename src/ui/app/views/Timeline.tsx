@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { Button } from '../../components';
 import { formatDuration } from '../data';
-import type { Timeline } from '../detail-model';
+import { requestFailed, type Timeline } from '../detail-model';
 
 const pct = (v: number, total: number) => `${Math.min(100, Math.max(0, (v / Math.max(total, 1)) * 100))}%`;
 
@@ -46,9 +46,9 @@ export function CausalTimeline({ timeline }: { timeline: Timeline }) {
           {lanes.network.map((n) => (
             <span
               class="timeline__bar timeline__bar--net"
-              data-failed={n.status >= 400 || n.status === 0 ? '' : undefined}
+              data-failed={requestFailed(n.status) ? '' : undefined}
               style={{ left: pct(n.start, duration), width: pct(Math.max(n.end - n.start, duration / 400), duration) }}
-              title={`${n.method} ${n.url} · ${n.status || 'failed'} · ${formatDuration(n.end - n.start)}`}
+              title={`${n.method} ${n.url} · ${n.status > 0 ? n.status : n.failure ?? 'failed'} · ${formatDuration(n.end - n.start)}`}
             />
           ))}
         </div>
@@ -85,7 +85,7 @@ export function CausalTimeline({ timeline }: { timeline: Timeline }) {
           <span class="faint">Step</span> <span class="mono">{step?.title ?? '—'}</span>
         </dd>
         <dd>
-          <span class="faint">Request</span> <span class="mono">{request ? `${request.method} ${request.url} ${request.status || 'failed'}` : '—'}</span>
+          <span class="faint">Request</span> <span class="mono">{request ? `${request.method} ${request.url} ${request.status > 0 ? request.status : request.failure ?? 'failed'}` : '—'}</span>
         </dd>
         <dd>
           <span class="faint">Last console</span> <span class="mono">{lastLog ? `${lastLog.level}: ${lastLog.text}` : '—'}</span>

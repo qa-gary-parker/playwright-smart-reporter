@@ -53,3 +53,7 @@ export function suiteHealth(s: { total: number; passRate: number; flaky: number;
   const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
   return { score, grade, pass: s.passRate, stability: Math.round(stability), perf: Math.round(perf) };
 }
+
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}

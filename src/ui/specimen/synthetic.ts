@@ -122,6 +122,35 @@ export const SYNTHETIC: ReportTest = {
   },
   aiSuggestion:
     'The charge request to `/api/payments/charge` returned **502** after 3.0s, so the app rendered the declined page. The assertion failed because of the backend response, not the locator.\n\nThis test passed in 9 of the last 10 runs.\n\n- Check the payments service for this run before changing the test.\n- If the gateway is unstable in this environment, mock the charge call:\n\n```ts\nawait page.route(\'**/api/payments/charge\', (route) => route.fulfill({ json: { status: \'approved\' } }));\n```',
+  a11y: {
+    standard: 'WCAG2AA',
+    timestamp: '2026-09-01T10:34:36.000Z',
+    url: 'https://shop.example.test/checkout/declined',
+    passes: 41,
+    incomplete: 1,
+    inapplicable: 47,
+    violations: [
+      {
+        id: 'color-contrast',
+        impact: 'serious',
+        description: 'Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.13/color-contrast',
+        wcagTags: ['wcag2aa', 'wcag143'],
+        nodes: [
+          { target: ['.checkout__hint'], html: '<p class="checkout__hint">', failureSummary: 'Element has insufficient color contrast of 2.9' },
+          { target: ['.fake-btn'], html: '<div class="fake-btn">', failureSummary: 'Element has insufficient color contrast of 3.1' },
+        ],
+      },
+      {
+        id: 'button-name',
+        impact: 'critical',
+        description: 'Ensure buttons have discernible text',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.13/button-name',
+        wcagTags: ['wcag2a', 'wcag412'],
+        nodes: [{ target: ['button.retry'], html: '<button class="retry"></button>', failureSummary: 'Element does not have inner text' }],
+      },
+    ],
+  },
   ...({
     timeline: {
       duration: at,

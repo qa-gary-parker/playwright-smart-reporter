@@ -110,6 +110,8 @@ describe('router', () => {
       { view: 'history', tab: 'compare' },
       { view: 'gallery' },
       { view: 'live' },
+      { view: 'a11y' },
+      { view: 'coverage' },
       { view: 'queue', queue: 'flaky', q: '', run: 'run-123' },
       { view: 'insights', run: 'shard 1/2#3' },
     ];

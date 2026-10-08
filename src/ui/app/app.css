@@ -1287,3 +1287,60 @@ a.lines__label {
 .palette__count {
   margin-left: auto;
 }
+
+.impact {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.impact[data-impact='critical'],
+.impact[data-impact='serious'] {
+  color: var(--fail-fg);
+}
+
+.impact[data-impact='moderate'] {
+  color: var(--flaky-fg);
+}
+
+.impact[data-impact='minor'] {
+  color: var(--text-muted);
+}
+
+.a11y-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.a11y-item {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.a11y-item__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+
+.a11y-item__count {
+  margin-left: auto;
+}
+
+.a11y-item__help {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.a11y-nodes,
+.a11y-tests {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

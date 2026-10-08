@@ -18,6 +18,7 @@ const SCREENS: Array<[string, string]> = [
   ['heatmap', 'screen=history&tab=heatmap'],
   ['gallery', 'screen=gallery'],
   ['live', 'screen=live'],
+  ['a11y', 'screen=a11y'],
 ];
 const MODES = ['light', 'dark', 'hc'];
 

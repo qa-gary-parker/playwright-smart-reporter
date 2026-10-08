@@ -1,18 +1,16 @@
+import type { CausalTimeline } from '../../types';
 import type { CodeLine } from '../components';
 import { displayStatus, formatDuration, isFailing, location, type ReportTest } from './data';
 
-export interface Timeline {
-  duration: number;
-  lanes: {
-    steps: Array<{ title: string; start: number; end: number; category: string; failed?: boolean }>;
-    network: Array<{ start: number; end: number; method: string; url: string; status: number }>;
-    console: Array<{ at: number; level: string; text: string }>;
-  };
-  firstAnomaly?: { kind: 'network-error' | 'console-error' | 'slow-step'; at: number; summary: string; ref: { lane: 'network' | 'console' | 'steps'; index: number } };
-}
+export type Timeline = CausalTimeline;
 
 export function timelineOf(t: ReportTest): Timeline | undefined {
-  return (t as ReportTest & { timeline?: Timeline }).timeline;
+  return t.timeline;
+}
+
+// Status -1 (or 0 in older traces) means no response arrived.
+export function requestFailed(status: number): boolean {
+  return status >= 400 || status <= 0;
 }
 
 export function parseExpectation(error?: string): { expected: string; received: string } | undefined {
@@ -44,6 +42,8 @@ export function parseSnippet(snippet?: string): { lines: CodeLine[]; highlight?:
 // Index of the step that failed: the timeline knows; otherwise the last assertion or API step.
 export function failingStepIndex(t: ReportTest): number {
   if (!isFailing(t)) return -1;
+  const flagged = t.steps.findIndex((s) => s.failed);
+  if (flagged >= 0) return flagged;
   const timeline = timelineOf(t);
   if (timeline) {
     const i = timeline.lanes.steps.findIndex((s) => s.failed);

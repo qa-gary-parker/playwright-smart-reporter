@@ -6,7 +6,9 @@ export type ViewRoute =
   | { view: 'insights' }
   | { view: 'history'; tab: HistoryTab }
   | { view: 'gallery' }
-  | { view: 'live' };
+  | { view: 'live' }
+  | { view: 'a11y' }
+  | { view: 'coverage' };
 
 export type Route = ViewRoute & { run?: string };
 
@@ -41,6 +43,8 @@ export function parseHash(hash: string): Route {
   if (head === 'history') return withRun({ view: 'history', tab: (HISTORY_TABS as readonly string[]).includes(arg) ? (arg as HistoryTab) : 'trends' });
   if (head === 'gallery') return withRun({ view: 'gallery' });
   if (head === 'live') return withRun({ view: 'live' });
+  if (head === 'a11y') return withRun({ view: 'a11y' });
+  if (head === 'coverage') return withRun({ view: 'coverage' });
   return withRun({ ...DEFAULT_ROUTE });
 }
 

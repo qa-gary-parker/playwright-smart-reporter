@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing, suiteHealth, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, isFailing, plural, suiteHealth, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
@@ -34,11 +34,6 @@ function TestLines({ tests, value }: { tests: ReportTest[]; value: (t: ReportTes
   );
 }
 
-type Extras = {
-  forecastSummary?: { atRisk: string[]; threshold: number; minRuns: number };
-  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
-};
-
 export function Insights() {
   const d = data.value;
   const s = d.summary;
@@ -47,7 +42,6 @@ export function Insights() {
   const tests = runTests.value;
   const byId = testsById.value;
   const ids = (list: string[] | undefined) => (list ?? []).map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);
-  const extras = d as typeof d & Extras;
 
   return (
     <div class="page">
@@ -55,7 +49,7 @@ export function Insights() {
         <h1 class="page__title">Insights</h1>
         <span class="faint">
           Run of {formatDate(d.meta.startTime, true)}
-          {trends.length > 1 ? ` · compared with the previous ${trends.length - 1} runs` : ''}
+          {trends.length > 1 ? ` · compared with the previous ${plural(trends.length - 1, 'run')}` : ''}
         </span>
       </header>
       <div class="stats">
@@ -118,7 +112,7 @@ export function Insights() {
             <p class="panel__empty">No quality gate configured.</p>
           )}
         </Panel>
-        <Panel title="Failure clusters" meta={d.clusters.length ? `${d.clusters.length} clusters` : undefined}>
+        <Panel title="Failure clusters" meta={d.clusters.length ? plural(d.clusters.length, 'cluster') : undefined}>
           {d.clusters.length ? (
             <ul class="lines">
               {d.clusters.map((c) => (
@@ -136,13 +130,13 @@ export function Insights() {
             <p class="panel__empty">No failures to cluster.</p>
           )}
         </Panel>
-        {extras.forecastSummary && (
+        {d.forecastSummary && (
           <Panel title="At risk" meta={`passing, trending unstable`}>
             <TestLines
-              tests={ids(extras.forecastSummary.atRisk).slice(0, 8)}
+              tests={ids(d.forecastSummary.atRisk).slice(0, 8)}
               value={(t) => {
-                const f = (t as ReportTest & { forecast?: { state: string; risk?: number } }).forecast;
-                return f?.state === 'scored' && f.risk !== undefined ? `${Math.round(f.risk * 100)}% risk` : '';
+                const f = t.forecast;
+                return f?.state === 'scored' ? `${Math.round(f.risk * 100)}% risk` : '';
               }}
             />
           </Panel>
@@ -184,10 +178,10 @@ export function Insights() {
             <p class="panel__empty">Not enabled for this project.</p>
           )}
         </Panel>
-        {extras.ownership && (
-          <Panel title="Owners" meta={`${extras.ownership.owners.length} owners`}>
+        {d.ownership && (
+          <Panel title="Owners" meta={plural(d.ownership.owners.length, 'owner')}>
             <ul class="lines">
-              {extras.ownership.owners.map((o) => (
+              {d.ownership.owners.map((o) => (
                 <li class="lines__item">
                   <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'all', q: `owner:${o.owner}`, group: 'owner' })}>
                     {o.owner}
