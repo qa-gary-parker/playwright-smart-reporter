@@ -79,6 +79,23 @@ describe('buildReportData', () => {
     expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined });
   });
 
+  it('carries per-test owners and a per-owner health summary', () => {
+    const data = buildReportData(
+      input([
+        { ...FAILED, owners: ['@org/payments'], ownerSource: 'codeowners' },
+        result({ testId: 'p1', owners: ['@org/payments'], ownerSource: 'codeowners' }),
+        result({ testId: 'p2' }),
+      ]),
+    );
+    expect(data.tests.map((t) => [t.testId, t.owners, t.ownerSource])).toEqual([
+      ['f1', ['@org/payments'], 'codeowners'],
+      ['p1', ['@org/payments'], 'codeowners'],
+      ['p2', undefined, undefined],
+    ]);
+    expect(data.ownership).toEqual({ owners: [{ owner: '@org/payments', total: 2, failed: 1, flaky: 0, passRate: 50 }] });
+    expect(buildReportData(input([result({ testId: 'p2' })])).ownership).toBeUndefined();
+  });
+
   it('applies 2.x feature-flag defaults', () => {
     expect(buildReportData(input([])).config.features).toEqual({
       gallery: true,

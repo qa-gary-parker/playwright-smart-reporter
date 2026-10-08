@@ -69,6 +69,7 @@ import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlaky
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
+import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
 
 // ============================================================================
 // Smart Reporter
@@ -114,6 +115,7 @@ class SmartReporter implements Reporter {
   private ciInfo?: CIInfo;
   private liveWriter: LiveWriter;
   private liveFirstFailureSent: boolean = false;
+  private ownership = new Map<string, OwnerInfo>();
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -166,6 +168,13 @@ class SmartReporter implements Reporter {
 
     // Auto-detect CI environment
     this.ciInfo = detectCIInfo();
+
+    // Resolve owners once per run, for every test file, so live notifications can route too
+    try {
+      this.ownership = resolveOwnership(suite.allTests().map(t => t.location.file), config.rootDir, this.options.ownership);
+    } catch (err) {
+      console.warn('⚠️  Ownership resolution failed:', err instanceof Error ? err.message : err);
+    }
 
     // Initialize HistoryCollector and load history
     this.historyCollector = new HistoryCollector(this.options, this.outputDir);
@@ -353,6 +362,12 @@ class SmartReporter implements Reporter {
       outcome,
       expectedStatus,
     };
+
+    const ownerInfo = this.ownership.get(test.location.file);
+    if (ownerInfo) {
+      testData.owners = ownerInfo.owners;
+      testData.ownerSource = ownerInfo.source;
+    }
 
     // Add error if failed (strip ANSI codes for clean display)
     if (result.status === 'failed' || result.status === 'timedOut') {

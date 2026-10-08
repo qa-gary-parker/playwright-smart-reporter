@@ -44,6 +44,9 @@ export interface NotificationConfig {
   config: Record<string, string>;
   conditions?: NotificationCondition;
   template?: string;
+  // Phase 9: Ownership and routing
+  // Fire only for failures owned by one of these owners (CODEOWNERS handles or git author emails)
+  owners?: string[];
 }
 
 // ============================================================================
@@ -169,6 +172,9 @@ export interface SmartReporterOptions {
   ai?: AIConfig;
   // Phase 7: Flake forecasting. Advisory only; never feeds quarantine.
   forecast?: ForecastConfig;
+  // Phase 9: Ownership and routing
+  // enabled defaults to true when a CODEOWNERS file is found or source is 'git'
+  ownership?: { enabled?: boolean; source?: 'codeowners' | 'git' | 'auto'; codeownersPath?: string };
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
@@ -325,6 +331,10 @@ export interface TestResultData {
   performanceMetrics?: PerformanceMetrics;
   networkLogs?: NetworkLogData;        // NEW: Network logs from trace
   attempts?: AttemptData[];            // Every attempt in retry order, final attempt last
+
+  // Phase 9: Ownership and routing
+  owners?: string[];
+  ownerSource?: 'codeowners' | 'git';
 }
 
 // NEW: Retry Analysis

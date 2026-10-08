@@ -95,4 +95,6 @@ export interface ReportData {
   };
   // Phase 7: Flake forecasting
   forecastSummary?: ForecastSummary;
+  // Phase 9: Ownership and routing (per-test owners/ownerSource come from TestResultData)
+  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
 }

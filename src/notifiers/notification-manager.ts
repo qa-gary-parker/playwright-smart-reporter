@@ -109,19 +109,28 @@ export class NotificationManager {
   }
 
   async notify(results: TestResultData[], startTime: number, comparison?: RunComparison): Promise<void> {
-    const ctx = buildContext(results, startTime);
+    const runCtx = buildContext(results, startTime);
 
     for (const config of this.configs) {
       try {
+        // Owner routing: scope counts, conditions and the failure list to tests these owners own
+        const owners = config.owners?.length ? new Set(config.owners.map(o => o.toLowerCase())) : undefined;
+        const scoped = owners ? results.filter(r => r.owners?.some(o => owners.has(o.toLowerCase()))) : results;
+        if (owners && !scoped.some(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))) {
+          continue;
+        }
+        const ctx = owners ? buildContext(scoped, startTime) : runCtx;
+
         // Evaluate conditions
-        if (config.conditions && !evaluateConditions(config.conditions, ctx, results, comparison)) {
+        if (config.conditions && !evaluateConditions(config.conditions, ctx, scoped, comparison)) {
           continue;
         }
 
         // Render message
         const message = config.template
           ? renderTemplate(config.template, ctx)
-          : `Test Run: ${ctx.passed}/${ctx.total} passed (${ctx.passRate}%) — ${ctx.failed} failures`;
+          : `Test Run: ${ctx.passed}/${ctx.total} passed (${ctx.passRate}%) — ${ctx.failed} failures` +
+            (owners ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
 
         // Dispatch to channel
         switch (config.channel) {

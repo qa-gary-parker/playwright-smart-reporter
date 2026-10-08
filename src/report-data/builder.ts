@@ -1,5 +1,6 @@
 import { aiReportInfo } from '../analyzers/ai-analyzer';
 import { forecastRun } from '../analyzers/flake-forecast';
+import { summarizeOwnership } from '../analyzers/ownership';
 import { getReporterVersion } from '../generators/json-exporter';
 import type {
   CIInfo,
@@ -134,5 +135,6 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     quarantine: input.quarantineEntries && { threshold: input.quarantineThreshold, entries: input.quarantineEntries },
     ai: { suiteHealthSummary: input.aiSuiteHealthSummary, ...aiReportInfo(input) },
     ...(forecast && { forecastSummary: forecast.summary }),
+    ownership: summarizeOwnership(tests),
   };
 }

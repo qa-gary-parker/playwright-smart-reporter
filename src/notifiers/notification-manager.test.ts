@@ -380,6 +380,61 @@ describe('NotificationManager', () => {
     });
   });
 
+  describe('owner routing', () => {
+    const run = () => [
+      createTestResult({ testId: 'a1', title: 'checkout fails', status: 'failed', outcome: 'unexpected', owners: ['@org/payments'] }),
+      createTestResult({ testId: 'a2', title: 'cart passes', owners: ['@org/payments'] }),
+      createTestResult({ testId: 'b1', title: 'search fails', status: 'timedOut', outcome: 'unexpected', owners: ['@org/search', 'Dev@Example.com'] }),
+      createTestResult({ testId: 'c1', title: 'unowned fails', status: 'failed', outcome: 'unexpected' }),
+    ];
+
+    async function sentBySlack(configs: NotificationConfig[]): Promise<Array<[string, string]>> {
+      const { SlackNotifier } = await import('./slack-notifier');
+      const sent: Array<[string, string]> = [];
+      for (let i = 0; i < configs.length; i++) {
+        vi.mocked(SlackNotifier).mockImplementationOnce((url?: string) => ({
+          sendMessage: vi.fn(async (message: string) => { sent.push([url ?? '', message]); }),
+        } as any));
+      }
+      await new NotificationManager(configs).notify(run(), Date.now());
+      return sent;
+    }
+
+    it('sends each owner a notification listing only the failures they own', async () => {
+      const sent = await sentBySlack([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/payments' }, owners: ['@org/payments'] },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/search' }, owners: ['@org/search'] },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/nobody' }, owners: ['@org/nobody'] },
+      ]);
+
+      expect(sent).toEqual([
+        ['https://hooks/payments', 'Test Run: 1/2 passed (50%) — 1 failures owned by @org/payments: checkout fails'],
+        ['https://hooks/search', 'Test Run: 0/1 passed (0%) — 1 failures owned by @org/search: search fails'],
+      ]);
+    });
+
+    it('scopes template variables and conditions to the owned tests, matching owners case-insensitively', async () => {
+      const sent = await sentBySlack([
+        {
+          channel: 'slack',
+          config: { webhookUrl: 'https://hooks/team' },
+          owners: ['@Org/Payments', 'DEV@example.com'],
+          template: '{{failed}}/{{total}}: {{failedTests}}',
+          conditions: { minFailures: 2 },
+        },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/payments-strict' }, owners: ['@org/payments'], conditions: { minFailures: 2 } },
+      ]);
+
+      expect(sent).toEqual([['https://hooks/team', '2/3: checkout fails, search fails']]);
+    });
+
+    it('leaves configs without owners unscoped', async () => {
+      const sent = await sentBySlack([{ channel: 'slack', config: { webhookUrl: 'https://hooks/all' }, template: '{{failedTests}}' }]);
+
+      expect(sent).toEqual([['https://hooks/all', 'checkout fails, search fails, unowned fails']]);
+    });
+  });
+
   describe('error handling', () => {
     it('failed notifier does not crash others', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
