@@ -164,6 +164,19 @@ export interface SmartReporterOptions {
 
   // Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
   exportPdfFull?: boolean;
+
+  // Phase 0.5: Local model support (Ollama)
+  ai?: AIConfig;
+}
+
+export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
+
+export interface AIConfig {
+  provider?: AIProviderName;  // Default: detected from env (see resolveAIProvider). Set to skip detection.
+  baseUrl?: string;           // OpenAI-compatible providers only (openai, ollama, openai-compatible)
+  model?: string;             // Overrides the selected provider's default model
+  timeoutMs?: number;         // Per-call timeout (default: 60000)
+  maxTotalMs?: number;        // Cap on total AI analysis time per run (default: 300000)
 }
 
 // ============================================================================

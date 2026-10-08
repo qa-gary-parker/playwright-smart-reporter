@@ -9,8 +9,8 @@ import { sanitizeFilename } from '../utils/sanitizers';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;

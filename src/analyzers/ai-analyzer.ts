@@ -1,44 +1,205 @@
 import { spawn } from 'child_process';
-import type { TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
+import type { AIConfig, AIProviderName, TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
 import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
 
-const CLAUDE_CLI_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_TOTAL_MS = 300_000;
 const NO_SUGGESTION = 'No suggestion available';
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+// 127.0.0.1, not localhost: Ollama binds IPv4 only and Node 18 may resolve localhost to ::1
+const OLLAMA_DEFAULT_HOST = 'http://127.0.0.1:11434';
+const DEFAULT_MODELS = {
+  anthropic: 'claude-haiku-4-5',
+  'claude-cli': 'claude-haiku-4-5',
+  openai: 'gpt-4o-mini',
+  gemini: 'gemini-2.5-flash',
+  ollama: 'llama3.2',
+};
+const NO_KEY_TIP = '💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis (or CLAUDE_CODE_OAUTH_TOKEN to use the Claude Code CLI, or OLLAMA_HOST / OLLAMA_MODEL to use a local Ollama model with no key)';
+
+export interface ResolvedAIProvider {
+  provider: AIProviderName | 'claude-cli';
+  model: string;
+  baseUrl?: string; // OpenAI-compatible providers: requests go to `${baseUrl}/chat/completions`
+  apiKey?: string;
+}
+
+export interface AIProviderResolution {
+  resolved?: ResolvedAIProvider;
+  problem?: string;        // why an explicit ai.provider cannot run
+  oauthInApiKey: boolean;  // issue #40
+  localShadowed: boolean;  // OLLAMA_* is set but a cloud key took precedence
+}
+
+// Accepts the OLLAMA_HOST forms Ollama itself accepts ("0.0.0.0", "host:port", "http://host")
+function ollamaBaseUrl(host: string): string {
+  let url = host.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+  if (!/^https?:\/\//i.test(url)) url = `http://${/:\d+$/.test(url) ? url : `${url}:11434`}`;
+  return `${url}/v1`;
+}
+
+/**
+ * Picks the AI provider. Without `ai.provider`, the first match wins:
+ * ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, CLAUDE_CODE_OAUTH_TOKEN (Claude Code CLI;
+ * also an OAuth token found in ANTHROPIC_API_KEY, issue #40), then OLLAMA_HOST / OLLAMA_MODEL.
+ * An explicit `ai.provider` wins and never falls back to another provider.
+ */
+export function resolveAIProvider(config: AIConfig | undefined, env: NodeJS.ProcessEnv = process.env): AIProviderResolution {
+  const c = config ?? {};
+  let anthropicKey = env.ANTHROPIC_API_KEY || undefined;
+  let oauthToken = env.CLAUDE_CODE_OAUTH_TOKEN || undefined;
+  const oauthInApiKey = !!anthropicKey?.startsWith('sk-ant-oat');
+  if (oauthInApiKey) {
+    oauthToken = oauthToken ?? anthropicKey;
+    anthropicKey = undefined;
+  }
+  const openaiKey = env.OPENAI_API_KEY || undefined;
+  const geminiKey = env.GEMINI_API_KEY || undefined;
+  const trim = (url: string) => url.trim().replace(/\/+$/, '');
+
+  const anthropic: ResolvedAIProvider | undefined = anthropicKey ? { provider: 'anthropic', model: c.model || DEFAULT_MODELS.anthropic, apiKey: anthropicKey } : undefined;
+  const claudeCli: ResolvedAIProvider | undefined = oauthToken ? { provider: 'claude-cli', model: c.model || DEFAULT_MODELS['claude-cli'], apiKey: oauthToken } : undefined;
+  const openai: ResolvedAIProvider | undefined = openaiKey ? { provider: 'openai', model: c.model || DEFAULT_MODELS.openai, baseUrl: trim(c.baseUrl || OPENAI_BASE_URL), apiKey: openaiKey } : undefined;
+  const gemini: ResolvedAIProvider | undefined = geminiKey ? { provider: 'gemini', model: c.model || DEFAULT_MODELS.gemini, apiKey: geminiKey } : undefined;
+  const ollama: ResolvedAIProvider = {
+    provider: 'ollama',
+    model: c.model || env.OLLAMA_MODEL || DEFAULT_MODELS.ollama,
+    baseUrl: ollamaBaseUrl(c.baseUrl || env.OLLAMA_HOST || OLLAMA_DEFAULT_HOST),
+  };
+  const compatible: ResolvedAIProvider | undefined = c.baseUrl && c.model
+    ? { provider: 'openai-compatible', model: c.model, baseUrl: trim(c.baseUrl), apiKey: openaiKey }
+    : undefined;
+
+  const explicit = (resolved: ResolvedAIProvider | undefined, problem: string): AIProviderResolution =>
+    resolved ? { resolved, oauthInApiKey, localShadowed: false } : { problem: `ai.provider is "${String(c.provider)}" but ${problem}`, oauthInApiKey, localShadowed: false };
+
+  switch (c.provider) {
+    case undefined: break;
+    case 'anthropic': return explicit(anthropic ?? claudeCli, 'neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set');
+    case 'openai': return explicit(openai, 'OPENAI_API_KEY is not set');
+    case 'gemini': return explicit(gemini, 'GEMINI_API_KEY is not set');
+    case 'ollama': return explicit(ollama, '');
+    case 'openai-compatible': return explicit(compatible, 'it needs both ai.baseUrl and ai.model');
+    default: return explicit(undefined, 'that is not a supported provider');
+  }
+
+  const localSet = !!(env.OLLAMA_HOST || env.OLLAMA_MODEL);
+  const resolved = anthropic ?? openai ?? gemini ?? claudeCli ?? (localSet ? ollama : undefined);
+  return { resolved, oauthInApiKey, localShadowed: localSet && resolved !== ollama };
+}
+
+/** Provider and model behind a report's AI output; empty when the report has none. */
+export function aiReportInfo(
+  input: {
+    options: { ai?: AIConfig };
+    results: ReadonlyArray<{ aiSuggestion?: string }>;
+    failureClusters?: ReadonlyArray<{ aiSuggestion?: string }>;
+    aiSuiteHealthSummary?: string;
+  },
+  env: NodeJS.ProcessEnv = process.env,
+): { provider?: string; model?: string } {
+  const hasOutput = !!input.aiSuiteHealthSummary
+    || input.results.some(r => r.aiSuggestion)
+    || (input.failureClusters ?? []).some(c => c.aiSuggestion);
+  const resolved = hasOutput ? resolveAIProvider(input.options.ai, env).resolved : undefined;
+  return resolved ? { provider: resolved.provider, model: resolved.model } : {};
+}
+
+/** The request never got a response: connection refused, DNS failure, timeout, or unreadable body. */
+class AITransportError extends Error {
+  readonly timedOut: boolean;
+  constructor(readonly url: string, cause: unknown) {
+    const inner = (cause as { cause?: unknown })?.cause;
+    super(inner instanceof Error ? inner.message : cause instanceof Error ? cause.message : String(cause));
+    this.timedOut = (cause as { name?: string })?.name === 'TimeoutError';
+  }
+}
+
+class AISkippedError extends Error {}
+
+async function postJson(url: string, headers: Record<string, string>, body: unknown, timeoutMs: number): Promise<{ ok: boolean; status: number; data: unknown }> {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { ok: response.ok, status: response.status, data: response.ok ? await response.json() : undefined };
+  } catch (err) {
+    throw new AITransportError(url, err);
+  }
+}
+
+/** POST to any OpenAI-compatible `/chat/completions` (OpenAI, Ollama, LM Studio, vLLM, gateways). */
+export async function callOpenAICompatible(
+  prompt: string,
+  { baseUrl, model, apiKey, timeoutMs = DEFAULT_TIMEOUT_MS }: { baseUrl: string; model: string; apiKey?: string; timeoutMs?: number },
+): Promise<string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  const url = `${baseUrl}/chat/completions`;
+  const res = await postJson(url, headers, {
+    model,
+    max_tokens: 512,
+    messages: [{ role: 'user', content: prompt }],
+  }, timeoutMs);
+
+  if (!res.ok) {
+    const hint = res.status === 404 ? ` (check that model "${model}" exists there; for Ollama run \`ollama pull ${model}\`)` : '';
+    throw new Error(`OpenAI-compatible API error: ${res.status} from ${url}${hint}`);
+  }
+  const data = res.data as { choices?: Array<{ message?: { content?: string } }> };
+  return data.choices?.[0]?.message?.content || NO_SUGGESTION;
+}
+
+const secs = (ms: number) => `${+(ms / 1000).toFixed(1)}s`;
 
 /**
  * AI-powered analysis for test failures and recommendations.
- * Bring your own API key: set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.
- * Claude subscription users without an API key can set CLAUDE_CODE_OAUTH_TOKEN
- * to route analysis through the locally installed Claude Code CLI instead.
+ * Bring your own API key (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY), use a Claude
+ * subscription via CLAUDE_CODE_OAUTH_TOKEN and the Claude Code CLI, or run a local model
+ * through Ollama or any OpenAI-compatible endpoint. See resolveAIProvider for precedence.
+ * An unreachable or slow provider skips the remaining analysis with one warning; it never fails the run.
  */
 export class AIAnalyzer {
-  private anthropicKey?: string;
-  private openaiKey?: string;
-  private geminiKey?: string;
-  private useClaudeCli: boolean;
-  private oauthToken?: string;
+  private provider?: ResolvedAIProvider;
+  private configProblem = false;
+  private timeoutMs: number;
+  private maxTotalMs: number;
+  private deadline?: number;
+  private skipReason?: string;
   private cliUnavailable = false;
 
-  constructor() {
-    this.anthropicKey = process.env.ANTHROPIC_API_KEY;
-    this.openaiKey = process.env.OPENAI_API_KEY;
-    this.geminiKey = process.env.GEMINI_API_KEY;
-    this.oauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-
-    // Issue #40: subscription OAuth tokens (sk-ant-oat...) are not API keys.
-    // If one landed in ANTHROPIC_API_KEY, don't send it to the API (guaranteed 401) —
-    // reroute it to the Claude Code CLI instead.
-    if (this.anthropicKey?.startsWith('sk-ant-oat')) {
-      console.warn('⚠️  ANTHROPIC_API_KEY contains a Claude subscription OAuth token, not an API key. Routing AI analysis through the Claude Code CLI instead. Set CLAUDE_CODE_OAUTH_TOKEN (and unset ANTHROPIC_API_KEY) to silence this warning.');
-      this.oauthToken = this.oauthToken ?? this.anthropicKey;
-      this.anthropicKey = undefined;
+  constructor(config?: AIConfig, env: NodeJS.ProcessEnv = process.env) {
+    this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.maxTotalMs = config?.maxTotalMs ?? DEFAULT_MAX_TOTAL_MS;
+    let resolution: AIProviderResolution;
+    try {
+      resolution = resolveAIProvider(config, env);
+    } catch (err) {
+      // runs in the reporter constructor, where a throw would abort the whole test run
+      resolution = { problem: `the ai options are invalid (${err instanceof Error ? err.message : String(err)})`, oauthInApiKey: false, localShadowed: false };
     }
+    const { resolved, problem, oauthInApiKey, localShadowed } = resolution;
+    this.provider = resolved;
 
-    this.useClaudeCli = !!this.oauthToken;
+    // Issue #40: subscription OAuth tokens (sk-ant-oat...) are not API keys; resolveAIProvider
+    // reroutes one found in ANTHROPIC_API_KEY to the Claude Code CLI (the API would 401).
+    if (oauthInApiKey) {
+      console.warn('⚠️  ANTHROPIC_API_KEY contains a Claude subscription OAuth token, not an API key. Routing AI analysis through the Claude Code CLI instead. Set CLAUDE_CODE_OAUTH_TOKEN (and unset ANTHROPIC_API_KEY) to silence this warning.');
+    }
+    if (problem) {
+      this.configProblem = true;
+      console.warn(`⚠️  AI analysis is disabled: ${problem}.`);
+    }
+    if (localShadowed && resolved) {
+      console.warn(`⚠️  OLLAMA_HOST/OLLAMA_MODEL is set, but AI analysis uses ${resolved.provider} because its key takes precedence. Set ai: { provider: 'ollama' } to use the local model.`);
+    }
   }
 
   isAvailable(): boolean {
-    return !!(this.anthropicKey || this.openaiKey || this.geminiKey || this.useClaudeCli);
+    return !!this.provider;
   }
 
   async analyzeFailed(results: TestResultData[]): Promise<void> {
@@ -49,14 +210,16 @@ export class AIAnalyzer {
     if (failedTests.length === 0) return;
 
     if (!this.isAvailable()) {
-      console.log('💡 Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY for AI failure analysis (or CLAUDE_CODE_OAUTH_TOKEN to use the Claude Code CLI)');
+      if (!this.configProblem) console.log(NO_KEY_TIP);
       return;
     }
+    if (this.skipReason) return;
 
-    console.log(`\n   Analyzing ${failedTests.length} failure(s) with AI...`);
+    console.log(`\n   Analyzing ${failedTests.length} failure(s) with AI (${this.provider!.provider}, ${this.provider!.model})...`);
 
     const BATCH_SIZE = 3;
     for (let i = 0; i < failedTests.length; i += BATCH_SIZE) {
+      if (this.skipReason) break;
       const batch = failedTests.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(failedTests.length / BATCH_SIZE);
@@ -67,28 +230,29 @@ export class AIAnalyzer {
           const prompt = test.aiPrompt ?? this.buildFailurePrompt(test);
           test.aiSuggestion = await this.callAI(prompt);
         } catch (err) {
-          console.error(`Failed to get AI suggestion for "${test.title}":`, err);
+          if (!(err instanceof AISkippedError)) console.error(`Failed to get AI suggestion for "${test.title}":`, err);
         }
       });
 
       await Promise.all(promises);
     }
 
-    console.log(`   AI analysis complete`);
+    if (!this.skipReason) console.log(`   AI analysis complete`);
   }
 
   async analyzeClusters(clusters: FailureCluster[]): Promise<void> {
     if (clusters.length === 0) return;
-    if (!this.isAvailable()) return;
+    if (!this.isAvailable() || this.skipReason) return;
 
     console.log(`\n   Analyzing ${clusters.length} failure cluster(s) with AI...`);
 
     for (const cluster of clusters) {
+      if (this.skipReason) break;
       try {
         const prompt = this.buildClusterPrompt(cluster);
         cluster.aiSuggestion = await this.callAI(prompt);
       } catch (err) {
-        console.error(`Failed to get AI suggestion for cluster "${cluster.errorType}":`, err);
+        if (!(err instanceof AISkippedError)) console.error(`Failed to get AI suggestion for cluster "${cluster.errorType}":`, err);
       }
     }
   }
@@ -99,7 +263,7 @@ export class AIAnalyzer {
     failureClusters: FailureCluster[],
     historySummaries: RunSummary[],
   ): Promise<string | undefined> {
-    if (!this.isAvailable()) return undefined;
+    if (!this.isAvailable() || this.skipReason) return undefined;
 
     console.log('\n   Generating AI suite health summary...');
 
@@ -120,7 +284,7 @@ export class AIAnalyzer {
       console.log('   Suite health summary generated');
       return summary;
     } catch (err) {
-      console.error('Failed to generate suite health summary:', err);
+      if (!(err instanceof AISkippedError)) console.error('Failed to generate suite health summary:', err);
       return undefined;
     }
   }
@@ -215,16 +379,42 @@ export class AIAnalyzer {
   }
 
   private async callAI(prompt: string): Promise<string> {
-    if (this.anthropicKey) {
-      return this.callAnthropic(prompt);
-    } else if (this.openaiKey) {
-      return this.callOpenAI(prompt);
-    } else if (this.geminiKey) {
-      return this.callGemini(prompt);
-    } else if (this.useClaudeCli) {
-      return this.callClaudeCli(prompt);
+    const p = this.provider;
+    if (!p) return 'AI analysis not available';
+    if (this.skipReason) throw new AISkippedError(this.skipReason);
+
+    const capReason = `the ${secs(this.maxTotalMs)} total analysis cap (ai.maxTotalMs) was reached; remaining items were not analyzed`;
+    this.deadline ??= Date.now() + this.maxTotalMs;
+    const remaining = this.deadline - Date.now();
+    if (remaining <= 0) this.skip(capReason);
+    const timeoutMs = Math.min(this.timeoutMs, remaining);
+
+    try {
+      switch (p.provider) {
+        case 'anthropic': return await this.callAnthropic(prompt, p, timeoutMs);
+        case 'gemini': return await this.callGemini(prompt, p, timeoutMs);
+        case 'claude-cli': return await this.callClaudeCli(prompt, p, timeoutMs);
+        default: return await callOpenAICompatible(prompt, { baseUrl: p.baseUrl!, model: p.model, apiKey: p.apiKey, timeoutMs });
+      }
+    } catch (err) {
+      if (err instanceof AITransportError) {
+        this.skip(!err.timedOut
+          ? `${p.provider} request to ${err.url} failed (${err.message})`
+          : timeoutMs < this.timeoutMs
+            ? capReason
+            : `${p.provider} (${p.model}) did not respond within ${secs(timeoutMs)}; raise ai.timeoutMs for slow local models`);
+      }
+      throw err;
     }
-    return 'AI analysis not available';
+  }
+
+  /** Stops all further AI calls this run and warns once. */
+  private skip(reason: string): never {
+    if (!this.skipReason) {
+      this.skipReason = reason;
+      console.warn(`⚠️  AI analysis skipped: ${reason}. The test run and report are unaffected.`);
+    }
+    throw new AISkippedError(reason);
   }
 
   /**
@@ -232,18 +422,18 @@ export class AIAnalyzer {
    * users (team/pro plans) that have CLAUDE_CODE_OAUTH_TOKEN but no API key.
    * The prompt is piped via stdin to avoid argv length limits.
    */
-  private callClaudeCli(prompt: string): Promise<string> {
+  private callClaudeCli(prompt: string, p: ResolvedAIProvider, timeoutMs: number): Promise<string> {
     if (this.cliUnavailable) {
       return Promise.reject(new Error('Claude CLI unavailable (previous call failed to find the binary)'));
     }
     return new Promise((resolve, reject) => {
       // --restricted --tools "" makes the CLI text-in/text-out like the HTTP providers:
       // failure text can contain untrusted page content, so no tools may run.
-      const child = spawn('claude', ['-p', '--output-format', 'text', '--model', 'claude-haiku-4-5', '--restricted', '--tools', ''], {
+      const child = spawn('claude', ['-p', '--output-format', 'text', '--model', p.model, '--restricted', '--tools', ''], {
         stdio: ['pipe', 'pipe', 'pipe'],
         // npm installs the CLI as a .cmd shim on Windows, which spawn only resolves via a shell
         shell: process.platform === 'win32',
-        env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: this.oauthToken },
+        env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: p.apiKey },
       });
 
       let stdout = '';
@@ -262,9 +452,9 @@ export class AIAnalyzer {
           child.kill();
           // escalate in case the CLI ignores SIGTERM; unref so a dead child doesn't hold the process open
           setTimeout(() => child.kill('SIGKILL'), 5_000).unref();
-          reject(new Error(`Claude CLI timed out after ${CLAUDE_CLI_TIMEOUT_MS / 1000}s`));
+          reject(new Error(`Claude CLI timed out after ${secs(timeoutMs)}`));
         });
-      }, CLAUDE_CLI_TIMEOUT_MS);
+      }, timeoutMs);
 
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
@@ -300,20 +490,16 @@ export class AIAnalyzer {
     });
   }
 
-  private async callAnthropic(prompt: string): Promise<string> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.anthropicKey!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        max_tokens: 512,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
+  private async callAnthropic(prompt: string, p: ResolvedAIProvider, timeoutMs: number): Promise<string> {
+    const response = await postJson('https://api.anthropic.com/v1/messages', {
+      'Content-Type': 'application/json',
+      'x-api-key': p.apiKey!,
+      'anthropic-version': '2023-06-01',
+    }, {
+      model: p.model,
+      max_tokens: 512,
+      messages: [{ role: 'user', content: prompt }],
+    }, timeoutMs);
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -322,58 +508,30 @@ export class AIAnalyzer {
       throw new Error(`Anthropic API error: ${response.status}`);
     }
 
-    const data = (await response.json()) as {
+    const data = response.data as {
       content: Array<{ type: string; text?: string }>;
     };
     return data.content[0]?.text || 'No suggestion available';
   }
 
-  private async callOpenAI(prompt: string): Promise<string> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.openaiKey}`,
+  private async callGemini(prompt: string, p: ResolvedAIProvider, timeoutMs: number): Promise<string> {
+    const response = await postJson(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(p.model)}:generateContent`, {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': p.apiKey!,
+    }, {
+      contents: [{
+        parts: [{ text: prompt }],
+      }],
+      generationConfig: {
+        maxOutputTokens: 512,
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 512,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const data = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>;
-    };
-    return data.choices[0]?.message?.content || 'No suggestion available';
-  }
-
-  private async callGemini(prompt: string): Promise<string> {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': this.geminiKey!,
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }],
-        }],
-        generationConfig: {
-          maxOutputTokens: 512,
-        },
-      }),
-    });
+    }, timeoutMs);
 
     if (!response.ok) {
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
-    const data = (await response.json()) as {
+    const data = response.data as {
       candidates: Array<{ content: { parts: Array<{ text: string }> }; role: string }>;
     };
     return data.candidates[0]?.content?.parts[0]?.text || 'No suggestion available';

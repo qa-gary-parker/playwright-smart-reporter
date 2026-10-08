@@ -91,6 +91,8 @@ function clearAiKeys() {
   delete process.env.OPENAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  delete process.env.OLLAMA_HOST;
+  delete process.env.OLLAMA_MODEL;
 }
 
 describe('AIAnalyzer', () => {

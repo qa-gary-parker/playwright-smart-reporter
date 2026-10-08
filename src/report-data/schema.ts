@@ -83,5 +83,10 @@ export interface ReportData {
   historySnapshots?: Record<string, RunSnapshotFile>;
   gates?: QualityGateResult;
   quarantine?: { threshold?: number; entries: QuarantineEntry[] };
-  ai: { suiteHealthSummary?: string };
+  ai: {
+    suiteHealthSummary?: string;
+    // Phase 0.5: Local model support (Ollama)
+    provider?: string;
+    model?: string;
+  };
 }

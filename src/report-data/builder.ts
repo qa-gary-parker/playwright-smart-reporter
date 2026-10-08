@@ -1,3 +1,4 @@
+import { aiReportInfo } from '../analyzers/ai-analyzer';
 import { getReporterVersion } from '../generators/json-exporter';
 import type {
   CIInfo,
@@ -127,6 +128,6 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     historySnapshots: input.historyRunSnapshots,
     gates: input.qualityGateResult,
     quarantine: input.quarantineEntries && { threshold: input.quarantineThreshold, entries: input.quarantineEntries },
-    ai: { suiteHealthSummary: input.aiSuiteHealthSummary },
+    ai: { suiteHealthSummary: input.aiSuiteHealthSummary, ...aiReportInfo(input) },
   };
 }

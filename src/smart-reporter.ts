@@ -134,7 +134,7 @@ class SmartReporter implements Reporter {
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
-    this.aiAnalyzer = new AIAnalyzer();
+    this.aiAnalyzer = new AIAnalyzer(options.ai);
 
     // Initialize live writer (defaults to disabled no-op)
     if (options.live?.enabled) {
@@ -495,32 +495,37 @@ class SmartReporter implements Reporter {
     // Run AI analysis on failures and clusters if enabled
     const options = this.historyCollector.getOptions();
     let aiSuiteHealthSummary: string | undefined;
-    if (options.enableAIRecommendations !== false) {
-      await this.aiAnalyzer.analyzeFailed(this.results);
-      if (failureClusters.length > 0) {
-        await this.aiAnalyzer.analyzeClusters(failureClusters);
+    // An AI outage must never fail the run (Phase 0.5)
+    try {
+      if (options.enableAIRecommendations !== false) {
+        await this.aiAnalyzer.analyzeFailed(this.results);
+        if (failureClusters.length > 0) {
+          await this.aiAnalyzer.analyzeClusters(failureClusters);
+        }
+        // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
+        if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
+          const passed = this.results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
+          const failed = this.results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
+          const skipped = this.results.filter(r => r.status === 'skipped').length;
+          const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
+          const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
+          const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
+          const total = this.results.length;
+          const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+          const avgStability = this.results.reduce((sum, r) => sum + (r.stabilityScore?.overall ?? 100), 0) / Math.max(total, 1);
+          const suiteStats = {
+            total, passed, failed, skipped,
+            flaky: flakyCount, slow: slowCount, needsRetry,
+            passRate, averageStability: Math.round(avgStability),
+          };
+          const historySummaries = this.historyCollector.getHistory().summaries ?? [];
+          aiSuiteHealthSummary = await this.aiAnalyzer.analyzeSuiteHealth(
+            this.results, suiteStats, failureClusters, historySummaries,
+          );
+        }
       }
-      // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
-      if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
-        const passed = this.results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-        const failed = this.results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
-        const skipped = this.results.filter(r => r.status === 'skipped').length;
-        const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
-        const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
-        const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
-        const total = this.results.length;
-        const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-        const avgStability = this.results.reduce((sum, r) => sum + (r.stabilityScore?.overall ?? 100), 0) / Math.max(total, 1);
-        const suiteStats = {
-          total, passed, failed, skipped,
-          flaky: flakyCount, slow: slowCount, needsRetry,
-          passRate, averageStability: Math.round(avgStability),
-        };
-        const historySummaries = this.historyCollector.getHistory().summaries ?? [];
-        aiSuiteHealthSummary = await this.aiAnalyzer.analyzeSuiteHealth(
-          this.results, suiteStats, failureClusters, historySummaries,
-        );
-      }
+    } catch (err) {
+      console.warn('⚠️  AI analysis failed and was skipped:', err);
     }
 
     // Get comparison data if enabled

@@ -69,6 +69,16 @@ describe('buildReportData', () => {
     expect(() => JSON.stringify(data)).not.toThrow();
   });
 
+  it('records which provider and model produced the AI output', () => {
+    const data = buildReportData(input([{ ...FAILED, aiSuggestion: 'Wait for the selector' }], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
+    expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined, provider: 'ollama', model: 'qwen2.5:7b' });
+  });
+
+  it('leaves provider and model out when the report has no AI output', () => {
+    const data = buildReportData(input([FAILED], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
+    expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined });
+  });
+
   it('applies 2.x feature-flag defaults', () => {
     expect(buildReportData(input([])).config.features).toEqual({
       gallery: true,
