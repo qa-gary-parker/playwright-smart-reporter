@@ -269,6 +269,8 @@ export interface TestResultData {
   status: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
   duration: number;
   error?: string;
+  errorSnippet?: string;     // Playwright's source snippet around the failing line
+  errorLocation?: { file: string; line: number; column: number };
   retry: number;
   // Playwright outcome and expected status for proper handling of retries and test.fail()
   outcome?: 'expected' | 'unexpected' | 'flaky' | 'skipped';

@@ -358,6 +358,10 @@ class SmartReporter implements Reporter {
       if (error) {
         const rawError = error.stack || error.message || 'Unknown error';
         testData.error = stripAnsiCodes(rawError);
+        if (error.snippet) testData.errorSnippet = stripAnsiCodes(error.snippet);
+        if (error.location) {
+          testData.errorLocation = { ...error.location, file: path.relative(this.outputDir, error.location.file) };
+        }
       }
     }
 
