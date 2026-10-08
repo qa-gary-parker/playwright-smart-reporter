@@ -35,7 +35,7 @@
     "!dist/**/*.test.js.map"
   ],
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.ui.json && node scripts/build-ui.mjs",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc && tsc -p tsconfig.ui.json && node scripts/build-ui.mjs",
     "ui:specimen": "node scripts/build-ui.mjs --specimen",
     "lint:css": "stylelint \"src/ui/**/*.css\"",
     "test:ui": "npm run ui:specimen && playwright test --config=playwright.ui.config.ts",
