@@ -400,7 +400,8 @@ function main(): void {
     // When live mode is enabled and this is the report HTML, inject SSE URL and run capability
     if (options.live && ext === '.html') {
       let body = fs.readFileSync(filePath, 'utf-8');
-      if (body.includes('data-live-mode')) {
+      // The 2.x live page and the v3 report both declare where SSE events come from.
+      if (body.includes('data-live-mode') || body.includes('name="smart-live-sse"')) {
         body = body.replace(/__SSE_URL__/g, '/sse');
       }
       if (options.runCommand) {

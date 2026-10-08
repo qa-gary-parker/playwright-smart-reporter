@@ -57,3 +57,10 @@ export function suiteHealth(s: { total: number; passRate: number; flaky: number;
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+// Quote separators and line breaks; prefix formula characters so spreadsheets show them as text.
+export function csvCell(v: unknown): string {
+  const raw = String(v ?? '');
+  const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}

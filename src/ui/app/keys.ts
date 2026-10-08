@@ -43,7 +43,7 @@ function cycle(predicate: (id: string) => boolean, dir: 1 | -1): void {
   const order = queueOrder.value.filter(predicate);
   const ids = order.length ? order : runTests.value.map((t) => t.testId).filter(predicate);
   const i = current ? ids.indexOf(current) : -1;
-  const next = ids[(i + dir + ids.length) % ids.length];
+  const next = i < 0 ? ids[dir === 1 ? 0 : ids.length - 1] : ids[(i + dir + ids.length) % ids.length];
   if (next) selectRelative([next], 1);
 }
 

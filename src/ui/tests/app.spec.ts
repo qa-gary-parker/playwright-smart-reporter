@@ -145,3 +145,43 @@ test('10,000 rows render a window, scroll smoothly, and show the right rows', as
     await expect(page.locator('.row__name').filter({ hasText: new RegExp(` #${index}$`) })).toHaveCount(1);
   }
 });
+
+test('the coverage view lists the least covered file first and shows hit counts', async ({ page }) => {
+  await page.goto(url('screen=coverage&mode=light'));
+  const rows = page.getByRole('table', { name: 'Coverage by file' }).getByRole('row');
+  await expect(rows.nth(1)).toContainText('app/src/format.ts');
+  await expect(rows.nth(1)).toContainText('66.66%');
+  await page.getByRole('button', { name: 'app/src/math.ts' }).click();
+  const src = page.getByLabel('Source of app/src/math.ts with hit counts');
+  await expect(src.locator('[data-state="miss"]')).toHaveCount(2);
+  await expect(src.locator('.cov-src__line').nth(5)).toContainText('return a * b;');
+  await expect(src.locator('.cov-src__line').nth(5)).toHaveAttribute('data-state', 'miss');
+});
+
+test('skip to content moves focus to the main area and keeps the route', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  const before = page.url();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Skip to content' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#main')).toBeFocused();
+  expect(page.url()).toBe(before);
+});
+
+test('switching tests resets per-test state such as an expanded stack', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  await page.getByRole('button', { name: /Show all 37 lines/ }).click();
+  await expect(page.getByRole('button', { name: /Show all 37 lines/ })).toHaveCount(0);
+  await page.keyboard.press('j');
+  await page.keyboard.press('k');
+  await expect(page.getByRole('button', { name: /Show all 37 lines/ })).toBeVisible();
+});
+
+test('filter edits replace the history entry instead of adding one per edit', async ({ page }) => {
+  await page.goto(url('screen=all&mode=light'));
+  const length = await page.evaluate(() => history.length);
+  const input = page.getByRole('textbox', { name: 'Filter tests' });
+  for (const text of ['h', 'h2', 'h2 should']) await input.fill(text);
+  await expect(page.locator('.pane__count')).toHaveText('2');
+  expect(await page.evaluate(() => history.length)).toBe(length);
+});

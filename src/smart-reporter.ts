@@ -664,9 +664,7 @@ class SmartReporter implements Reporter {
     const traceResults = this.results.filter(r => r.attachments?.traces && r.attachments.traces.length > 0);
 
     if (traceResults.length > 0) {
-      if (!fs.existsSync(tracesDir)) {
-        fs.mkdirSync(tracesDir, { recursive: true });
-      }
+      fs.mkdirSync(tracesDir, { recursive: true });
 
       for (const result of traceResults) {
         if (result.attachments && result.attachments.traces) {
@@ -677,9 +675,13 @@ class SmartReporter implements Reporter {
               const safeTestId = sanitizeFilename(result.testId);
               const traceFileName = `${safeTestId}-trace-${i}.zip`;
               const destPath = path.join(tracesDir, traceFileName);
-              fs.copyFileSync(tracePath, destPath);
-              // Update the path to relative for HTML
-              result.attachments.traces[i] = `./traces/${traceFileName}`;
+              try {
+                fs.copyFileSync(tracePath, destPath);
+                // Update the path to relative for HTML
+                result.attachments.traces[i] = `./traces/${traceFileName}`;
+              } catch (err) {
+                console.warn(`⚠️  Could not copy trace ${tracePath}:`, err);
+              }
             }
           }
         }
@@ -766,14 +768,19 @@ class SmartReporter implements Reporter {
     };
 
     const reportData = buildReportData(reportInput);
-    const written = await writeReport(reportData, {
-      outputPath,
-      assets: loadUiAssets(),
-      cspSafe: this.options.cspSafe,
-      assetMode: this.options.assetMode,
-    });
-    const dataMb = (written.dataBytes / (1024 * 1024)).toFixed(1);
-    console.log(`\n   Report data: ${dataMb} MB, ${written.mode === 'inline' ? 'inline in the HTML' : `in ${path.basename(written.files.find((f) => f.endsWith('-data.js')) ?? '')}`}`);
+    // A failed write must not skip history, exports, notifications, or gates below.
+    try {
+      const written = await writeReport(reportData, {
+        outputPath,
+        assets: loadUiAssets(),
+        cspSafe: this.options.cspSafe,
+        assetMode: this.options.assetMode,
+      });
+      const dataMb = (written.dataBytes / (1024 * 1024)).toFixed(1);
+      console.log(`\n   Report data: ${dataMb} MB, ${written.mode === 'inline' ? 'inline in the HTML' : `in ${path.basename(written.files.find((f) => f.endsWith('-data.js')) ?? '')}`}`);
+    } catch (err) {
+      console.error('❌ Smart Reporter could not write the HTML report:', err);
+    }
 
     // Issue #15: Better console output with command to open report
     console.log(`\n📊 Smart Report: ${outputPath}`);

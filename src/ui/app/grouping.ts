@@ -23,7 +23,7 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
   file: { label: 'File', mono: true, keys: (t) => [t.file] },
   project: { label: 'Project', mono: false, keys: (t) => [t.project ?? NONE] },
   suite: { label: 'Suite', mono: false, keys: (t) => [t.suites?.length ? t.suites.join(' › ') : NONE] },
-  tag: { label: 'Tag', mono: true, keys: (t) => (t.tags?.length ? t.tags : [NONE]) },
+  tag: { label: 'Tag', mono: true, keys: (t) => (t.tags?.length ? [...new Set(t.tags)] : [NONE]) },
   status: { label: 'Status', mono: false, keys: (t) => [isFailing(t) ? 'failed' : t.outcome === 'flaky' ? 'flaky' : t.status] },
   grade: { label: 'Grade', mono: false, keys: (t) => [t.stabilityScore ? `Grade ${t.stabilityScore.grade}` : NONE] },
   owner: { label: 'Owner', mono: true, keys: (t) => t.owners?.slice(0, 1) ?? ['Unowned'] },

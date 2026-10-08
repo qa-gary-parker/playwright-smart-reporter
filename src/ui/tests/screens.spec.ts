@@ -19,6 +19,7 @@ const SCREENS: Array<[string, string]> = [
   ['gallery', 'screen=gallery'],
   ['live', 'screen=live'],
   ['a11y', 'screen=a11y'],
+  ['coverage', 'screen=coverage'],
 ];
 const MODES = ['light', 'dark', 'hc'];
 

@@ -1,5 +1,5 @@
 import { Button, Dialog, Icon, Menu, MiniBar } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing } from '../data';
+import { csvCell, displayStatus, formatDate, formatDuration, isFailing } from '../data';
 import { data, runTests, summaryOpen } from '../store';
 import { copyText } from './Detail';
 
@@ -14,10 +14,6 @@ function download(name: string, type: string, content: string): void {
 
 const stamp = () => new Date().toISOString().slice(0, 10);
 
-function csvCell(v: unknown): string {
-  const s = String(v ?? '');
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 export function exportCsv(): void {
   const header = ['Title', 'File', 'Line', 'Project', 'Status', 'Duration (ms)', 'Retries', 'Flakiness', 'Grade', 'Tags'];

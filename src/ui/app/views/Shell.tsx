@@ -134,6 +134,7 @@ function Rail() {
         {(f.trends || f.comparison) && <RailItem icon="history" label="History" to={{ view: 'history', tab: f.trends ? 'trends' : 'compare' }} active={r.view === 'history'} />}
         {f.gallery && <RailItem icon="image" label="Gallery" to={{ view: 'gallery', ...run }} active={r.view === 'gallery'} />}
         {f.live && <RailItem icon="radio" label="Live" to={{ view: 'live' }} active={r.view === 'live'} />}
+        {data.value.coverage && <RailItem icon="target" label="Coverage" count={Math.floor(data.value.coverage.summary.lines.pct)} to={{ view: 'coverage' }} active={r.view === 'coverage'} />}
         {data.value.a11y && <RailItem icon="eye" label="Accessibility" count={data.value.a11y.totalViolations} to={{ view: 'a11y' }} active={r.view === 'a11y'} />}
       </div>
       <div class="rail__foot">
@@ -153,9 +154,10 @@ export function Frame({ children }: { children: ComponentChildren }) {
   const r = route.value;
   return (
     <div class="app" data-rail={railOpen.value ? 'open' : 'closed'}>
-      <a class="skip-link" href="#main">
+      {/* A hash link would change the route, so move focus directly. */}
+      <button type="button" class="skip-link" onClick={() => document.getElementById('main')?.focus()}>
         Skip to content
-      </a>
+      </button>
       <TopBar />
       {r.run && (
         <div class="runbar" role="status">

@@ -1,7 +1,7 @@
 // One synthetic failure that carries every detail section the example run lacks:
 // AI analysis, a code frame, network and console context, a causal timeline,
 // four attempts, and a 40-line stack. Marked synthetic in its tags.
-import type { ReportTest } from '../../report-data/schema';
+import type { ReportData, ReportTest } from '../../report-data/schema';
 
 const STACK = [
   'Error: expect(locator).toHaveText(expected) failed',
@@ -165,4 +165,38 @@ export const SYNTHETIC: ReportTest = {
       firstAnomaly: { kind: 'network-error', at: 4872, summary: 'POST /api/payments/charge returned 502 Bad Gateway', ref: { lane: 'network', index: 3 } },
     },
   } as object),
+};
+
+const MATH = `export function add(a: number, b: number): number {
+  return a + b;
+}
+
+export function multiply(a: number, b: number): number {
+  return a * b;
+}
+
+export function sign(n: number): -1 | 0 | 1 {
+  if (n > 0) return 1;
+  if (n < 0) return -1;
+  return 0;
+}`;
+
+const FORMAT = `export function formatResult(label: string, value: number): string {
+  return \`\${label}: \${value}\`;
+}
+
+export function shout(text: string): string {
+  return text.toUpperCase();
+}`;
+
+const totals = (covered: number, total: number) => ({ covered, total, pct: total ? Math.floor((covered / total) * 10000) / 100 : 100 });
+
+// Mirrors the numbers the example coverage app produces (example/coverage).
+export const SYNTHETIC_COVERAGE: ReportData['coverage'] = {
+  summary: { lines: totals(17, 21), functions: totals(3, 5), branches: totals(4, 4) },
+  files: [
+    { path: 'app/src/math.ts', lines: totals(10, 12), functions: totals(2, 3), branches: totals(3, 3), hits: [2, 2, 2, null, 0, 0, 1, null, 2, 2, 1, 1, 1], source: MATH },
+    { path: 'app/src/format.ts', lines: totals(4, 6), functions: totals(1, 2), branches: totals(1, 1), hits: [1, 1, 1, null, 0, 0, 1], source: FORMAT },
+    { path: 'app/src/main.ts', lines: totals(3, 3), functions: totals(0, 0), branches: totals(0, 0), hits: [1, 1, 1] },
+  ],
 };

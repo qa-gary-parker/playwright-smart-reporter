@@ -17,11 +17,24 @@ export type HistoryTab = (typeof HISTORY_TABS)[number];
 
 export const DEFAULT_ROUTE: Route = { view: 'queue', queue: 'failures', q: '' };
 
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#/, '');
   const [pathPart, queryPart = ''] = raw.split('?');
-  const params = new URLSearchParams(queryPart);
-  let segments = pathPart.split('/').filter(Boolean).map(decodeURIComponent);
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(queryPart);
+  } catch {
+    params = new URLSearchParams();
+  }
+  let segments = pathPart.split('/').filter(Boolean).map(safeDecode);
   let run: string | undefined;
   if (segments[0] === 'run' && segments[1]) {
     run = segments[1];

@@ -12,7 +12,7 @@ const ROW = 32;
 const GROUP = 28;
 const OVERSCAN = 12;
 
-type Item = { kind: 'group'; key: string; label: string; count: number; mono: boolean; open: boolean } | { kind: 'test'; test: ReportTest };
+type Item = { kind: 'group'; key: string; label: string; count: number; mono: boolean; open: boolean } | { kind: 'test'; test: ReportTest; group: string };
 
 const ROW_SIGNALS: Signal[] = ['new-failure', 'regression', 'flaky', 'quarantined', 'slow'];
 
@@ -31,13 +31,18 @@ export function useQueueModel(queue: QueueId, q: string, group: GroupBy | undefi
     const by = group ?? QUEUES[queue].groupBy;
     const items: Item[] = [];
     const order: ReportTest[] = [];
+    const seen = new Set<string>();
     for (const g of groupTests(tests, by, data.value)) {
       const open = !closed.has(g.key);
       if (by !== 'none') items.push({ kind: 'group', key: g.key, label: g.label, count: g.tests.length, mono: g.mono, open });
       if (open || by === 'none') {
         for (const t of g.tests) {
-          items.push({ kind: 'test', test: t });
-          order.push(t);
+          items.push({ kind: 'test', test: t, group: g.key });
+          // A test can sit in several tag groups; keyboard order visits it once.
+          if (!seen.has(t.testId)) {
+            seen.add(t.testId);
+            order.push(t);
+          }
         }
       }
     }
@@ -106,14 +111,18 @@ function TestTree({ model, selected, onSelect, label }: { model: QueueModel; sel
     return () => ro.disconnect();
   }, []);
 
+  // Scroll only when the selection changes, not when groups collapse or filters change.
+  const latest = useRef({ items: model.items, offsets });
+  latest.current = { items: model.items, offsets };
   useEffect(() => {
     const el = scroller.current;
-    const i = model.items.findIndex((it) => it.kind === 'test' && it.test.testId === selected);
+    const { items, offsets: offs } = latest.current;
+    const i = items.findIndex((it) => it.kind === 'test' && it.test.testId === selected);
     if (!el || i < 0) return;
-    const top = offsets[i];
+    const top = offs[i];
     if (top < el.scrollTop) el.scrollTop = top - GROUP;
     else if (top + ROW > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW - el.clientHeight;
-  }, [selected, offsets]);
+  }, [selected]);
 
   let first = 0;
   let lo = 0;
@@ -138,7 +147,7 @@ function TestTree({ model, selected, onSelect, label }: { model: QueueModel; sel
         {model.items.slice(first, last).map((it, k) => {
           const i = first + k;
           return (
-            <div class="vlist__item" style={{ transform: `translateY(${offsets[i]}px)` }} key={it.kind === 'group' ? `g:${it.key}` : `t:${it.test.testId}`}>
+            <div class="vlist__item" style={{ transform: `translateY(${offsets[i]}px)` }} key={it.kind === 'group' ? `g:${it.key}` : `t:${it.group}:${it.test.testId}`}>
               {it.kind === 'group' ? (
                 <GroupHeader label={it.label} count={it.count} mono={it.mono} expanded={it.open} onToggle={() => toggle(it.key)} />
               ) : (
@@ -220,7 +229,7 @@ export function QueueView({ narrow }: { narrow: boolean }) {
           <span>Group: {GROUPINGS[by].label.toLowerCase()}</span>
         </Menu>
       </div>
-      <FilterBar q={r.q} onChange={(q) => navigate({ ...r, q, test: undefined })} />
+      <FilterBar q={r.q} onChange={(q) => navigate({ ...r, q, test: undefined }, true)} />
       {model.tests.length === 0 ? (
         <EmptyState title={r.q ? 'No tests match this filter' : queue.empty} icon={r.q ? 'filter' : 'inbox'} action={r.q ? <Button size="sm" onClick={() => navigate({ ...r, q: '' })}>Clear filter</Button> : undefined} />
       ) : (
@@ -230,7 +239,7 @@ export function QueueView({ narrow }: { narrow: boolean }) {
   );
 
   const detail = selected ? (
-    <Detail t={selected} onBack={narrow ? () => navigate({ ...r, test: undefined }) : undefined} onStep={step} />
+    <Detail key={selected.testId} t={selected} onBack={narrow ? () => navigate({ ...r, test: undefined }) : undefined} onStep={step} />
   ) : (
     <EmptyState title="Select a test" icon="mouse-pointer">
       Use <Kbd>j</Kbd> and <Kbd>k</Kbd> to move, <Kbd>↵</Kbd> to open.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportTest } from '../../report-data/schema';
-import { displayStatus, formatDuration, isFailing, titlePath } from './data';
+import { csvCell, displayStatus, formatDuration, isFailing, titlePath } from './data';
 import { formatQuery, matchesQuery, parseQuery } from './filters';
 import { groupTests } from './grouping';
 import { QUEUES } from './queues';
@@ -74,7 +74,7 @@ describe('grouping', () => {
   });
 
   it('puts a test in every tag group it carries and counts sum per mode', () => {
-    const tagged = t({ testId: 'm', tags: ['@smoke', '@payments'] });
+    const tagged = t({ testId: 'm', tags: ['@smoke', '@payments', '@smoke'] });
     const groups = groupTests([failed, tagged, passed], 'tag', data);
     expect(Object.fromEntries(groups.map((g) => [g.label, g.tests.map((x) => x.testId)]))).toEqual({
       '@smoke': ['f', 'm'],
@@ -118,9 +118,28 @@ describe('router', () => {
     for (const r of routes) expect(parseHash(formatRoute(r))).toEqual(r);
   });
 
+  it('survives malformed percent-encoding in a hand-edited link', () => {
+    expect(parseHash('#/run/%E0%A4%A/insights')).toEqual({ view: 'insights', run: '%E0%A4%A' });
+  });
+
   it('falls back to the failures queue for unknown or empty hashes', () => {
     expect(parseHash('')).toEqual({ view: 'queue', queue: 'failures', q: '' });
     expect(parseHash('#/q/nope')).toEqual({ view: 'queue', queue: 'failures', q: '' });
     expect(parseHash('#/q/all?g=bogus')).toEqual({ view: 'queue', queue: 'all', q: '' });
+  });
+});
+
+describe('csv export', () => {
+  it('quotes separators and line breaks and neutralises formulas', () => {
+    expect(['plain', 'a,b', 'say "hi"', 'line\r\nbreak', '=HYPERLINK("x")', '-1', '@user', 42].map(csvCell)).toEqual([
+      'plain',
+      '"a,b"',
+      '"say ""hi"""',
+      '"line\r\nbreak"',
+      `"'=HYPERLINK(""x"")"`,
+      "'-1",
+      "'@user",
+      '42',
+    ]);
   });
 });

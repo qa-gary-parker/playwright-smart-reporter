@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import type { ThemeConfig } from '../types';
 import type { ReportData } from './schema';
 
@@ -61,15 +63,17 @@ export function serializeData(data: ReportData): string[] {
 }
 
 const MODE_FOR_PRESET: Record<string, string> = { dark: 'dark', light: 'light', 'high-contrast': 'hc' };
+const ACCENT_PRESETS = new Set(['ocean', 'sunset', 'dracula', 'cyberpunk', 'forest', 'rose']);
 
 export function themeAttributes(theme?: ThemeConfig): string {
   const preset = theme?.preset;
   if (!preset || preset === 'default') return '';
   const mode = MODE_FOR_PRESET[preset];
-  return mode ? ` data-mode="${mode}"` : ` data-accent="${preset}"`;
+  if (mode) return ` data-mode="${mode}"`;
+  return ACCENT_PRESETS.has(preset) ? ` data-accent="${preset}"` : '';
 }
 
-const CSS_COLOR = /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|(rgb|rgba|hsl|hsla|oklch)\([^;{}]*\))$/;
+const CSS_COLOR = /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|(rgb|rgba|hsl|hsla|oklch)\([^;{}<>\\]*\))$/;
 
 export function customThemeCss(theme?: ThemeConfig): string {
   if (!theme) return '';
@@ -94,17 +98,9 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// pipeline() rejects on any stream error instead of raising an uncaught exception.
 async function writeChunks(file: string, chunks: Iterable<string>): Promise<void> {
-  const stream = fs.createWriteStream(file, { encoding: 'utf8' });
-  try {
-    for (const chunk of chunks) {
-      if (!stream.write(chunk)) {
-        await new Promise<void>((resolve) => stream.once('drain', resolve));
-      }
-    }
-  } finally {
-    await new Promise<void>((resolve, reject) => stream.end((err?: Error | null) => (err ? reject(err) : resolve())));
-  }
+  await pipeline(Readable.from(chunks), fs.createWriteStream(file, { encoding: 'utf8' }));
 }
 
 export async function writeReport(data: ReportData, opts: WriteReportOptions): Promise<WriteReportResult> {
@@ -141,7 +137,7 @@ export async function writeReport(data: ReportData, opts: WriteReportOptions): P
     const cssFile = path.join(dir, `${base}.css`);
     fs.writeFileSync(cssFile, css);
     files.push(cssFile);
-    head.push(`<link rel="stylesheet" href="./${encodeURI(base)}.css">\n`);
+    head.push(`<link rel="stylesheet" href="./${encodeURIComponent(base)}.css">\n`);
   } else {
     head.push(`<style>${assets.fonts}</style>\n<style>${css}</style>\n`);
   }
@@ -151,14 +147,14 @@ export async function writeReport(data: ReportData, opts: WriteReportOptions): P
     const dataFile = path.join(dir, `${base}-data.js`);
     await writeChunks(dataFile, ['window.__SMART_DATA__=', ...chunks, ';\n']);
     files.push(dataFile);
-    body.push(`<script src="./${encodeURI(base)}-data.js"></script>\n`);
+    body.push(`<script src="./${encodeURIComponent(base)}-data.js"></script>\n`);
   }
 
   if (cspSafe) {
     const jsFile = path.join(dir, `${base}.js`);
     fs.writeFileSync(jsFile, appJs);
     files.push(jsFile);
-    body.push(`<script src="./${encodeURI(base)}.js"></script>\n`);
+    body.push(`<script src="./${encodeURIComponent(base)}.js"></script>\n`);
   }
 
   const inlineData = mode === 'inline' ? ['<script>window.__SMART_DATA__=', ...chunks, ';</script>\n'] : [];

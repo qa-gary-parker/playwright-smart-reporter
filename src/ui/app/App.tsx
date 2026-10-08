@@ -3,6 +3,7 @@ import { Toast } from '../components';
 import { route, toast } from './store';
 import { SummaryDialog } from './views/Exports';
 import { Accessibility } from './views/Accessibility';
+import { Coverage } from './views/Coverage';
 import { Gallery } from './views/Gallery';
 import { History } from './views/History';
 import { Insights } from './views/Insights';
@@ -27,6 +28,7 @@ export function App() {
         {r.view === 'gallery' && <Gallery />}
         {r.view === 'live' && <Live />}
         {r.view === 'a11y' && <Accessibility />}
+        {r.view === 'coverage' && <Coverage />}
       </Frame>
       <Palette />
       <Keymap />

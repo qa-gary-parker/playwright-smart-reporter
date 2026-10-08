@@ -9,6 +9,7 @@ import type {
   QuarantineEntry,
   RunComparison,
   RunSnapshotFile,
+  RunSummary,
   SmartReporterOptions,
   TestHistory,
   TestResultData,
@@ -68,6 +69,15 @@ export function summarize(results: TestResultData[], duration: number): ReportSu
   };
 }
 
+// History is updated after the report is written, so add this run's summary here.
+function withCurrentRun(input: ReportInput, summary: ReportSummary): RunSummary[] {
+  const past = input.history.summaries ?? [];
+  const runId = input.options.runId ?? `run-${input.startTime}`;
+  if (past.some((r) => r.runId === runId)) return past;
+  const { total, passed, failed, skipped, flaky, slow, duration, passRate } = summary;
+  return [...past, { runId, timestamp: new Date(input.startTime).toISOString(), total, passed, failed, skipped, flaky, slow, duration, passRate }];
+}
+
 export function buildReportData(input: ReportInput, now: number = Date.now()): ReportData {
   const { results, options, comparison } = input;
 
@@ -98,6 +108,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     return { ...rest, clusterId: clusterOf.get(r.testId), signals, ...(testForecast && { forecast: testForecast }) };
   });
 
+  const summary = summarize(results, now - input.startTime);
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
@@ -125,10 +136,10 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
       exports: { json: !!options.exportJson, junit: !!options.exportJunit, pdf: !!options.exportPdf },
       live: options.live?.enabled ? { jsonlFile: options.live.outputFile ?? '.smart-live-results.jsonl' } : undefined,
     },
-    summary: summarize(results, now - input.startTime),
+    summary,
     tests,
     clusters,
-    trends: input.history.summaries ?? [],
+    trends: withCurrentRun(input, summary),
     comparison: comparison && {
       baselineRun: comparison.baselineRun,
       currentRun: comparison.currentRun,

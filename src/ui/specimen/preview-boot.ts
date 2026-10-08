@@ -1,7 +1,7 @@
 import type { ReportData } from '../../report-data/schema';
 import fixture from './report-fixture.json';
 import { summarizeA11y } from '../../analyzers/a11y-analyzer';
-import { SYNTHETIC } from './synthetic';
+import { SYNTHETIC, SYNTHETIC_COVERAGE } from './synthetic';
 
 const params = new URLSearchParams(location.search);
 const screen = params.get('screen') ?? 'failures';
@@ -10,6 +10,7 @@ const textCluster = data.clusters.find((c) => /toHaveText/.test(c.errorType));
 data.tests = [{ ...SYNTHETIC, clusterId: textCluster?.id }, ...data.tests];
 if (textCluster) textCluster.testIds = [SYNTHETIC.testId, ...textCluster.testIds];
 data.a11y = summarizeA11y(data.tests);
+data.coverage = SYNTHETIC_COVERAGE;
 
 if (screen === 'green') {
   for (const t of data.tests) {
@@ -76,6 +77,7 @@ const HASH: Record<string, string> = {
   gallery: '#/gallery',
   live: '#/live',
   a11y: '#/a11y',
+  coverage: '#/coverage',
   keymap: '#/q/failures',
 };
 // An explicit hash is a deep link under test; keep it.

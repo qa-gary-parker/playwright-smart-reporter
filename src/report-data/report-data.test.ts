@@ -103,6 +103,17 @@ describe('buildReportData', () => {
     expect(buildReportData(input([])).coverage).toBeUndefined();
   });
 
+  it('adds the current run to the trend once', () => {
+    const past = { runId: 'run-1', timestamp: '2026-01-01T00:00:00.000Z', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 5, passRate: 100 };
+    const data = buildReportData(input([FAILED, result({ testId: 'p1' })], { history: { runs: [], tests: {}, summaries: [past] } }), 3_000);
+    expect(data.trends).toEqual([
+      past,
+      { runId: 'run-1000', timestamp: new Date(1_000).toISOString(), total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, slow: 0, duration: 2_000, passRate: 50 },
+    ]);
+    const already = buildReportData(input([], { history: { runs: [], tests: {}, summaries: [{ ...past, runId: 'run-1000' }] } }));
+    expect(already.trends).toHaveLength(1);
+  });
+
   it('applies 2.x feature-flag defaults', () => {
     expect(buildReportData(input([])).config.features).toEqual({
       gallery: true,
@@ -151,6 +162,11 @@ describe('theme mapping', () => {
       ':root:root:root{--bg:#101010;--accent-l:rgb(1, 2, 3);--accent-d:rgb(1, 2, 3);}',
     );
     expect(customThemeCss({ preset: 'dark' })).toBe('');
+    expect(customThemeCss({ background: 'rgb(</style><script>alert(1)</script>)' })).toBe('');
+  });
+
+  it('ignores preset values outside the known list', () => {
+    expect(themeAttributes({ preset: 'x" onload="alert(1)' as never })).toBe('');
   });
 });
 
@@ -190,6 +206,17 @@ describe('writeReport', () => {
     expect(html).toContain('<script src="./report-data.js"></script>');
     expect(html).not.toContain('__SMART_DATA__');
     expect(evalData(fs.readFileSync(path.join(dir, 'report-data.js'), 'utf8')).tests).toHaveLength(3);
+  });
+
+  it('rejects instead of crashing when the output path cannot be written', async () => {
+    fs.mkdirSync(path.join(dir, 'taken.html'));
+    await expect(writeReport(data(), { outputPath: path.join(dir, 'taken.html'), assets, assetMode: 'inline' })).rejects.toThrow(/EISDIR/);
+  });
+
+  it('encodes report names in asset URLs', async () => {
+    const out = path.join(dir, 'run #1.html');
+    await writeReport(data(), { outputPath: out, assets, assetMode: 'external' });
+    expect(fs.readFileSync(out, 'utf8')).toContain('<script src="./run%20%231-data.js"></script>');
   });
 
   it('switches to external in auto mode only above the threshold', async () => {

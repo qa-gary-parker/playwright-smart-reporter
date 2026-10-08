@@ -73,11 +73,19 @@ export function Live() {
     }
     if (!live) return;
     let seen = 0;
-    const poll = () =>
+    let busy = false;
+    const poll = () => {
+      if (busy) return;
+      busy = true;
       fetch(live.jsonlFile, { cache: 'no-store' })
-        .then((r) => r.text())
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.text();
+        })
         .then((text) => {
           const lines = text.trim().split('\n').filter(Boolean);
+          // The server truncates the file when a new run starts.
+          if (lines.length < seen) seen = 0;
           for (const line of lines.slice(seen)) {
             try {
               onEvent(JSON.parse(line));
@@ -87,7 +95,9 @@ export function Live() {
           }
           seen = lines.length;
         })
-        .catch(() => setError(location.protocol === 'file:' ? 'Live results need the report served over HTTP: npx playwright-smart-reporter-serve --live' : null));
+        .catch(() => setError(location.protocol === 'file:' ? 'Live results need the report served over HTTP: npx playwright-smart-reporter-serve --live' : null))
+        .finally(() => (busy = false));
+    };
     const timer = setInterval(poll, 2000);
     poll();
     stop.current = () => clearInterval(timer);

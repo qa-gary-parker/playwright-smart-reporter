@@ -1344,3 +1344,129 @@ a.lines__label {
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+.cov-table {
+  margin-top: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.cov-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 120px 120px 120px;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+}
+
+.cov-row + .cov-row {
+  border-top: 1px solid var(--border);
+}
+
+.cov-row--head {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.cov-row[aria-selected='true'] {
+  background: var(--bg-selected);
+}
+
+.cov-file {
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cov-file:hover {
+  text-decoration: underline;
+}
+
+.cov-pct {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.cov-pct__value {
+  font-weight: 500;
+}
+
+.cov-bar {
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--fail-bg);
+}
+
+.cov-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--pass-fg);
+}
+
+.cov-src {
+  padding: var(--space-2) 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  line-height: 18px;
+}
+
+.cov-src__line {
+  display: flex;
+  padding-right: var(--space-3);
+}
+
+.cov-src__line[data-state='hit'] {
+  background: var(--pass-bg);
+}
+
+.cov-src__line[data-state='miss'] {
+  background: var(--fail-bg);
+}
+
+.cov-src__n {
+  flex: 0 0 48px;
+  padding-right: var(--space-3);
+  color: var(--text-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.cov-src__hits {
+  flex: 0 0 48px;
+  padding-right: var(--space-3);
+  color: var(--text-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.cov-src__line[data-state='miss'] .cov-src__hits {
+  color: var(--fail-fg);
+}
+
+.cov-src__t {
+  white-space: pre;
+}
+
+@media (max-width: 899px) {
+  .cov-row {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
+
+  .cov-row > :nth-child(n + 3) {
+    display: none;
+  }
+}

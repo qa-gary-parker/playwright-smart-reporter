@@ -141,6 +141,23 @@ export function Insights() {
             />
           </Panel>
         )}
+        {d.coverage && (
+          <Panel title="Coverage" meta={`${d.coverage.summary.lines.pct}% of lines`}>
+            <ul class="lines">
+              {[...d.coverage.files]
+                .sort((a, b) => a.lines.pct - b.lines.pct)
+                .slice(0, 5)
+                .map((f) => (
+                  <li class="lines__item">
+                    <a class="lines__label mono" href={formatRoute({ view: 'coverage' })}>
+                      {f.path}
+                    </a>
+                    <span class="lines__value mono">{f.lines.pct}%</span>
+                  </li>
+                ))}
+            </ul>
+          </Panel>
+        )}
         <Panel title="Regressions">
           <TestLines tests={tests.filter((t) => t.signals.includes('regression')).slice(0, 8)} value={(t) => (t.performanceMetrics ? `+${Math.round(t.performanceMetrics.percentChange)}%` : formatDuration(t.duration))} />
         </Panel>
