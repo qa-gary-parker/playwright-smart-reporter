@@ -249,7 +249,7 @@ describe('loadFailureBundle and writeFailureBundle', () => {
     expect(loadFailureBundle(jsFile, OPTS).failures).toStrictEqual([LOGIN_FAILURE, EXPORT_FAILURE]);
   });
 
-  it('builds the bundle from the exportJson output, which carries no steps, lines, or history', () => {
+  it('builds the bundle from the exportJson output, which carries lines but no steps or history', () => {
     const jsonFile = exportJsonData(loadFixture().tests as TestResultData[], { runs: [], tests: {} }, 0, {}, undefined, undefined, dir);
     const bundle = loadFailureBundle(jsonFile, OPTS);
     expect(bundle.failures.map((f) => f.id)).toEqual([LOGIN_FAILURE.id, EXPORT_FAILURE.id]);
@@ -258,6 +258,8 @@ describe('loadFailureBundle and writeFailureBundle', () => {
       title: 'exports a CSV',
       titlePath: ['exports a CSV'],
       file: 'tests/export.spec.ts',
+      line: 6,
+      column: 1,
       status: 'timedOut',
       source: { relative: 'tests/export.spec.ts', absolute: '/repo/tests/export.spec.ts' },
       error: EXPORT_ERROR,

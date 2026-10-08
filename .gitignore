@@ -26,6 +26,7 @@ example/traces/
 example/*.pdf
 example/*.xml
 example/*-data.json
+example/*-ctrf.json
 example/.smart-quarantine.json
 example/test-history-premium.json
 example/premium-report.html

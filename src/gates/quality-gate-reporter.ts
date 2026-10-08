@@ -1,6 +1,6 @@
 import type { QualityGateResult, QualityGateRuleResult } from '../types';
 
-const ruleLabels: Record<string, string> = {
+export const ruleLabels: Record<string, string> = {
   maxFailures: 'Max failures',
   minPassRate: 'Min pass rate',
   maxFlakyRate: 'Max flaky rate',

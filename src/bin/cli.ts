@@ -15,6 +15,7 @@ Commands:
   digest    Generate a test health digest from history
   failures  Print the redacted failure bundle for coding agents
   mcp       Serve the failure bundle to coding agents over MCP (stdio)
+  github    Publish a JSON export to GitHub (job summary, annotations, PR comment)
 
 Run playwright-smart-reporter <command> --help for command-specific help.
 `);
@@ -187,6 +188,31 @@ async function loadFailures() {
   return loadFailureBundle(dataPath, { rootDir: process.cwd() });
 }
 
+async function runGithub(): Promise<void> {
+  if (hasFlag('--help')) {
+    console.log(`
+Usage: playwright-smart-reporter github [options]
+
+Publish a JSON export to GitHub Actions: append a job summary to $GITHUB_STEP_SUMMARY,
+print error annotations at each failing assertion, and create or update one PR comment.
+The PR comment needs \`pull-requests: write\`; fork PRs and 403s fall back to summary
+and annotations only. Requires the gh CLI with GH_TOKEN set for the comment.
+
+Options:
+  --data <path>         Path to smart-report-data.json (default: smart-report-data.json)
+  --report-url <url>    Link to the uploaded report (default: the workflow run page)
+  --help                Show this help
+`);
+    return;
+  }
+
+  const { runGithubCommand } = await import('../github');
+  process.exitCode = runGithubCommand({
+    dataPath: parseFlag('--data') ?? 'smart-report-data.json',
+    reportUrl: parseFlag('--report-url'),
+  });
+}
+
 async function runFailures(): Promise<void> {
   if (hasFlag('--help')) {
     console.log(`
@@ -253,6 +279,9 @@ async function main(): Promise<void> {
       break;
     case 'digest':
       await runDigest();
+      break;
+    case 'github':
+      await runGithub();
       break;
     case 'failures':
       await runFailures();

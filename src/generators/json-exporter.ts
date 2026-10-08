@@ -8,6 +8,7 @@ import type {
   FailureCluster,
   A11yResult,
   CausalTimeline,
+  QualityGateResult,
 } from '../types';
 
 export function getReporterVersion(): string {
@@ -25,6 +26,8 @@ export interface JsonExportData {
     generatedAt: string;
     reporterVersion: string;
     projectName?: string;
+    // Phase 5: CI surface integrations — absolute directory that test `file` paths are relative to
+    rootDir?: string;
   };
   summary: {
     total: number;
@@ -44,9 +47,11 @@ export interface JsonExportData {
     runs: TestHistory['runs'];
     summaries?: TestHistory['summaries'];
   };
+  // Phase 5: CI surface integrations
+  qualityGates?: QualityGateResult;
 }
 
-interface JsonTestEntry {
+export interface JsonTestEntry {
   testId: string;
   title: string;
   file: string;
@@ -70,6 +75,10 @@ interface JsonTestEntry {
   a11y?: A11yResult;
   // Phase 4: Causal failure timeline
   timeline?: CausalTimeline;
+  // Phase 5: CI surface integrations
+  line?: number;
+  column?: number;
+  errorLocation?: TestResultData['errorLocation'];
 }
 
 interface JsonClusterEntry {
@@ -89,6 +98,8 @@ export function exportJsonData(
   failureClusters?: FailureCluster[],
   outputDir?: string,
   basename?: string,
+  qualityGateResult?: QualityGateResult,
+  rootDir?: string,
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -136,6 +147,9 @@ export function exportJsonData(
     aiSuggestion: r.aiSuggestion,
     a11y: r.a11y,
     timeline: r.timeline,
+    line: r.line,
+    column: r.column,
+    errorLocation: r.errorLocation,
   }));
 
   const clusters: JsonClusterEntry[] | undefined = failureClusters?.map(c => ({
@@ -151,6 +165,7 @@ export function exportJsonData(
       generatedAt: new Date().toISOString(),
       reporterVersion: getReporterVersion(),
       projectName: options.projectName,
+      rootDir,
     },
     summary: {
       total: results.length,
@@ -170,6 +185,7 @@ export function exportJsonData(
       runs: history.runs,
       summaries: history.summaries,
     },
+    qualityGates: qualityGateResult,
   };
 
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));

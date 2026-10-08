@@ -182,6 +182,8 @@ export interface SmartReporterOptions {
   enableCausalTimeline?: boolean;  // Default: true (timeline + first-anomaly suggestion on failed tests)
   // Phase 8: agent-ready output
   exportFailures?: boolean;        // Write redacted <name>-failures.json for coding agents (default: false)
+  // Phase 5: CI surface integrations
+  exportCtrf?: boolean;            // Write <name>-ctrf.json (Common Test Report Format) alongside HTML
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';

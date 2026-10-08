@@ -11,6 +11,9 @@ jobs:
   test:
     name: Run Demo Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # sticky Smart Reporter comment on pull requests
 
     steps:
       - name: Checkout code
@@ -58,14 +61,26 @@ jobs:
           path: example/test-history.json
           key: test-history-${{ github.ref_name }}-${{ github.run_id }}
 
-      # Upload the HTML report as an artifact
+      # Upload the HTML report and its JSON/CTRF exports as an artifact
       - name: Upload Smart Report
+        id: upload-report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: smart-report
-          path: example/smart-report.html
+          path: |
+            example/smart-report.html
+            example/smart-report-data.json
+            example/smart-report-ctrf.json
           retention-days: 30
+
+      # Job summary, failure annotations and one sticky PR comment (this repo's action.yml)
+      - name: Publish Smart Report to the pull request
+        if: always() && github.event_name == 'pull_request'
+        uses: ./
+        with:
+          data: example/smart-report-data.json
+          report-url: ${{ steps.upload-report.outputs.artifact-url }}
 
       # Upload screenshots from failed tests
       - name: Upload test artifacts

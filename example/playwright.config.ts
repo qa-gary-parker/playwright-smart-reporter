@@ -63,6 +63,11 @@ export default defineConfig({
       // === Step Display ===
       // filterPwApiSteps: true,        // Hide pw:api steps, show only test.step
 
+      // === CI Integrations ===
+      exportJson: true,                // smart-report-data.json, read by `playwright-smart-reporter github`
+      exportCtrf: true,                // smart-report-ctrf.json in the Common Test Report Format
+      qualityGates: { minPassRate: 80, noNewFailures: true }, // Shown in the PR comment and job summary
+
       // === Notifications (optional) ===
       // slackWebhook: process.env.SLACK_WEBHOOK_URL,
       // teamsWebhook: process.env.TEAMS_WEBHOOK_URL,

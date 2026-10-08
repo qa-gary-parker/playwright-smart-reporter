@@ -62,6 +62,7 @@ import { loadUiAssets, writeReport } from './report-data/writer';
 import { exportJsonData } from './generators/json-exporter';
 import { writeFailureBundle } from './agent/failure-bundle';
 import { exportJunitXml } from './generators/junit-exporter';
+import { exportCtrfReport } from './generators/ctrf-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { QualityGateEvaluator, formatGateReport } from './gates';
@@ -775,6 +776,8 @@ class SmartReporter implements Reporter {
           failureClusters,
           exportDir,
           reportInput.outputBasename,
+          qualityGateResult,
+          this.outputDir,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
@@ -797,6 +800,18 @@ class SmartReporter implements Reporter {
         console.log(`   JUnit XML: ${junitPath}`);
       } catch (err) {
         console.warn('⚠️  JUnit export failed:', err);
+      }
+    }
+
+    if (this.options.exportCtrf) {
+      try {
+        const ctrfPath = exportCtrfReport(this.results, this.startTime, this.options, exportDir, reportInput.outputBasename, {
+          playwrightVersion: this.fullConfig?.version,
+          ciInfo: this.ciInfo,
+        });
+        console.log(`   CTRF JSON: ${ctrfPath}`);
+      } catch (err) {
+        console.warn('⚠️  CTRF export failed:', err);
       }
     }
 

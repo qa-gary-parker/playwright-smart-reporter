@@ -388,6 +388,23 @@ describe('json-exporter', () => {
       expect(written.metadata.projectName).toBe('my-project');
     });
 
+    it('writes the locations, rootDir and gate result the github command needs', () => {
+      const failing = createTestResult({
+        status: 'failed', outcome: 'unexpected', line: 4, column: 5, error: 'Error: boom',
+        errorLocation: { file: 'helpers/assert.ts', line: 3, column: 32 },
+      });
+      const gates = { passed: false, rules: [{ rule: 'maxFailures', passed: false, actual: '1', threshold: '≤ 0' }] };
+
+      exportJsonData([failing], createTestHistory(), Date.now(), {}, undefined, undefined, '/out', 'smart-report', gates, '/repo/e2e');
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.metadata.rootDir).toBe('/repo/e2e');
+      expect(written.qualityGates).toEqual(gates);
+      expect(written.tests[0].line).toBe(4);
+      expect(written.tests[0].column).toBe(5);
+      expect(written.tests[0].errorLocation).toEqual({ file: 'helpers/assert.ts', line: 3, column: 32 });
+    });
+
     it('JSON output is pretty-printed with 2-space indentation', () => {
       exportJsonData([createTestResult()], createTestHistory(), Date.now(), {});
 
