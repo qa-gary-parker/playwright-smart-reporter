@@ -6,6 +6,7 @@ import type {
   RunComparison,
   RunSummary,
   StabilityScore,
+  A11yImpact,
 } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
@@ -592,6 +593,60 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.passed).toBe(false);
       // 33% < 34%
       expect(rule?.actual).toBe('33%');
+    });
+  });
+
+  // Phase 10: Accessibility
+  describe('accessibility gates', () => {
+    const a11y = (...impacts: A11yImpact[]): TestResultData['a11y'] => ({
+      violations: impacts.map((impact, i) => ({
+        id: `rule-${i}`, impact, description: '', helpUrl: '', wcagTags: [], nodes: [],
+      })),
+      passes: 10,
+      incomplete: 0,
+      inapplicable: 0,
+      timestamp: '',
+      standard: 'WCAG2AA',
+    });
+    // 4 violations over two scanned tests: 1 critical, 2 serious, 1 minor
+    const scanned = [
+      createTestResult({ testId: 't1', a11y: a11y('critical', 'serious') }),
+      createTestResult({ testId: 't2', a11y: a11y('serious', 'minor') }),
+      createTestResult({ testId: 't3' }),
+    ];
+
+    it('passes maxA11yViolations at the threshold', () => {
+      const result = evaluator.evaluate({ maxA11yViolations: 4 }, scanned);
+      expect(result.passed).toBe(true);
+      expect(result.rules).toEqual([{ rule: 'maxA11yViolations', passed: true, actual: '4', threshold: '≤ 4' }]);
+    });
+
+    it('fails maxA11yViolations above the threshold', () => {
+      const result = evaluator.evaluate({ maxA11yViolations: 3 }, scanned);
+      expect(result.passed).toBe(false);
+      expect(result.rules).toEqual([{ rule: 'maxA11yViolations', passed: false, actual: '4', threshold: '≤ 3' }]);
+    });
+
+    it('counts only the matching impact for maxA11yCritical and maxA11ySerious', () => {
+      const result = evaluator.evaluate({ maxA11yCritical: 0, maxA11ySerious: 2 }, scanned);
+      expect(result.passed).toBe(false);
+      expect(result.rules).toEqual([
+        { rule: 'maxA11yCritical', passed: false, actual: '1', threshold: '≤ 0' },
+        { rule: 'maxA11ySerious', passed: true, actual: '2', threshold: '≤ 2' },
+      ]);
+    });
+
+    it('skips a11y gates when no test was scanned', () => {
+      const result = evaluator.evaluate(
+        { maxA11yViolations: 0, maxA11yCritical: 0, maxA11ySerious: 0 },
+        [createTestResult(), createTestResult({ testId: 'test-2' })],
+      );
+      expect(result.passed).toBe(true);
+      expect(result.rules.map(r => [r.rule, r.passed, r.actual, r.skipped])).toEqual([
+        ['maxA11yViolations', true, 'N/A', true],
+        ['maxA11yCritical', true, 'N/A', true],
+        ['maxA11ySerious', true, 'N/A', true],
+      ]);
     });
   });
 });

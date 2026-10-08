@@ -4,6 +4,7 @@ import type {
   QualityGateResult,
   QualityGateRuleResult,
   RunComparison,
+  A11yImpact,
 } from '../types';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
@@ -35,6 +36,17 @@ export class QualityGateEvaluator {
 
     if (config.noNewFailures === true) {
       rules.push(this.evaluateNoNewFailures(comparison));
+    }
+
+    // Phase 10: Accessibility
+    if (config.maxA11yViolations !== undefined) {
+      rules.push(this.evaluateMaxA11y('maxA11yViolations', config.maxA11yViolations, results));
+    }
+    if (config.maxA11yCritical !== undefined) {
+      rules.push(this.evaluateMaxA11y('maxA11yCritical', config.maxA11yCritical, results, 'critical'));
+    }
+    if (config.maxA11ySerious !== undefined) {
+      rules.push(this.evaluateMaxA11y('maxA11ySerious', config.maxA11ySerious, results, 'serious'));
     }
 
     const passed = rules.every(r => r.passed);
@@ -132,6 +144,17 @@ export class QualityGateEvaluator {
       actual: avgGrade,
       threshold: `≥ ${threshold}`,
     };
+  }
+
+  private evaluateMaxA11y(rule: string, threshold: number, results: TestResultData[], impact?: A11yImpact): QualityGateRuleResult {
+    const scanned = results.filter(r => r.a11y);
+    if (scanned.length === 0) {
+      return { rule, passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
+    }
+    const count = scanned.reduce(
+      (sum, r) => sum + r.a11y!.violations.filter(v => !impact || v.impact === impact).length, 0,
+    );
+    return { rule, passed: count <= threshold, actual: String(count), threshold: `≤ ${threshold}` };
   }
 
   private evaluateNoNewFailures(comparison?: RunComparison): QualityGateRuleResult {

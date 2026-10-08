@@ -9,3 +9,4 @@ export { FailureClusterer } from './failure-clusterer';
 export { StabilityScorer } from './stability-scorer';
 export { AIAnalyzer } from './ai-analyzer';
 export { forecastRun } from './flake-forecast';
+export { summarizeA11y } from './a11y-analyzer';

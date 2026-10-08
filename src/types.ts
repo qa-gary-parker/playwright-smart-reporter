@@ -175,6 +175,9 @@ export interface SmartReporterOptions {
   // Phase 9: Ownership and routing
   // enabled defaults to true when a CODEOWNERS file is found or source is 'git'
   ownership?: { enabled?: boolean; source?: 'codeowners' | 'git' | 'auto'; codeownersPath?: string };
+  // Phase 10: Accessibility
+  // Read by withAccessibility() and injected into `use.smartReporterA11y`
+  accessibility?: AccessibilityConfig;
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
@@ -335,6 +338,8 @@ export interface TestResultData {
   // Phase 9: Ownership and routing
   owners?: string[];
   ownerSource?: 'codeowners' | 'git';
+  // Phase 10: Accessibility
+  a11y?: A11yResult;
 }
 
 // NEW: Retry Analysis
@@ -493,6 +498,11 @@ export interface QualityGateConfig {
   maxFlakyRate?: number;
   minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
   noNewFailures?: boolean;
+
+  // Phase 10: Accessibility (each rule is skipped when no test was scanned)
+  maxA11yViolations?: number;
+  maxA11yCritical?: number;
+  maxA11ySerious?: number;
 }
 
 export interface QualityGateRuleResult {
@@ -620,4 +630,65 @@ export interface ForecastSummary {
   atRisk: string[];     // testIds, highest risk first
   threshold: number;
   minRuns: number;
+}
+
+// ============================================================================
+// Phase 10: Accessibility
+// ============================================================================
+
+export interface AccessibilityConfig {
+  enabled: boolean;
+  standard?: 'WCAG2A' | 'WCAG2AA' | 'WCAG2AAA';
+  failOnSeverity?: A11yImpact;
+  include?: string[];
+  exclude?: string[];
+  selector?: string;
+}
+
+export type A11yImpact = 'minor' | 'moderate' | 'serious' | 'critical';
+
+export interface A11yNode {
+  target: string[];
+  html: string;
+  failureSummary: string;
+}
+
+export interface A11yViolation {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  nodes: A11yNode[];
+}
+
+export interface A11yResult {
+  violations: A11yViolation[];
+  passes: number;
+  incomplete: number;
+  inapplicable: number;
+  timestamp: string;
+  standard: string;
+  url?: string;
+}
+
+export interface A11yRuleSummary {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  tests: number;
+  nodes: number;
+  testIds: string[];
+}
+
+export interface A11ySummary {
+  testsScanned: number;
+  testsWithViolations: number;
+  pagesScanned: number;
+  totalViolations: number;
+  byImpact: Record<A11yImpact, number>;
+  byRule: A11yRuleSummary[];        // most-hit rule first
+  rating: 'excellent' | 'good' | 'fair' | 'poor';
 }

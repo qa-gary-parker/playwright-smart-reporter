@@ -1,4 +1,5 @@
 import type {
+  A11ySummary,
   BrandingConfig,
   CIInfo,
   FlakeForecast,
@@ -97,4 +98,6 @@ export interface ReportData {
   forecastSummary?: ForecastSummary;
   // Phase 9: Ownership and routing (per-test owners/ownerSource come from TestResultData)
   ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
+  // Phase 10: Accessibility (per-test results ride on ReportTest.a11y)
+  a11y?: A11ySummary;
 }

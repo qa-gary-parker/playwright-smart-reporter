@@ -2,7 +2,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison } from '../types';
+import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison, A11yResult } from '../types';
 import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
 
@@ -14,6 +14,7 @@ interface GateOptions {
   maxFlakyRate?: number;
   minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
   noNewFailures?: boolean;
+  maxA11yViolations?: number;
 }
 
 function printUsage(): void {
@@ -30,6 +31,7 @@ Options:
   --max-flaky-rate <n>        Maximum flaky rate percentage
   --min-stability-grade <g>   Minimum stability grade (A, B, C, D)
   --no-new-failures           Fail if new failures detected (requires comparison data)
+  --max-a11y-violations <n>   Maximum accessibility violations (skipped when no test was scanned)
   -h, --help                  Show this help message
 
 Examples:
@@ -81,6 +83,9 @@ function parseArgs(argv: string[]): GateOptions {
       case '--no-new-failures':
         options.noNewFailures = true;
         break;
+      case '--max-a11y-violations':
+        options.maxA11yViolations = parseInt(args[++i], 10);
+        break;
     }
   }
 
@@ -110,6 +115,7 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   if (options.maxFlakyRate !== undefined) config.maxFlakyRate = options.maxFlakyRate;
   if (options.minStabilityGrade !== undefined) config.minStabilityGrade = options.minStabilityGrade;
   if (options.noNewFailures !== undefined) config.noNewFailures = options.noNewFailures;
+  if (options.maxA11yViolations !== undefined) config.maxA11yViolations = options.maxA11yViolations;
 
   return config;
 }
@@ -128,6 +134,7 @@ interface JsonTestEntry {
     overall: number;
     grade: string;
   };
+  a11y?: A11yResult;
 }
 
 function toTestResultData(entry: JsonTestEntry): TestResultData {
@@ -155,6 +162,7 @@ function toTestResultData(entry: JsonTestEntry): TestResultData {
     stabilityScore,
     steps: [],
     history: [],
+    a11y: entry.a11y,
   };
 }
 
@@ -167,7 +175,10 @@ function main(): void {
     || config.minPassRate !== undefined
     || config.maxFlakyRate !== undefined
     || config.minStabilityGrade !== undefined
-    || config.noNewFailures !== undefined;
+    || config.noNewFailures !== undefined
+    || config.maxA11yViolations !== undefined
+    || config.maxA11yCritical !== undefined
+    || config.maxA11ySerious !== undefined;
 
   if (!hasRules) {
     console.error('Error: No quality gate rules configured. Use --config or inline flags.');

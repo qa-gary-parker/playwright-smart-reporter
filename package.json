@@ -18,6 +18,10 @@
     "./quarantine": {
       "types": "./dist/quarantine/quarantine-helper.d.ts",
       "default": "./dist/quarantine/quarantine-helper.js"
+    },
+    "./accessibility": {
+      "types": "./dist/accessibility/index.d.ts",
+      "default": "./dist/accessibility/index.js"
     }
   },
   "files": [
@@ -78,11 +82,15 @@
     "url": "https://github.com/qa-gary-parker/playwright-smart-reporter/issues"
   },
   "peerDependencies": {
+    "@axe-core/playwright": ">=4.0.0",
     "@playwright/test": ">=1.40.0",
     "playwright-core": ">=1.40.0"
   },
   "peerDependenciesMeta": {
     "playwright-core": {
+      "optional": true
+    },
+    "@axe-core/playwright": {
       "optional": true
     }
   },

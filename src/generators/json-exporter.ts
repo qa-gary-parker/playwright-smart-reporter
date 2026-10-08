@@ -6,6 +6,7 @@ import type {
   SmartReporterOptions,
   RunComparison,
   FailureCluster,
+  A11yResult,
 } from '../types';
 
 export function getReporterVersion(): string {
@@ -64,6 +65,8 @@ interface JsonTestEntry {
   browser?: string;
   project?: string;
   aiSuggestion?: string;
+  // Phase 10: Accessibility
+  a11y?: A11yResult;
 }
 
 interface JsonClusterEntry {
@@ -128,6 +131,7 @@ export function exportJsonData(
     browser: r.browser,
     project: r.project,
     aiSuggestion: r.aiSuggestion,
+    a11y: r.a11y,
   }));
 
   const clusters: JsonClusterEntry[] | undefined = failureClusters?.map(c => ({

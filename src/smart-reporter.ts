@@ -35,6 +35,7 @@ import {
   StepCollector,
   AttachmentCollector,
   NetworkCollector,
+  A11yCollector,
 } from './collectors';
 
 // ============================================================================
@@ -90,6 +91,7 @@ class SmartReporter implements Reporter {
   private stepCollector: StepCollector;
   private attachmentCollector: AttachmentCollector;
   private networkCollector: NetworkCollector;
+  private a11yCollector = new A11yCollector();
 
   // Analyzers
   private flakinessAnalyzer!: FlakinessAnalyzer;
@@ -437,6 +439,14 @@ class SmartReporter implements Reporter {
           // Network log extraction is optional, don't fail on errors
         }
       }
+    }
+
+    // Phase 10: Accessibility
+    try {
+      const a11y = this.a11yCollector.collect(result);
+      if (a11y) testData.a11y = a11y;
+    } catch (err) {
+      console.warn(`Smart Reporter: could not read accessibility results for "${test.title}":`, err);
     }
 
     // Run all analyzers (flakiness, performance, retries, stability)
@@ -942,5 +952,7 @@ export function mergeHistories(
   fs.writeFileSync(outputFile, JSON.stringify(mergedHistory, null, 2));
   console.log(`✅ Merged ${historyFiles.length} history files into ${outputFile}`);
 }
+
+export { withAccessibility } from './accessibility/a11y-config';
 
 export default SmartReporter;

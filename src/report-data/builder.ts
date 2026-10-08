@@ -13,6 +13,7 @@ import type {
   TestHistory,
   TestResultData,
 } from '../types';
+import { summarizeA11y } from '../analyzers/a11y-analyzer';
 import { isFlakyTest } from '../utils/flakiness';
 import {
   SCHEMA_VERSION,
@@ -136,5 +137,6 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     ai: { suiteHealthSummary: input.aiSuiteHealthSummary, ...aiReportInfo(input) },
     ...(forecast && { forecastSummary: forecast.summary }),
     ownership: summarizeOwnership(tests),
+    a11y: summarizeA11y(results),
   };
 }

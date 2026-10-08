@@ -92,6 +92,7 @@ Options:
     retry: t.retry,
     steps: [],
     history: [],
+    a11y: t.a11y,
   }));
 
   const evaluator = new QualityGateEvaluator();
