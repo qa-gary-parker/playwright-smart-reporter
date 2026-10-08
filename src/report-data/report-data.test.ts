@@ -90,6 +90,27 @@ describe('buildReportData', () => {
       networkLogs: true,
     });
   });
+
+  // prior runs pass, pass, pass, pass, fail; this run passes
+  const FLIPPED = [true, true, true, true, false].map((passed) => ({ passed, duration: 100, timestamp: '', retry: 0 }));
+
+  it('attaches flake forecasts to first-try passes and summarises the at-risk tests', () => {
+    const data = buildReportData(input([result({ testId: 'p1', history: FLIPPED }), { ...FAILED, history: FLIPPED }]));
+    const byId = Object.fromEntries(data.tests.map((t) => [t.testId, t]));
+    expect(byId.p1.forecast).toEqual({
+      state: 'scored',
+      risk: 0.9,
+      reasons: [{ signal: 'outcome-instability', detail: 'Pass/fail flipped 2 times in the last 6 runs, most recently this run', weight: 0.9 }],
+    });
+    expect('forecast' in byId.f1).toBe(false);
+    expect(data.forecastSummary).toEqual({ atRisk: ['p1'], threshold: 0.5, minRuns: 5 });
+  });
+
+  it('omits forecasts when forecasting is disabled', () => {
+    const data = buildReportData(input([result({ testId: 'p1', history: FLIPPED })], { options: { forecast: { enabled: false } } }));
+    expect('forecast' in data.tests[0]).toBe(false);
+    expect('forecastSummary' in data).toBe(false);
+  });
 });
 
 describe('theme mapping', () => {

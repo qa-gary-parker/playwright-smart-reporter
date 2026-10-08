@@ -167,6 +167,8 @@ export interface SmartReporterOptions {
 
   // Phase 0.5: Local model support (Ollama)
   ai?: AIConfig;
+  // Phase 7: Flake forecasting. Advisory only; never feeds quarantine.
+  forecast?: ForecastConfig;
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
@@ -218,6 +220,8 @@ export interface TestHistory {
   };
   summaries?: RunSummary[];
   runFiles?: Record<string, string>; // runId -> relative JSON snapshot path
+  // Phase 7: runId -> testId -> forecast risk recorded that run (risk 0 omitted), pruned to maxHistoryRuns
+  forecasts?: Record<string, Record<string, number>>;
 }
 
 export interface TestResultSnapshot {
@@ -578,4 +582,32 @@ export interface DigestOptions {
   output?: string;
   ai?: boolean;
   format?: 'markdown' | 'text';
+}
+
+// ============================================================================
+// Phase 7: Flake forecasting
+// ============================================================================
+
+export interface ForecastConfig {
+  enabled?: boolean;    // Default: true
+  minRuns?: number;     // Default: 5; values below 3 are raised to 3
+  threshold?: number;   // Default: 0.5; risk at or above this lists the test as at risk
+}
+
+export type ForecastSignal = 'duration-drift' | 'duration-variance' | 'retry-trend' | 'outcome-instability';
+
+export interface ForecastReason {
+  signal: ForecastSignal;
+  detail: string;
+  weight: number;       // this signal's contribution to risk, 0-1
+}
+
+export type FlakeForecast =
+  | { state: 'insufficient-history'; runs: number; minRuns: number }
+  | { state: 'scored'; risk: number; reasons: ForecastReason[] };
+
+export interface ForecastSummary {
+  atRisk: string[];     // testIds, highest risk first
+  threshold: number;
+  minRuns: number;
 }

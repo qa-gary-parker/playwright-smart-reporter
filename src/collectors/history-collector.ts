@@ -9,8 +9,8 @@ import { sanitizeFilename } from '../utils/sanitizers';
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -123,7 +123,7 @@ export class HistoryCollector {
   /**
    * Update history with test results
    */
-  updateHistory(results: TestResultData[]): void {
+  updateHistory(results: TestResultData[], forecasts?: Record<string, number>): void {
     const timestamp = new Date().toISOString();
     const runId = this.currentRun.runId;
 
@@ -251,6 +251,14 @@ export class HistoryCollector {
           }
         }
         delete this.history.runFiles[existingRunId];
+      }
+    }
+
+    if (forecasts) {
+      const recorded = (this.history.forecasts ??= {});
+      recorded[runId] = { ...recorded[runId], ...forecasts };
+      for (const oldRunId of Object.keys(recorded).slice(0, -this.options.maxHistoryRuns)) {
+        delete recorded[oldRunId];
       }
     }
 

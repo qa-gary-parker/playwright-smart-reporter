@@ -1,6 +1,8 @@
 import type {
   BrandingConfig,
   CIInfo,
+  FlakeForecast,
+  ForecastSummary,
   QualityGateResult,
   QuarantineEntry,
   RunSnapshotFile,
@@ -16,6 +18,8 @@ export type Signal = 'new-failure' | 'regression' | 'flaky' | 'quarantined' | 's
 export type ReportTest = Omit<TestResultData, 'failureCluster' | 'traceData'> & {
   clusterId?: string;
   signals: Signal[];
+  // Phase 7: Flake forecasting
+  forecast?: FlakeForecast;
 };
 
 export interface ReportCluster {
@@ -89,4 +93,6 @@ export interface ReportData {
     provider?: string;
     model?: string;
   };
+  // Phase 7: Flake forecasting
+  forecastSummary?: ForecastSummary;
 }

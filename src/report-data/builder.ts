@@ -1,4 +1,5 @@
 import { aiReportInfo } from '../analyzers/ai-analyzer';
+import { forecastRun } from '../analyzers/flake-forecast';
 import { getReporterVersion } from '../generators/json-exporter';
 import type {
   CIInfo,
@@ -76,6 +77,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     return { id: c.id, errorType: c.errorType, testIds: c.tests.map((t) => t.testId), aiSuggestion: c.aiSuggestion };
   });
 
+  const forecast = forecastRun(results, options.forecast);
+
   const tests: ReportTest[] = results.map((r) => {
     const { failureCluster: _cluster, traceData: _trace, ...rest } = r;
     const signals: Signal[] = [];
@@ -86,7 +89,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     if (r.performanceTrend?.startsWith('↑')) signals.push('slow');
     if (sets.fixedTests.has(r.testId)) signals.push('fixed');
     if (sets.newTests.has(r.testId) || r.flakinessIndicator?.includes('New')) signals.push('new');
-    return { ...rest, clusterId: clusterOf.get(r.testId), signals };
+    const testForecast = forecast?.forecasts[r.testId];
+    return { ...rest, clusterId: clusterOf.get(r.testId), signals, ...(testForecast && { forecast: testForecast }) };
   });
 
   return {
@@ -129,5 +133,6 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     gates: input.qualityGateResult,
     quarantine: input.quarantineEntries && { threshold: input.quarantineThreshold, entries: input.quarantineEntries },
     ai: { suiteHealthSummary: input.aiSuiteHealthSummary, ...aiReportInfo(input) },
+    ...(forecast && { forecastSummary: forecast.summary }),
   };
 }

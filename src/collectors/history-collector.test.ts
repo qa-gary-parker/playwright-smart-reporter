@@ -275,6 +275,41 @@ describe('HistoryCollector', () => {
 
       expect(mockFs.writeFileSync).toHaveBeenCalled();
     });
+
+    it('records forecast risks under the current run id', () => {
+      const collector = new HistoryCollector({ runId: '42' }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([createTestResult({ testId: 'a' })], { a: 0.7 });
+
+      const written: TestHistory = JSON.parse(String(mockFs.writeFileSync.mock.calls.at(-1)![1]));
+      expect(written.forecasts).toEqual({ 'run-42': { a: 0.7 } });
+    });
+
+    it('leaves the history file without forecasts when none are passed', () => {
+      const collector = new HistoryCollector({ runId: '42' }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([createTestResult({ testId: 'a' })]);
+
+      const written = JSON.parse(String(mockFs.writeFileSync.mock.calls.at(-1)![1]));
+      expect(Object.keys(written).sort()).toEqual(['runs', 'summaries', 'tests']);
+    });
+
+    it('prunes recorded forecasts to maxHistoryRuns, oldest first', () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({
+        runs: [], tests: {}, summaries: [],
+        forecasts: { 'run-a': { x: 0.1 }, 'run-b': { x: 0.2 }, 'run-c': { x: 0.3 } },
+      }));
+      const collector = new HistoryCollector({ runId: '42', maxHistoryRuns: 3 }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([createTestResult({ testId: 'x' })], { x: 0.9 });
+
+      expect(collector.getHistory().forecasts).toEqual({ 'run-b': { x: 0.2 }, 'run-c': { x: 0.3 }, 'run-42': { x: 0.9 } });
+      expect(Object.keys(collector.getHistory().forecasts!)).toEqual(['run-b', 'run-c', 'run-42']);
+    });
   });
 
   describe('getBaselineRun', () => {

@@ -48,6 +48,7 @@ import {
   FailureClusterer,
   StabilityScorer,
   AIAnalyzer,
+  forecastRun,
 } from './analyzers';
 
 // ============================================================================
@@ -781,8 +782,16 @@ class SmartReporter implements Reporter {
       console.warn('⚠️  exportPdfFull requires exportPdf: true — no PDF was generated');
     }
 
+    // Forecast before updateHistory: each result.history is the live history array it appends to
+    let forecastRisks: Record<string, number> | undefined;
+    try {
+      forecastRisks = forecastRun(this.results, this.options.forecast)?.risks;
+    } catch (err) {
+      console.warn('⚠️  Flake forecast failed:', err);
+    }
+
     // Update history
-    this.historyCollector.updateHistory(this.results);
+    this.historyCollector.updateHistory(this.results, forecastRisks);
 
     // Send webhook notifications if enabled - use outcome-based counting
     const failed = this.results.filter(r =>
