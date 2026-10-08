@@ -29,6 +29,7 @@ example/*-data.json
 example/.smart-quarantine.json
 example/test-history-premium.json
 example/premium-report.html
+example/timeline/out/
 
 # Pack archives
 *.tgz

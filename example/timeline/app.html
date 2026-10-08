@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Orders</title>
+</head>
+<body>
+  <h1>Orders</h1>
+  <button id="load">Load orders</button>
+  <p id="status"></p>
+  <ul id="orders"></ul>
+  <p id="detail"></p>
+  <script>
+    function render(data) {
+      document.getElementById('orders').innerHTML = data.items.map((o) => `<li data-id="${o.id}">${o.name}</li>`).join('');
+      document.getElementById('status').textContent = `${data.items.length} orders`;
+    }
+
+    document.getElementById('load').addEventListener('click', async () => {
+      const res = await fetch('/api/orders');
+      if (!res.ok) {
+        document.getElementById('status').textContent = `Could not load orders (${res.status})`;
+        return;
+      }
+      const data = await res.json();
+      // Defer so a bad payload surfaces as an uncaught page error, as a framework render would.
+      setTimeout(() => render(data), 0);
+    });
+
+    document.getElementById('orders').addEventListener('click', async (event) => {
+      const id = event.target.dataset.id;
+      const res = await fetch(`/api/orders/${id}`);
+      const order = await res.json();
+      document.getElementById('detail').textContent = `Order ${order.id}: ${order.name}`;
+    });
+  </script>
+</body>
+</html>

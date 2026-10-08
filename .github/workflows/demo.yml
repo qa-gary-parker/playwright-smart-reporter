@@ -34,6 +34,9 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Run causal timeline acceptance tests
+        run: npm run test:timeline
+
       # Restore test history from cache for flakiness detection
       - name: Restore test history
         uses: actions/cache/restore@v4
