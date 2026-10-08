@@ -131,7 +131,8 @@ export interface SmartReporterOptions {
   projectName?: string;            // e.g., 'api-tests' or 'ui-regression'
 
   // Report size optimization
-  maxEmbeddedSize?: number;        // Max bytes for inline base64 (default: 5MB). Traces larger are file-referenced.
+  /** @deprecated No effect since 3.0.0: traces are always copied next to the report and never embedded. */
+  maxEmbeddedSize?: number;
   // Where report data lives: inline in the HTML, in a companion <name>-data.js, or chosen by size (default: 'auto')
   assetMode?: 'inline' | 'external' | 'auto';
 
@@ -324,7 +325,8 @@ export interface TestResultData {
   screenshot?: string;
   videoPath?: string;
   tracePath?: string;      // NEW: Trace file path
-  traceData?: string;      // NEW: Base64 encoded trace data
+  /** @deprecated Not set since 3.0.0. */
+  traceData?: string;
   history: TestHistoryEntry[];
 
   // NEW: Tag/Suite filtering

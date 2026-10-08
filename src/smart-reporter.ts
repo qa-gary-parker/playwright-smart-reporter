@@ -413,20 +413,6 @@ class SmartReporter implements Reporter {
     let trace: TraceContents | undefined;
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
-      // Embed trace as base64 for one-click viewing (skip in CSP-safe mode)
-      // Respect maxEmbeddedSize to prevent huge HTML files (default: 5MB)
-      const maxEmbeddedSize = this.options.maxEmbeddedSize ?? 5 * 1024 * 1024;
-      if (!this.options.cspSafe) {
-        try {
-          const stats = fs.statSync(traceAttachment.path);
-          if (stats.size <= maxEmbeddedSize) {
-            const traceBuffer = fs.readFileSync(traceAttachment.path);
-            testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
-          }
-        } catch {
-          // If we can't read the trace, just use the path
-        }
-      }
       // One trace read feeds both the network log and the causal timeline
       if (this.options.enableNetworkLogs !== false || wantTimeline) {
         try {
