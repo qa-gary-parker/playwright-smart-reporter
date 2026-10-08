@@ -542,7 +542,7 @@ class SmartReporter implements Reporter {
    * Performs final analysis, generates HTML report, updates history, and sends notifications
    * @param result - Full test run result
    */
-  async onEnd(result: FullResult): Promise<void> {
+  async onEnd(result: FullResult): Promise<{ status?: FullResult['status'] } | undefined> {
     // Convert resultsMap to array - this ensures we only have the final attempt for each test
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());
@@ -911,11 +911,14 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Quality gates - log results and set exitCode
+    // Quality gates - log results and fail the run. Playwright exits with a code derived from the
+    // run status and ignores process.exitCode, so a breached gate must change the status.
+    let status: FullResult['status'] | undefined;
     if (qualityGateResult) {
       console.log(formatGateReport(qualityGateResult));
       if (!qualityGateResult.passed) {
         process.exitCode = 1;
+        status = 'failed';
       }
     }
 
@@ -926,6 +929,8 @@ class SmartReporter implements Reporter {
     } else if (this.options.quarantine?.enabled) {
       console.log('   Quarantine: no tests exceed flakiness threshold');
     }
+
+    return status ? { status } : undefined;
   }
 
   // ============================================================================
