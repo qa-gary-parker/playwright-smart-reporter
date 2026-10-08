@@ -1,0 +1,61 @@
+.tone-fail {
+  color: var(--fail-fg);
+}
+
+.tone-pass {
+  color: var(--pass-fg);
+}
+
+.tone-flaky {
+  color: var(--flaky-fg);
+}
+
+.tone-skip {
+  color: var(--skip-fg);
+}
+
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.glyph svg {
+  display: block;
+}
+
+.glyph__mark {
+  stroke: var(--bg);
+}
+
+.glyph__label {
+  color: var(--text-muted);
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.count--button {
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.count--button:hover {
+  background: var(--bg-hover);
+}
+
+.count__value {
+  font-weight: 600;
+}
+
+.count__label {
+  color: var(--text-muted);
+}

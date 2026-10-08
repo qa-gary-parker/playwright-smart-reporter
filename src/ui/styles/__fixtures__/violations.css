@@ -1,0 +1,40 @@
+.hex {
+  color: #00ff88;
+}
+
+.named {
+  color: white;
+}
+
+.gradient {
+  background: linear-gradient(var(--bg), var(--bg-subtle));
+}
+
+.glow {
+  box-shadow: 0 0 20px var(--pass-fg);
+}
+
+.blur {
+  backdrop-filter: blur(12px);
+}
+
+.radius {
+  border-radius: 12px;
+}
+
+.font {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+.size {
+  font-size: 14px;
+}
+
+.label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.motion {
+  transition: all 0.3s ease;
+}

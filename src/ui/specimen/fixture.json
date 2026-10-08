@@ -1,0 +1,7017 @@
+{
+ "source": "example/smart-report.html, example/test-history.json (2026-09-01 run)",
+ "stats": {
+  "passed": 37,
+  "failed": 13,
+  "skipped": 6,
+  "flaky": 4,
+  "slow": 1,
+  "newTests": 0,
+  "total": 56,
+  "passRate": 66,
+  "gradeA": 42,
+  "gradeB": 0,
+  "gradeC": 1,
+  "gradeD": 2,
+  "gradeF": 11,
+  "totalDuration": 99933
+ },
+ "summaries": [
+  {
+   "timestamp": "2026-03-04T22:16:55.750Z",
+   "total": 56,
+   "passed": 39,
+   "failed": 11,
+   "skipped": 6,
+   "flaky": 3,
+   "slow": 2,
+   "duration": 87359,
+   "passRate": 70
+  },
+  {
+   "timestamp": "2026-03-05T10:28:22.878Z",
+   "total": 56,
+   "passed": 39,
+   "failed": 11,
+   "skipped": 6,
+   "flaky": 3,
+   "slow": 4,
+   "duration": 99690,
+   "passRate": 70
+  },
+  {
+   "timestamp": "2026-03-06T20:40:48.179Z",
+   "total": 56,
+   "passed": 39,
+   "failed": 11,
+   "skipped": 6,
+   "flaky": 2,
+   "slow": 0,
+   "duration": 87283,
+   "passRate": 70
+  },
+  {
+   "timestamp": "2026-03-06T20:46:12.815Z",
+   "total": 56,
+   "passed": 39,
+   "failed": 11,
+   "skipped": 6,
+   "flaky": 4,
+   "slow": 1,
+   "duration": 112831,
+   "passRate": 70
+  },
+  {
+   "timestamp": "2026-03-06T20:49:42.670Z",
+   "total": 56,
+   "passed": 39,
+   "failed": 11,
+   "skipped": 6,
+   "flaky": 4,
+   "slow": 2,
+   "duration": 112295,
+   "passRate": 70
+  },
+  {
+   "timestamp": "2026-03-06T20:52:34.817Z",
+   "total": 56,
+   "passed": 39,
+   "failed": 11,
+   "skipped": 6,
+   "flaky": 3,
+   "slow": 3,
+   "duration": 109871,
+   "passRate": 70
+  },
+  {
+   "timestamp": "2026-08-06T14:21:58.348Z",
+   "total": 56,
+   "passed": 37,
+   "failed": 13,
+   "skipped": 6,
+   "flaky": 3,
+   "slow": 0,
+   "duration": 87797,
+   "passRate": 66
+  },
+  {
+   "timestamp": "2026-08-06T15:23:15.539Z",
+   "total": 56,
+   "passed": 37,
+   "failed": 13,
+   "skipped": 6,
+   "flaky": 3,
+   "slow": 2,
+   "duration": 89187,
+   "passRate": 66
+  },
+  {
+   "timestamp": "2026-08-06T15:40:21.977Z",
+   "total": 56,
+   "passed": 36,
+   "failed": 14,
+   "skipped": 6,
+   "flaky": 3,
+   "slow": 1,
+   "duration": 88149,
+   "passRate": 64
+  },
+  {
+   "timestamp": "2026-09-01T10:34:30.164Z",
+   "total": 56,
+   "passed": 37,
+   "failed": 13,
+   "skipped": 6,
+   "flaky": 2,
+   "slow": 1,
+   "duration": 100012,
+   "passRate": 66
+  }
+ ],
+ "tests": [
+  {
+   "id": "[Desktop Chrome] parallel/test1.spec.ts::h1 should be visible",
+   "title": "h1 should be visible",
+   "file": "parallel/test1.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 1034,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 319,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 13,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 210,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 588,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 69,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1047,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1191,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1025,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1106,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 793,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 954,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1044,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1073,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1150,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1022,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 1041,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::homepage loads successfully",
+   "title": "homepage loads successfully",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 1076,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 312,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 12,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 211,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 636,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 65,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 48,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1043,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1358,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1003,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1114,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 835,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 891,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1255,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1080,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1163,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1088,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 1083,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::homepage loads and displays heading",
+   "title": "homepage loads and displays heading",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 1078,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 310,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 9,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 213,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 635,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 58,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 62,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1164,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1149,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1148,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1151,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 860,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 999,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1002,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1077,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1196,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1092,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 1084,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::homepage loads and displays heading",
+   "title": "homepage loads and displays heading",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 1091,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 330,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 11,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 209,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 590,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 46,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 39,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1135,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1222,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1000,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1129,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 868,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 890,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 985,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1154,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1235,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1108,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 1073,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::homepage loads successfully",
+   "title": "homepage loads successfully",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 1095,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 328,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 10,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 210,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 591,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 36,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 45,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1186,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1218,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1028,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1126,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 960,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 903,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1055,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1169,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1233,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1110,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 1099,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] parallel/test1.spec.ts::h1 should be visible",
+   "title": "h1 should be visible",
+   "file": "parallel/test1.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 1171,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 333,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 8,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 210,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 639,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 46,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 60,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1167,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1214,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1003,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1158,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 882,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 890,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 918,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1157,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1284,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1173,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 1085,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] parallel/test2.spec.ts::h2 should be visible",
+   "title": "h2 should be visible",
+   "file": "parallel/test2.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 699,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('h2')\nExpected: visible\nError: strict mode violation: locator('h2') resolved to 4 elements:\n    1) <h2 class=\"featureSectionTitle__Rac\">Built for testing</h2> aka getByRole('heading', { name: 'Built for testing' })\n    2) <h2 class=\"featureSectionTitle__Rac\">Built for AI agents</h2> aka getByRole('heading', { name: 'Built for AI agents' })\n    3) <h2 class=\"featureSectionTitle__Rac\">Powerful tooling</h2> aka getByRole('heading', { name: 'Powerful tooling' })\n    4) <h2>Chosen by companies and open source projects</h2> aka getByRole('heading', { name: 'Chosen by companies and open' })\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('h2')\n\n    at example/parallel/test2.spec.ts:5:36",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 83,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 43,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 455,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h2')",
+     "duration": 19,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 54,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1128,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1202,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 984,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1123,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 793,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 933,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 909,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 699,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 730,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 699,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0.3,
+   "grade": "D",
+   "stability": 64,
+   "averageDuration": 920,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::navigation links are present",
+   "title": "navigation links are present",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 673,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 56,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 458,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 45,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 637,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 687,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 666,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 642,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 642,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 4673,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 840,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 635,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 646,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 667,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 100,
+   "averageDuration": 1074,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] parallel/test2.spec.ts::h2 should be visible",
+   "title": "h2 should be visible",
+   "file": "parallel/test2.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 829,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('h2')\nExpected: visible\nError: strict mode violation: locator('h2') resolved to 4 elements:\n    1) <h2 class=\"featureSectionTitle__Rac\">Built for testing</h2> aka getByRole('heading', { name: 'Built for testing' })\n    2) <h2 class=\"featureSectionTitle__Rac\">Built for AI agents</h2> aka getByRole('heading', { name: 'Built for AI agents' })\n    3) <h2 class=\"featureSectionTitle__Rac\">Powerful tooling</h2> aka getByRole('heading', { name: 'Powerful tooling' })\n    4) <h2>Chosen by companies and open source projects</h2> aka getByRole('heading', { name: 'Chosen by companies and open' })\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for locator('h2')\n\n    at example/parallel/test2.spec.ts:5:36",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 91,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 46,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 490,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h2')",
+     "duration": 25,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 36,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 672,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 733,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 641,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 698,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 665,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 4299,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 700,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 829,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 777,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 775,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0.3,
+   "grade": "D",
+   "stability": 64,
+   "averageDuration": 1079,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::broken login - element not found",
+   "title": "broken login - element not found",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 2694,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#login-button-that-does-not-exist')\nExpected: visible\nTimeout: 2000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 2000ms\n  - waiting for locator('#login-button-that-does-not-exist')\n\n    at example/demo.spec.ts:17:67",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 75,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 449,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('#login-button-that-does-not-exist')",
+     "duration": 2012,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 45,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2715,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2719,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2645,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2728,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2735,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2711,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2719,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2707,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2777,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2689,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 2715,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::broken login - element not found",
+   "title": "broken login - element not found",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 2824,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#login-button-that-does-not-exist')\nExpected: visible\nTimeout: 2000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 2000ms\n  - waiting for locator('#login-button-that-does-not-exist')\n\n    at example/demo.spec.ts:17:67",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 93,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 4,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 46,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 474,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('#login-button-that-does-not-exist')",
+     "duration": 2010,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 72,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2769,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2770,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2682,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2740,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2779,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2747,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2726,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2830,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2796,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2827,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 2767,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::missing element causes failure",
+   "title": "missing element causes failure",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 2703,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#nonexistent-element')\nExpected: visible\nTimeout: 2000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 2000ms\n  - waiting for locator('#nonexistent-element')\n\n    at example/feature-demo.spec.ts:25:54",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 82,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 42,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 452,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('#nonexistent-element')",
+     "duration": 2005,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 70,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2704,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2663,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2707,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2672,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2662,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2681,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2708,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2670,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2733,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2676,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 2688,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::navigation links are present",
+   "title": "navigation links are present",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 5881,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('link', { name: 'Docs' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('link', { name: 'Docs' })\n\n    at example/feature-demo.spec.ts:18:58",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 83,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 43,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 469,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 5012,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 140,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5766,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5782,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5803,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5751,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5821,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5804,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5795,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5783,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5828,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5768,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 5790,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::incorrect text content causes failure",
+   "title": "incorrect text content causes failure",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 2687,
+   "retry": 2,
+   "error": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  locator('h1')\nExpected: \"This text does not exist\"\nReceived: \"Playwright enables reliable web automation for testing, scripting, and AI\u00a0agents.\"\nTimeout:  2000ms\n\nCall log:\n  - Expect \"toHaveText\" with timeout 2000ms\n  - waiting for locator('h1')\n    6 \u00d7 locator resolved to <h1 class=\"hero__title heroTitle_ohkl\">\u2026</h1>\n      - unexpected value \"Playwright enables reliable web automation for testing, scripting, and AI\u00a0agents.\"\n\n    at example/feature-demo.spec.ts:30:36",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 91,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 46,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 451,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toHaveText\" locator('h1')",
+     "duration": 2013,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 38,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2688,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2711,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2662,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2716,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2703,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2735,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2669,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2679,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2698,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2728,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 2699,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::slow navigation test",
+   "title": "slow navigation test",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 3656,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 89,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Wait for timeout",
+     "duration": 3004,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 478,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 29,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3677,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3665,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 7426,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3635,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3643,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3647,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3674,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3586,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3576,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3583,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 4011,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::slow navigation test",
+   "title": "slow navigation test",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 3721,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 80,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Wait for timeout",
+     "duration": 3004,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 452,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 26,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3694,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3690,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3633,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3708,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3682,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3680,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3665,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3741,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3688,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 3673,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 3685,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::flaky behavior - random failure",
+   "title": "flaky behavior - random failure",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 630,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 449,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 48,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 642,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 669,
+     "retry": 1,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 611,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 611,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 649,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 668,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 643,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 572,
+     "retry": 1,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 667,
+     "retry": 1,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 1653,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0.1,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": 739,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::skipped test - not implemented yet",
+   "title": "skipped test - not implemented yet",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "skipped",
+   "outcome": "skipped",
+   "duration": 0,
+   "retry": 0,
+   "error": null,
+   "steps": [],
+   "history": [
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": null,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": null,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::known issue - needs fixing",
+   "title": "known issue - needs fixing",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "skipped",
+   "outcome": "skipped",
+   "duration": 95,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 42,
+     "category": "pw:api"
+    },
+    {
+     "title": "Close context",
+     "duration": 30,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 91,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 91,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 88,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 92,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 90,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 91,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 91,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 87,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 88,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 113,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": null,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": null,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::flaky behavior - random failure",
+   "title": "flaky behavior - random failure",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 716,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 446,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 42,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 708,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 643,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 625,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 653,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 673,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 648,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 686,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 709,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 743,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 649,
+     "retry": 1,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 674,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::skipped test - not implemented yet",
+   "title": "skipped test - not implemented yet",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "skipped",
+   "outcome": "skipped",
+   "duration": 0,
+   "retry": 0,
+   "error": null,
+   "steps": [],
+   "history": [
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": null,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": null,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::feature behind flag @experimental",
+   "title": "feature behind flag @experimental",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 621,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 432,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 16,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 53,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 631,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 615,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 636,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 609,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 625,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 659,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 725,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 617,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 573,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 572,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [
+    "@experimental"
+   ],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 626,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::known issue - needs fixing",
+   "title": "known issue - needs fixing",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "skipped",
+   "outcome": "skipped",
+   "duration": 112,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Close context",
+     "duration": 24,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 76,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 78,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 108,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 76,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 76,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 110,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 106,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 76,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 110,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 97,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": null,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": null,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::regression test for bug #123",
+   "title": "regression test for bug #123",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 640,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 43,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 455,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 46,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 601,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 652,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 699,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 642,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 627,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 651,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 630,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 567,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 622,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 565,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 626,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::feature behind flag @experimental",
+   "title": "feature behind flag @experimental",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 730,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 41,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 452,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 41,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 622,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 645,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 648,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 625,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 681,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 674,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 856,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 596,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 699,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 715,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [
+    "@experimental"
+   ],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 676,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::critical path with multiple concerns",
+   "title": "critical path with multiple concerns",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 646,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 43,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 457,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 16,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 50,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 598,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 621,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 613,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 655,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 4050,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 615,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 610,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 621,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 562,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 620,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 100,
+   "averageDuration": 957,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] demo.spec.ts::documentation link works",
+   "title": "documentation link works",
+   "file": "demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 610,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 39,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to Playwright homepage",
+     "duration": 424,
+     "category": "test.step"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 423,
+     "category": "pw:api"
+    },
+    {
+     "title": "Verify docs link is visible",
+     "duration": 18,
+     "category": "test.step"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 54,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 608,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 598,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 631,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 629,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 665,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 645,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1870,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 577,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 564,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 579,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 737,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::feature not yet implemented",
+   "title": "feature not yet implemented",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "skipped",
+   "outcome": "skipped",
+   "duration": 0,
+   "retry": 0,
+   "error": null,
+   "steps": [],
+   "history": [
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": null,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": null,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::regression test for bug #123",
+   "title": "regression test for bug #123",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 5878,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('link', { name: 'Docs' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('link', { name: 'Docs' })\n\n    at example/demo.spec.ts:72:26",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 79,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 48,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 457,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 5014,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 134,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5787,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5827,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5824,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5754,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5804,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5797,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5822,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5860,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 6016,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5864,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 5836,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::flaky network-dependent check",
+   "title": "flaky network-dependent check",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "flaky",
+   "duration": 675,
+   "retry": 1,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 86,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 486,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 19,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 42,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 660,
+     "retry": 1,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 618,
+     "retry": 1,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 598,
+     "retry": 1,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 642,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 675,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 682,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 692,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 687,
+     "retry": 1,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 588,
+     "retry": 1,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 636,
+     "retry": 1,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": 648,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::missing element causes failure",
+   "title": "missing element causes failure",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 2807,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#nonexistent-element')\nExpected: visible\nTimeout: 2000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 2000ms\n  - waiting for locator('#nonexistent-element')\n\n    at example/feature-demo.spec.ts:25:54",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 83,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 43,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 452,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('#nonexistent-element')",
+     "duration": 2010,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 75,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2725,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2710,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 7619,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2712,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2752,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2725,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2705,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2791,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2862,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2756,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 3236,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::@smoke homepage renders correctly",
+   "title": "@smoke homepage renders correctly",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 664,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 39,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 477,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 50,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 620,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 635,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 609,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 635,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 631,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 610,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 635,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 614,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 612,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [
+    "@smoke"
+   ],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 624,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::@regression docs link navigates correctly",
+   "title": "@regression docs link navigates correctly",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 624,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 445,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 19,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 47,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 614,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 630,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 614,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 627,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 649,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 621,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 660,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 609,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 586,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 623,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [
+    "@regression"
+   ],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 623,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::slow page load scenario",
+   "title": "slow page load scenario",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 2590,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 37,
+     "category": "pw:api"
+    },
+    {
+     "title": "Wait for timeout",
+     "duration": 2002,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 439,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 16,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 25,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2602,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2597,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2526,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2637,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2594,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2644,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2605,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2625,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2657,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2632,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 2612,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::known issue tracked in Jira",
+   "title": "known issue tracked in Jira",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 631,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 38,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 452,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 15,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 48,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 601,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 608,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 636,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 612,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 627,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 602,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 575,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 647,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 639,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 619,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::experimental feature behind flag",
+   "title": "experimental feature behind flag",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 623,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 41,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 433,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 57,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 639,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 601,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 630,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 641,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 608,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 659,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 618,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 699,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 626,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 636,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::search input is accessible",
+   "title": "search input is accessible",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 622,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 42,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 436,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('button', { name: 'Search' })",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 49,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 606,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 612,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 623,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 603,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 610,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 606,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 550,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 612,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 617,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 608,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::search opens dialog",
+   "title": "search opens dialog",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 744,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 440,
+     "category": "pw:api"
+    },
+    {
+     "title": "Click getByRole('button', { name: 'Search' })",
+     "duration": 57,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('.DocSearch-Modal')",
+     "duration": 105,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 29,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 777,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1039,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 892,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 780,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 989,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 789,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 792,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 731,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 770,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 686,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 825,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::API section is navigable",
+   "title": "API section is navigable",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 658,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 39,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/docs/api/class-playwright\"",
+     "duration": 506,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toContainText\" locator('h1')",
+     "duration": 36,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 33,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 592,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 692,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 584,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 693,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 574,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 600,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 711,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 693,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 603,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 638,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::multi-step user journey",
+   "title": "multi-step user journey",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 640,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to homepage",
+     "duration": 455,
+     "category": "test.step"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 455,
+     "category": "pw:api"
+    },
+    {
+     "title": "Verify main heading",
+     "duration": 18,
+     "category": "test.step"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Check docs link",
+     "duration": 5,
+     "category": "test.step"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 4,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 49,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 593,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 668,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 664,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 628,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 644,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 635,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 731,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 656,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 646,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 618,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 648,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Desktop Chrome] feature-demo.spec.ts::API request triggers network logging",
+   "title": "API request triggers network logging",
+   "file": "feature-demo.spec.ts",
+   "project": "Desktop Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 651,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 38,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 466,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 50,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 598,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 643,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 624,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 605,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 619,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 641,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 623,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 585,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 619,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 620,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::incorrect text content causes failure",
+   "title": "incorrect text content causes failure",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 2823,
+   "retry": 2,
+   "error": "Error: expect(locator).toHaveText(expected) failed\n\nLocator:  locator('h1')\nExpected: \"This text does not exist\"\nReceived: \"Playwright enables reliable web automation for testing, scripting, and AI\u00a0agents.\"\nTimeout:  2000ms\n\nCall log:\n  - Expect \"toHaveText\" with timeout 2000ms\n  - waiting for locator('h1')\n    6 \u00d7 locator resolved to <h1 class=\"hero__title heroTitle_ohkl\">\u2026</h1>\n      - unexpected value \"Playwright enables reliable web automation for testing, scripting, and AI\u00a0agents.\"\n\n    at example/feature-demo.spec.ts:30:36",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 103,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 48,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 466,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toHaveText\" locator('h1')",
+     "duration": 2016,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 71,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2707,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2730,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2654,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2735,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2770,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2716,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2737,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2695,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2810,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 2755,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 2731,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::critical path with multiple concerns",
+   "title": "critical path with multiple concerns",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 769,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 76,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 43,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 489,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 40,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 698,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 702,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 636,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 655,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 703,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 697,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 710,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 729,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 741,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 817,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 709,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] demo.spec.ts::documentation link works",
+   "title": "documentation link works",
+   "file": "demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 5900,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('link', { name: 'Docs' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('link', { name: 'Docs' })\n\n    at example/demo.spec.ts:92:28\n    at example/demo.spec.ts:90:14",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 78,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to Playwright homepage",
+     "duration": 482,
+     "category": "test.step"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 481,
+     "category": "pw:api"
+    },
+    {
+     "title": "Verify docs link is visible",
+     "duration": 5012,
+     "category": "test.step"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 5010,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 151,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5783,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5809,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5738,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5817,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5794,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5786,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5792,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5861,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5816,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5781,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 5798,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::feature not yet implemented",
+   "title": "feature not yet implemented",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "skipped",
+   "outcome": "skipped",
+   "duration": 0,
+   "retry": 0,
+   "error": null,
+   "steps": [],
+   "history": [
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": true,
+     "duration": 0,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": null,
+   "grade": "A",
+   "stability": 93,
+   "averageDuration": null,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::flaky network-dependent check",
+   "title": "flaky network-dependent check",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "flaky",
+   "duration": 5996,
+   "retry": 1,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 85,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 5721,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 25,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 24,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 691,
+     "retry": 1,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 677,
+     "retry": 1,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 603,
+     "retry": 1,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 687,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 690,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 671,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 679,
+     "retry": 1,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 678,
+     "retry": 1,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 742,
+     "retry": 1,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 730,
+     "retry": 1,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "C",
+   "stability": 73,
+   "averageDuration": 685,
+   "isRegression": true,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::@smoke homepage renders correctly",
+   "title": "@smoke homepage renders correctly",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 700,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 37,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 441,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 16,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 39,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 666,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 670,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 684,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 649,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 616,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 662,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 676,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 685,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 699,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 708,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [
+    "@smoke"
+   ],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 672,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::@regression docs link navigates correctly",
+   "title": "@regression docs link navigates correctly",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 5887,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('link', { name: 'Docs' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('link', { name: 'Docs' })\n\n    at example/feature-demo.spec.ts:64:26",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 90,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 455,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 5014,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 146,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5788,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5821,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5806,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5808,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5779,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5788,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5839,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5820,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5875,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5759,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [
+    "@regression"
+   ],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 5808,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::slow page load scenario",
+   "title": "slow page load scenario",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 2737,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 91,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 47,
+     "category": "pw:api"
+    },
+    {
+     "title": "Wait for timeout",
+     "duration": 2005,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 468,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 16,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 25,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 6395,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2692,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2611,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2712,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2670,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2686,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2706,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2729,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2754,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 2746,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 3070,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::known issue tracked in Jira",
+   "title": "known issue tracked in Jira",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 807,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 0,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 40,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 553,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 38,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 644,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 636,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 4445,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 644,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 677,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 683,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 729,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 689,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 715,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 629,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 100,
+   "averageDuration": 1049,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::experimental feature behind flag",
+   "title": "experimental feature behind flag",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 704,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 38,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 453,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 16,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 35,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 672,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 643,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 592,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 660,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 638,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 640,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 649,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 627,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 715,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 665,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 650,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::search input is accessible",
+   "title": "search input is accessible",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 700,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 39,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 441,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('button', { name: 'Search' })",
+     "duration": 18,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 39,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 793,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 677,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 625,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 665,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 617,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 631,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 691,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 625,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 655,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 637,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 662,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::search opens dialog",
+   "title": "search opens dialog",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 819,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 38,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 465,
+     "category": "pw:api"
+    },
+    {
+     "title": "Click getByRole('button', { name: 'Search' })",
+     "duration": 61,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('.DocSearch-Modal')",
+     "duration": 105,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 25,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 751,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 790,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 1069,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 814,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 775,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 819,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 781,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 961,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 749,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 779,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 829,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::API section is navigable",
+   "title": "API section is navigable",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 557,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Create context",
+     "duration": 1,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 44,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/docs/api/class-playwright\"",
+     "duration": 373,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toContainText\" locator('h1')",
+     "duration": 39,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 36,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 625,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 588,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 587,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 611,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 608,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 607,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 604,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 517,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 715,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 600,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 606,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::multi-step user journey",
+   "title": "multi-step user journey",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "failed",
+   "outcome": "unexpected",
+   "duration": 5869,
+   "retry": 2,
+   "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('link', { name: 'Docs' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('link', { name: 'Docs' })\n\n    at example/feature-demo.spec.ts:123:60\n    at example/feature-demo.spec.ts:122:14",
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 92,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 2,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 45,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to homepage",
+     "duration": 470,
+     "category": "test.step"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 469,
+     "category": "pw:api"
+    },
+    {
+     "title": "Verify main heading",
+     "duration": 19,
+     "category": "test.step"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 17,
+     "category": "expect"
+    },
+    {
+     "title": "Check docs link",
+     "duration": 5010,
+     "category": "test.step"
+    },
+    {
+     "title": "Expect \"toBeVisible\" getByRole('link', { name: 'Docs' })",
+     "duration": 5009,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 108,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5830,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5958,
+     "retry": 2,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5775,
+     "retry": 2,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5829,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5802,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5822,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5858,
+     "retry": 2,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5783,
+     "retry": 2,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5823,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": false,
+     "skipped": false,
+     "duration": 5736,
+     "retry": 2,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 1,
+   "grade": "F",
+   "stability": 33,
+   "averageDuration": 5822,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 1,
+    "videos": 1,
+    "traces": 1
+   }
+  },
+  {
+   "id": "[Mobile Chrome] feature-demo.spec.ts::API request triggers network logging",
+   "title": "API request triggers network logging",
+   "file": "feature-demo.spec.ts",
+   "project": "Mobile Chrome",
+   "status": "passed",
+   "outcome": "expected",
+   "duration": 740,
+   "retry": 0,
+   "error": null,
+   "steps": [
+    {
+     "title": "Launch browser",
+     "duration": 87,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create context",
+     "duration": 3,
+     "category": "pw:api"
+    },
+    {
+     "title": "Create page",
+     "duration": 44,
+     "category": "pw:api"
+    },
+    {
+     "title": "Navigate to \"/\"",
+     "duration": 453,
+     "category": "pw:api"
+    },
+    {
+     "title": "Expect \"toBeVisible\" locator('h1')",
+     "duration": 19,
+     "category": "expect"
+    },
+    {
+     "title": "Close context",
+     "duration": 39,
+     "category": "pw:api"
+    }
+   ],
+   "history": [
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 676,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:08:09.212Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 675,
+     "retry": 0,
+     "timestamp": "2026-03-04T22:18:23.110Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 692,
+     "retry": 0,
+     "timestamp": "2026-03-05T10:30:02.569Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 699,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:42:15.462Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 717,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:48:05.646Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 708,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:51:34.965Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 689,
+     "retry": 0,
+     "timestamp": "2026-03-06T20:54:24.687Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 796,
+     "retry": 0,
+     "timestamp": "2026-08-06T14:23:26.146Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 743,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:24:44.727Z"
+    },
+    {
+     "passed": true,
+     "skipped": false,
+     "duration": 684,
+     "retry": 0,
+     "timestamp": "2026-08-06T15:41:50.127Z"
+    }
+   ],
+   "tags": [],
+   "flakinessScore": 0,
+   "grade": "A",
+   "stability": 97,
+   "averageDuration": 708,
+   "isRegression": false,
+   "attachments": {
+    "screenshots": 0,
+    "videos": 0,
+    "traces": 0
+   }
+  }
+ ]
+}

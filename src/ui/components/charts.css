@@ -1,0 +1,62 @@
+.spark {
+  display: block;
+  color: var(--text-muted);
+}
+
+.spark__last {
+  fill: var(--text);
+}
+
+.seg-pass {
+  background: var(--pass-fg);
+}
+
+.seg-fail {
+  background: var(--fail-fg);
+}
+
+.seg-flaky {
+  background: var(--flaky-fg);
+}
+
+.seg-skip {
+  background: var(--border-strong);
+}
+
+.minibar {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.minibar__track {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+
+.minibar__seg {
+  min-width: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.minibar__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  color: var(--text-muted);
+}
+
+.minibar__value {
+  font-weight: 600;
+}
+
+.strip {
+  display: flex;
+  gap: 2px;
+  height: 16px;
+}
+
+.strip__cell {
+  width: 6px;
+  border-radius: var(--radius-sm);
+}
