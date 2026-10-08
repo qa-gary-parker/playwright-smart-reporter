@@ -1,7 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import AdmZip from 'adm-zip';
 import type { NetworkLogEntry, NetworkLogData } from '../types';
+import { readTrace, type TraceContents } from './trace-reader';
 
 export interface NetworkCollectorOptions {
   /** Filter URLs - only include URLs containing this string */
@@ -34,6 +32,20 @@ const STATIC_CONTENT_TYPES = [
   'text/javascript',
 ];
 
+function emptyNetworkLog(): NetworkLogData {
+  return {
+    entries: [],
+    totalRequests: 0,
+    totalDuration: 0,
+    summary: {
+      byStatus: {},
+      byMethod: {},
+      slowest: null,
+      errors: [],
+    },
+  };
+}
+
 /**
  * Collects network logs from Playwright trace files
  */
@@ -54,70 +66,50 @@ export class NetworkCollector {
    * Extract network logs from a trace zip file
    */
   async collectFromTrace(tracePath: string): Promise<NetworkLogData> {
-    const result: NetworkLogData = {
-      entries: [],
-      totalRequests: 0,
-      totalDuration: 0,
-      summary: {
-        byStatus: {},
-        byMethod: {},
-        slowest: null,
-        errors: [],
-      },
-    };
-
-    if (!tracePath || !fs.existsSync(tracePath)) {
-      return result;
-    }
-
     try {
-      const zip = new AdmZip(tracePath);
-      const networkEntry = zip.getEntry('0-trace.network');
-
-      if (!networkEntry) {
-        return result;
-      }
-
-      const networkData = networkEntry.getData().toString('utf8');
-      const lines = networkData.trim().split('\n');
-
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.type === 'resource-snapshot' && parsed.snapshot) {
-            const entry = this.parseNetworkEntry(parsed.snapshot);
-            if (entry && this.shouldInclude(entry)) {
-              result.entries.push(entry);
-              result.totalRequests++;
-              result.totalDuration += entry.duration;
-
-              // Update summary
-              const statusGroup = Math.floor(entry.status / 100) * 100;
-              result.summary.byStatus[statusGroup] = (result.summary.byStatus[statusGroup] || 0) + 1;
-              result.summary.byMethod[entry.method] = (result.summary.byMethod[entry.method] || 0) + 1;
-
-              if (!result.summary.slowest || entry.duration > result.summary.slowest.duration) {
-                result.summary.slowest = entry;
-              }
-
-              if (entry.status >= 400) {
-                result.summary.errors.push(entry);
-              }
-            }
-          }
-        } catch {
-          // Skip malformed lines
-        }
-      }
-
-      // Sort by timestamp and limit entries
-      result.entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      if (this.options.maxEntries && result.entries.length > this.options.maxEntries) {
-        result.entries = result.entries.slice(0, this.options.maxEntries);
-      }
-
+      return this.collectFromContents(readTrace(tracePath));
     } catch (err) {
       console.warn(`Failed to parse trace file: ${tracePath}`, err);
+      return emptyNetworkLog();
+    }
+  }
+
+  /**
+   * Build network logs from an already-read trace (first context only, as always)
+   */
+  collectFromContents(trace: TraceContents): NetworkLogData {
+    const result = emptyNetworkLog();
+
+    for (const snapshot of trace.contexts[0]?.resources ?? []) {
+      try {
+        const entry = this.parseNetworkEntry(snapshot);
+        if (entry && this.shouldInclude(entry)) {
+          result.entries.push(entry);
+          result.totalRequests++;
+          result.totalDuration += entry.duration;
+
+          // Update summary
+          const statusGroup = Math.floor(entry.status / 100) * 100;
+          result.summary.byStatus[statusGroup] = (result.summary.byStatus[statusGroup] || 0) + 1;
+          result.summary.byMethod[entry.method] = (result.summary.byMethod[entry.method] || 0) + 1;
+
+          if (!result.summary.slowest || entry.duration > result.summary.slowest.duration) {
+            result.summary.slowest = entry;
+          }
+
+          if (entry.status >= 400) {
+            result.summary.errors.push(entry);
+          }
+        }
+      } catch {
+        // Skip malformed entries
+      }
+    }
+
+    // Sort by timestamp and limit entries
+    result.entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    if (this.options.maxEntries && result.entries.length > this.options.maxEntries) {
+      result.entries = result.entries.slice(0, this.options.maxEntries);
     }
 
     return result;
