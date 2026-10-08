@@ -6,6 +6,7 @@ import type {
   RunComparison,
   A11yImpact,
 } from '../types';
+import type { CoverageSummary } from '../report-data/schema';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
@@ -15,6 +16,7 @@ export class QualityGateEvaluator {
     config: QualityGateConfig,
     results: TestResultData[],
     comparison?: RunComparison,
+    coverage?: CoverageSummary,
   ): QualityGateResult {
     const rules: QualityGateRuleResult[] = [];
 
@@ -47,6 +49,9 @@ export class QualityGateEvaluator {
     }
     if (config.maxA11ySerious !== undefined) {
       rules.push(this.evaluateMaxA11y('maxA11ySerious', config.maxA11ySerious, results, 'serious'));
+    }
+    if (config.minCoverage !== undefined) {
+      rules.push(this.evaluateMinCoverage(config.minCoverage, coverage));
     }
 
     const passed = rules.every(r => r.passed);
@@ -175,6 +180,25 @@ export class QualityGateEvaluator {
       passed: newFailureCount === 0,
       actual: String(newFailureCount),
       threshold: 'new failures',
+    };
+  }
+
+  // No coverage data fails the rule: a coverage floor that nothing measured is a misconfigured run.
+  private evaluateMinCoverage(threshold: number, coverage?: CoverageSummary): QualityGateRuleResult {
+    if (!coverage) {
+      return {
+        rule: 'minCoverage',
+        passed: false,
+        actual: 'no data',
+        threshold: `≥ ${threshold}%`,
+      };
+    }
+
+    return {
+      rule: 'minCoverage',
+      passed: coverage.lines.pct >= threshold,
+      actual: `${coverage.lines.pct}%`,
+      threshold: `≥ ${threshold}%`,
     };
   }
 }

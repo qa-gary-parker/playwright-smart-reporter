@@ -9,6 +9,7 @@ export const ruleLabels: Record<string, string> = {
   maxA11yViolations: 'Max a11y violations',
   maxA11yCritical: 'Max a11y critical',
   maxA11ySerious: 'Max a11y serious',
+  minCoverage: 'Min line coverage',
 };
 
 function formatRuleLine(rule: QualityGateRuleResult): string {

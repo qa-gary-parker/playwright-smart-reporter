@@ -518,6 +518,8 @@ export interface QualityGateConfig {
   maxA11yViolations?: number;
   maxA11yCritical?: number;
   maxA11ySerious?: number;
+  // Phase 6: Code coverage (minimum line coverage percentage)
+  minCoverage?: number;
 }
 
 export interface QualityGateRuleResult {

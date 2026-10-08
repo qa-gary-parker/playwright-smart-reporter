@@ -10,6 +10,7 @@ import type {
   CausalTimeline,
   QualityGateResult,
 } from '../types';
+import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
 
 export function getReporterVersion(): string {
   try {
@@ -49,6 +50,11 @@ export interface JsonExportData {
   };
   // Phase 5: CI surface integrations
   qualityGates?: QualityGateResult;
+  // Phase 6: Code coverage (totals only; per-line hits and source live in the report data)
+  coverage?: {
+    summary: CoverageSummary;
+    files: Array<CoverageSummary & { path: string }>;
+  };
 }
 
 export interface JsonTestEntry {
@@ -100,6 +106,7 @@ export function exportJsonData(
   basename?: string,
   qualityGateResult?: QualityGateResult,
   rootDir?: string,
+  coverage?: ReportCoverage,
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -186,6 +193,10 @@ export function exportJsonData(
       summaries: history.summaries,
     },
     qualityGates: qualityGateResult,
+    coverage: coverage && {
+      summary: coverage.summary,
+      files: coverage.files.map(({ path, lines, functions, branches }) => ({ path, lines, functions, branches })),
+    },
   };
 
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));

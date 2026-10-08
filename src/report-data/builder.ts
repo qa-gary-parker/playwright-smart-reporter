@@ -18,6 +18,7 @@ import { isFlakyTest } from '../utils/flakiness';
 import {
   SCHEMA_VERSION,
   type ComparisonKey,
+  type ReportCoverage,
   type ReportData,
   type ReportSummary,
   type ReportTest,
@@ -39,6 +40,8 @@ export interface ReportInput {
   quarantineEntries?: QuarantineEntry[];
   quarantineThreshold?: number;
   aiSuiteHealthSummary?: string;
+  // Phase 6: Code coverage is merged by the reporter before gates run, so it arrives ready-built.
+  coverage?: ReportCoverage;
 }
 
 const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements'];
@@ -138,5 +141,6 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     ...(forecast && { forecastSummary: forecast.summary }),
     ownership: summarizeOwnership(tests),
     a11y: summarizeA11y(results),
+    coverage: input.coverage,
   };
 }

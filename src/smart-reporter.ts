@@ -36,6 +36,7 @@ import {
   AttachmentCollector,
   NetworkCollector,
   A11yCollector,
+  CoverageCollector,
 } from './collectors';
 
 // ============================================================================
@@ -75,6 +76,7 @@ import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timel
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
 import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
+import type { ReportCoverage } from './report-data/schema';
 
 // ============================================================================
 // Smart Reporter
@@ -96,6 +98,7 @@ class SmartReporter implements Reporter {
   private attachmentCollector: AttachmentCollector;
   private networkCollector: NetworkCollector;
   private a11yCollector = new A11yCollector();
+  private coverageCollector?: CoverageCollector;
 
   // Analyzers
   private flakinessAnalyzer!: FlakinessAnalyzer;
@@ -193,6 +196,7 @@ class SmartReporter implements Reporter {
       cspSafe: this.options.cspSafe,
       outputDir: outputDir,
     });
+    this.coverageCollector = new CoverageCollector(this.outputDir);
 
     // Initialize all analyzers with thresholds from options
     const thresholds = this.options.thresholds;
@@ -247,6 +251,9 @@ class SmartReporter implements Reporter {
   async onTestEnd(test: TestCase, result: TestResult): Promise<void> {
     const testId = this.getTestId(test);
     const file = path.relative(this.outputDir, test.location.file);
+    // Phase 6: Code coverage. Started before any await: Playwright does not await onTestEnd,
+    // and onEnd waits for every collect() it has seen. Errors are caught inside the collector.
+    void this.coverageCollector?.collect(result);
 
     // Collect test components
     const steps = this.stepCollector.extractSteps(result);
@@ -706,12 +713,20 @@ class SmartReporter implements Reporter {
 
     const exportDir = path.dirname(outputPath);
 
+    // Phase 6: Code coverage - merged before gates so minCoverage can read it
+    let coverage: ReportCoverage | undefined;
+    try {
+      coverage = await this.coverageCollector?.finish();
+    } catch (err) {
+      console.warn('⚠️  Coverage merge failed:', err);
+    }
+
     // Quality gates - evaluate BEFORE HTML generation so results embed in report
     let qualityGateResult: QualityGateResult | undefined;
     if (this.options.qualityGates) {
       try {
         const evaluator = new QualityGateEvaluator();
-        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison);
+        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary);
       } catch (err) {
         console.warn('⚠️  Quality gate evaluation failed:', err);
       }
@@ -747,6 +762,7 @@ class SmartReporter implements Reporter {
       quarantineEntries: quarantineResult?.entries,
       quarantineThreshold: this.options.quarantine?.threshold,
       aiSuiteHealthSummary,
+      coverage,
     };
 
     const reportData = buildReportData(reportInput);
@@ -763,6 +779,10 @@ class SmartReporter implements Reporter {
     console.log(`\n📊 Smart Report: ${outputPath}`);
     console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
     console.log(`   Or open directly: open "${outputPath}"`);
+    if (coverage) {
+      const { lines } = coverage.summary;
+      console.log(`   Coverage: ${lines.pct}% of lines (${lines.covered}/${lines.total}) across ${coverage.files.length} file(s)`);
+    }
 
 
     if (this.options.exportJson) {
@@ -778,6 +798,7 @@ class SmartReporter implements Reporter {
           reportInput.outputBasename,
           qualityGateResult,
           this.outputDir,
+          coverage,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {

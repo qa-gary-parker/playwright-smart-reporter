@@ -444,6 +444,32 @@ describe('QualityGateEvaluator', () => {
     });
   });
 
+  describe('minCoverage', () => {
+    const coverage = (pct: number) => ({
+      lines: { total: 18, covered: 12, pct },
+      functions: { total: 5, covered: 3, pct: 60 },
+      branches: { total: 4, covered: 4, pct: 100 },
+    });
+
+    it('passes when line coverage equals the threshold', () => {
+      const result = evaluator.evaluate({ minCoverage: 66.66 }, [createTestResult()], undefined, coverage(66.66));
+      expect(result.rules).toEqual([{ rule: 'minCoverage', passed: true, actual: '66.66%', threshold: '≥ 66.66%' }]);
+      expect(result.passed).toBe(true);
+    });
+
+    it('fails when line coverage is below the threshold', () => {
+      const result = evaluator.evaluate({ minCoverage: 70 }, [createTestResult()], undefined, coverage(66.66));
+      expect(result.rules).toEqual([{ rule: 'minCoverage', passed: false, actual: '66.66%', threshold: '≥ 70%' }]);
+      expect(result.passed).toBe(false);
+    });
+
+    it('fails when no coverage was collected', () => {
+      const result = evaluator.evaluate({ minCoverage: 0 }, [createTestResult()]);
+      expect(result.rules).toEqual([{ rule: 'minCoverage', passed: false, actual: 'no data', threshold: '≥ 0%' }]);
+      expect(result.passed).toBe(false);
+    });
+  });
+
   // ── Combined rules ──────────────────────────────────────────────────
 
   describe('combined rules', () => {

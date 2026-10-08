@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { TestResult } from '@playwright/test/reporter';
 import type { AttachmentData, CustomAttachment } from '../types';
+import { COVERAGE_ATTACHMENT_NAME } from '../coverage/payload';
 
 export interface AttachmentCollectorOptions {
   cspSafe?: boolean;           // If true, save screenshots as files instead of base64
@@ -63,7 +64,8 @@ export class AttachmentCollector {
     };
 
     // Standard Playwright attachment names to exclude from custom collection
-    const standardNames = new Set(['screenshot', 'video', 'trace']);
+    // Coverage payloads are raw V8 data for the coverage collector, not something to show per test.
+    const standardNames = new Set(['screenshot', 'video', 'trace', COVERAGE_ATTACHMENT_NAME]);
 
     // Collect screenshots (both standard and custom image attachments)
     const screenshots = result.attachments.filter(

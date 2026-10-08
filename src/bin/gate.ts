@@ -5,6 +5,7 @@ import * as path from 'path';
 import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison, A11yResult } from '../types';
 import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
+import type { CoverageSummary } from '../report-data/schema';
 
 interface GateOptions {
   inputPath: string;
@@ -15,6 +16,7 @@ interface GateOptions {
   minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
   noNewFailures?: boolean;
   maxA11yViolations?: number;
+  minCoverage?: number;
 }
 
 function printUsage(): void {
@@ -32,6 +34,7 @@ Options:
   --min-stability-grade <g>   Minimum stability grade (A, B, C, D)
   --no-new-failures           Fail if new failures detected (requires comparison data)
   --max-a11y-violations <n>   Maximum accessibility violations (skipped when no test was scanned)
+  --min-coverage <n>          Minimum line coverage percentage (fails when no coverage was collected)
   -h, --help                  Show this help message
 
 Examples:
@@ -86,6 +89,9 @@ function parseArgs(argv: string[]): GateOptions {
       case '--max-a11y-violations':
         options.maxA11yViolations = parseInt(args[++i], 10);
         break;
+      case '--min-coverage':
+        options.minCoverage = parseFloat(args[++i]);
+        break;
     }
   }
 
@@ -116,6 +122,7 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   if (options.minStabilityGrade !== undefined) config.minStabilityGrade = options.minStabilityGrade;
   if (options.noNewFailures !== undefined) config.noNewFailures = options.noNewFailures;
   if (options.maxA11yViolations !== undefined) config.maxA11yViolations = options.maxA11yViolations;
+  if (options.minCoverage !== undefined) config.minCoverage = options.minCoverage;
 
   return config;
 }
@@ -178,7 +185,8 @@ function main(): void {
     || config.noNewFailures !== undefined
     || config.maxA11yViolations !== undefined
     || config.maxA11yCritical !== undefined
-    || config.maxA11ySerious !== undefined;
+    || config.maxA11ySerious !== undefined
+    || config.minCoverage !== undefined;
 
   if (!hasRules) {
     console.error('Error: No quality gate rules configured. Use --config or inline flags.');
@@ -205,9 +213,10 @@ function main(): void {
   const tests: JsonTestEntry[] = (report.tests as JsonTestEntry[]) || [];
   const results = tests.map(toTestResultData);
   const comparison = report.comparison as RunComparison | undefined;
+  const coverage = (report.coverage as { summary?: CoverageSummary } | undefined)?.summary;
 
   const evaluator = new QualityGateEvaluator();
-  const gateResult = evaluator.evaluate(config, results, comparison);
+  const gateResult = evaluator.evaluate(config, results, comparison, coverage);
 
   console.log(formatGateReport(gateResult));
 

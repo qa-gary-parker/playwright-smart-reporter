@@ -100,4 +100,31 @@ export interface ReportData {
   ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
   // Phase 10: Accessibility (per-test results ride on ReportTest.a11y)
   a11y?: A11ySummary;
+  // Phase 6: Code coverage
+  coverage?: ReportCoverage;
+}
+
+// Percentages follow Istanbul: floored to 2 decimals, 100 when total is 0.
+export interface CoverageTotals {
+  total: number;
+  covered: number;
+  pct: number;
+}
+
+export interface CoverageSummary {
+  lines: CoverageTotals;
+  functions: CoverageTotals;
+  branches: CoverageTotals;
+}
+
+export interface CoverageFile extends CoverageSummary {
+  path: string;
+  // Hits per line summed over every test: index 0 is line 1, null is a line with no statement.
+  hits: Array<number | null>;
+  source?: string;
+}
+
+export interface ReportCoverage {
+  summary: CoverageSummary;
+  files: CoverageFile[];
 }

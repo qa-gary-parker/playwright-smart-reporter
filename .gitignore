@@ -31,6 +31,8 @@ example/.smart-quarantine.json
 example/test-history-premium.json
 example/premium-report.html
 example/timeline/out/
+example/coverage/app/dist/
+example/coverage/coverage-report/
 
 # Pack archives
 *.tgz
@@ -50,4 +52,4 @@ benchmark/specs/
 .worktrees/
 
 # Coverage output
-coverage/
+/coverage/

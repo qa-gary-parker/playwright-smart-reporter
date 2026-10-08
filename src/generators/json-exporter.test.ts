@@ -287,6 +287,17 @@ describe('json-exporter', () => {
       expect(written.history.summaries).toHaveLength(2);
     });
 
+    it('includes coverage totals but not per-line hits or source', () => {
+      const totals = { total: 12, covered: 9, pct: 75 };
+      const summary = { lines: totals, functions: totals, branches: totals };
+      const coverage = { summary, files: [{ path: 'src/math.ts', ...summary, hits: [1, 0], source: 'secret source' }] };
+
+      exportJsonData([createTestResult()], createTestHistory(), Date.now(), {}, undefined, undefined, undefined, undefined, undefined, undefined, coverage);
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.coverage).toEqual({ summary, files: [{ path: 'src/math.ts', ...summary }] });
+    });
+
     it('handles history with undefined summaries', () => {
       const history = createTestHistory({
         runs: [{ runId: 'run-1', timestamp: '2024-01-01T00:00:00Z' }],

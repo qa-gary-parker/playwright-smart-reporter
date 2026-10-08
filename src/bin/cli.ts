@@ -99,7 +99,7 @@ Options:
   }));
 
   const evaluator = new QualityGateEvaluator();
-  const result = evaluator.evaluate(config, results, data.comparison);
+  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary);
 
   console.log(formatGateReport(result));
 

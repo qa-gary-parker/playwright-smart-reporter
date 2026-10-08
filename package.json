@@ -22,6 +22,10 @@
     "./accessibility": {
       "types": "./dist/accessibility/index.d.ts",
       "default": "./dist/accessibility/index.js"
+    },
+    "./coverage": {
+      "types": "./dist/coverage/index.d.ts",
+      "default": "./dist/coverage/index.js"
     }
   },
   "files": [
@@ -40,6 +44,7 @@
     "test:watch": "vitest",
     "test:live-filter": "LIVE_REPORT=1 vitest run src/live/live-filter-integration.test.ts",
     "test:timeline": "TIMELINE_E2E=1 vitest run example/timeline",
+    "test:coverage-example": "npm run build && COVERAGE_E2E=1 vitest run src/coverage/coverage-example.test.ts",
     "test:coverage": "vitest run --coverage",
     "test:demo": "playwright test --config=example/playwright.config.ts",
     "test:merge-local": "rm -rf blob-reports && mkdir -p blob-reports/all && PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/run1 playwright test example/parallel/test1.spec.ts --config=example/playwright-blob.config.ts; PLAYWRIGHT_BLOB_OUTPUT_DIR=blob-reports/run2 playwright test example/parallel/test2.spec.ts --config=example/playwright-blob.config.ts; cp blob-reports/run1/*.zip blob-reports/run2/*.zip blob-reports/all/; node ./dist/merge-history.js blob-reports/run1/test-history.json blob-reports/run2/test-history.json -o blob-reports/all/test-history.json; npx playwright merge-reports --reporter=./dist/smart-reporter.js blob-reports/all"
@@ -106,6 +111,7 @@
     "@vitest/coverage-v8": "^2.1.9",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
+    "c8": "^10.1.3",
     "esbuild": "^0.28.2",
     "preact": "^10.29.8",
     "stylelint": "^17.16.0",
@@ -114,7 +120,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",
+    "@bcoe/v8-coverage": "^1.0.2",
     "adm-zip": "^0.5.16",
-    "pdfkit": "^0.16.0"
+    "pdfkit": "^0.16.0",
+    "v8-to-istanbul": "^9.3.0"
   }
 }

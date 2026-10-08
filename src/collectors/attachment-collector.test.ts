@@ -192,6 +192,17 @@ describe('AttachmentCollector', () => {
       expect(attachments.custom[0].name).toBe('custom-data');
     });
 
+    it('excludes coverage payloads from custom attachments', () => {
+      const result = makeTestResult([
+        { name: 'smart-reporter-coverage', contentType: 'application/vnd.smart-reporter.coverage+json', body: Buffer.from('{}') },
+        { name: 'custom-data', contentType: 'text/plain', body: Buffer.from('data') },
+      ]);
+
+      const attachments = new AttachmentCollector().collectAttachments(result);
+
+      expect(attachments.custom.map((a) => a.name)).toEqual(['custom-data']);
+    });
+
     it('excludes image content types from custom (they go to screenshots)', () => {
       const result = makeTestResult([
         { name: 'visual-diff', contentType: 'image/png', body: Buffer.from('img') },

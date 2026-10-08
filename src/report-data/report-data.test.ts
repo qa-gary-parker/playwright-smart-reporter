@@ -96,6 +96,13 @@ describe('buildReportData', () => {
     expect(buildReportData(input([result({ testId: 'p2' })])).ownership).toBeUndefined();
   });
 
+  it('carries merged coverage into the report data', () => {
+    const totals = { total: 3, covered: 2, pct: 66.66 };
+    const coverage = { summary: { lines: totals, functions: totals, branches: totals }, files: [] };
+    expect(buildReportData(input([], { coverage })).coverage).toBe(coverage);
+    expect(buildReportData(input([])).coverage).toBeUndefined();
+  });
+
   it('applies 2.x feature-flag defaults', () => {
     expect(buildReportData(input([])).config.features).toEqual({
       gallery: true,
