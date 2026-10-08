@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 function write(root: string, rel: string, content = ''): string {
@@ -29,7 +29,8 @@ function write(root: string, rel: string, content = ''): string {
 }
 
 function git(cwd: string, args: string[], email = 'setup@example.com'): void {
-  execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], {
+  // No background maintenance: a detached `git maintenance --auto` can still write into .git during cleanup.
+  execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', '-c', 'maintenance.auto=false', '-c', 'gc.auto=0', ...args], {
     cwd,
     stdio: 'ignore',
     env: {

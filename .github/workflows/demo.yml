@@ -78,7 +78,8 @@ jobs:
 
       # Job summary, failure annotations and one sticky PR comment (this repo's action.yml)
       - name: Publish Smart Report to the pull request
-        if: always() && github.event_name == 'pull_request'
+        # Only when the demo ran far enough to write its data.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && hashFiles('example/smart-report-data.json') != '' }}
         uses: ./
         with:
           data: example/smart-report-data.json
