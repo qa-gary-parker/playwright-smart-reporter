@@ -331,6 +331,8 @@ class SmartReporter implements Reporter {
       testId,
       title: test.title,
       file,
+      line: test.location.line,
+      column: test.location.column,
       status: result.status,
       duration: result.duration,
       retry: result.retry,
@@ -425,9 +427,13 @@ class SmartReporter implements Reporter {
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
     const existingResult = this.resultsMap.get(testId);
+    const attempt = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
+    testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
     if (!existingResult || result.retry > existingResult.retry) {
       // This is a newer attempt - replace the previous one
       this.resultsMap.set(testId, testData);
+    } else {
+      existingResult.attempts = testData.attempts;
     }
 
     // Write live result for real-time dashboard

@@ -8,7 +8,7 @@ import type {
   FailureCluster,
 } from '../types';
 
-function getReporterVersion(): string {
+export function getReporterVersion(): string {
   try {
     const pkgPath = path.resolve(__dirname, '../../package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));

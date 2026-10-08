@@ -129,6 +129,8 @@ export interface SmartReporterOptions {
 
   // Report size optimization
   maxEmbeddedSize?: number;        // Max bytes for inline base64 (default: 5MB). Traces larger are file-referenced.
+  // Where report data lives: inline in the HTML, in a companion <name>-data.js, or chosen by size (default: 'auto')
+  assetMode?: 'inline' | 'external' | 'auto';
 
   // Issue #26: External run ID for consistent IDs across CI shards
   runId?: string;                  // Unique identifier for this test run (e.g. GITHUB_RUN_ID)
@@ -250,10 +252,20 @@ export interface TestAnnotation {
   description?: string;      // Optional description/reason
 }
 
+export interface AttemptData {
+  retry: number;
+  status: TestResultData['status'];
+  duration: number;
+  error?: string;
+  steps: StepData[];
+}
+
 export interface TestResultData {
   testId: string;
   title: string;
   file: string;
+  line?: number;
+  column?: number;
   status: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
   duration: number;
   error?: string;
@@ -293,6 +305,7 @@ export interface TestResultData {
   attachments?: AttachmentData;
   performanceMetrics?: PerformanceMetrics;
   networkLogs?: NetworkLogData;        // NEW: Network logs from trace
+  attempts?: AttemptData[];            // Every attempt in retry order, final attempt last
 }
 
 // NEW: Retry Analysis
