@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.0] - 2026-10-08
+
+### Breaking changes
+- **New report renderer.** The template-string HTML report is replaced by a Preact single-page app built from a versioned `ReportData` payload (`schemaVersion: 3`). The report still opens over `file://` with no server. Failures (the landing view) and Insights replace Overview; Trends and Comparison are tabs of History; filters move from the sidebar to a filter bar. Number keys `1`–`5` now open Failures, All tests, Insights, History, and Gallery.
+- **Theme presets.** `ocean`, `sunset`, `dracula`, `cyberpunk`, `forest`, and `rose` now set the accent colour only, on the active mode. `default`, `light`, `dark`, and `high-contrast` set the mode. No preset value errors.
+- **Report data file.** `assetMode` defaults to `'auto'`: above 32 MB of data the reporter writes `<name>-data.js` next to the HTML. `cspSafe: true` always writes `<name>-data.js`, as well as `<name>.css` and `<name>.js`. Keep these files next to the HTML.
+- **Quality gates fail the run.** A run with a breached reporter-side gate now exits 1. See Fixed.
+- **Requirements.** The Playwright peer dependency is unchanged (`@playwright/test >=1.40.0`). New runtime dependency `@modelcontextprotocol/sdk` 1.31.0 (Node 18 or later), loaded only by the `mcp` command. New optional peer dependency `@axe-core/playwright >=4.0.0`, needed only for accessibility scanning.
+
+### Added
+- **Failures inbox and queues**: Failures, Flaky, Regressions, Quarantined, and All tests, in a virtualised list (10,000 rows tested) with a resizable detail pane. Failures groups by failure cluster.
+- **Test detail** in triage order: error, expected/received diff, source frame, causal timeline, AI analysis, attempts with a step-by-step retry comparison, steps, network, console, attachments, history, accessibility, annotations. Section state is saved in `localStorage`.
+- **Navigation**: command palette (⌘K), filter tokens (`status:`, `tag:`, `file:`, `project:`, `suite:`, `grade:`, `signal:`, `owner:`), grouping by cluster, file, project, suite, tag, status, grade, or owner, hash deep links, and a keyboard map (`?`).
+- **History**: Trends (with a three-run average and markers for runs more than two standard deviations from the mean), a Reliability heatmap (test against run), and Compare. With `enableHistoryDrilldown`, a past run opens read only.
+- **Insights**: stats row with sparklines, outcome bar, and panels for AI summary, quality gate, clusters, at-risk tests, coverage, regressions, slowest, most flaky, fixed, new tests, quarantine, and owners.
+- **Accessibility view** and a per-test Accessibility section.
+- **Theme control** with four modes (System, Light, Dark, High contrast) and seven accents. Geist Sans and Geist Mono are bundled.
+- **Causal failure timeline** (`enableCausalTimeline`, default `true`): steps, network, and console on one time axis for each failed test, with a heuristic first-anomaly suggestion that also feeds the AI prompt. History stores `test.step` durations (`stepDurations`) as the slow-step baseline.
+- **Local AI models** (`ai` option): Ollama via `OLLAMA_HOST`/`OLLAMA_MODEL` and any OpenAI-compatible endpoint. Every AI call has a timeout (`timeoutMs`, default 60 s) and the run has a total cap (`maxTotalMs`, default 300 s).
+- **Flake forecasting** (`forecast`, on by default): names first-try passes whose history trends unstable. Advisory only; it never quarantines or gates. Risks are recorded per run in the history file (`forecasts`).
+- **Ownership and routing** (`ownership`): owners from CODEOWNERS (last match wins) or git authors. Notifications accept `owners` and include only those owners' failures.
+- **Code coverage** (opt-in): import `test` from `playwright-smart-reporter/coverage`, or wrap your own with `withCoverage()`. Collects V8 coverage in Chromium and Istanbul `window.__coverage__` counters in any browser, resolves source maps, and merges across shards through `merge-reports`. The report gains a Coverage view (files least covered first, source with per-line hit counts) and an Insights panel. `qualityGates.minCoverage` and `--min-coverage` on `dist/bin/gate.js` gate on line coverage.
+- **Accessibility scanning** (opt-in): axe-core scans through `playwright-smart-reporter/accessibility` and `withAccessibility()`, with `qualityGates.maxA11yViolations`, `maxA11yCritical`, and `maxA11ySerious`.
+- **CTRF export** (`exportCtrf`): `<name>-ctrf.json`, validated against the CTRF schema.
+- **GitHub integration**: `playwright-smart-reporter github` and a composite action (`action.yml`) write a job summary, error annotations at the failing assertion, and one sticky pull request comment.
+- **Agent-ready output**: `exportFailures` writes a redacted `<name>-failures.json`; `playwright-smart-reporter failures [--json]` prints it; `playwright-smart-reporter mcp` serves it over MCP (`list_failures`, `get_failure`, `get_trace_context`).
+- `assetMode` option (`'inline'`, `'external'`, `'auto'`).
+- The JSON export carries `line`, `column`, `errorLocation`, `rootDir`, the quality gate result, `a11y`, `timeline`, and coverage totals.
+
+### Changed
+- Report data is written one test at a time instead of as one string. At 10,000 tests in the benchmark (`docs/investigations/report-scale.md`): 70 MB of data instead of 401 MB of HTML, and a 412 MB memory peak instead of 1,116 MB.
+- Custom `theme` colours map onto the design tokens and apply in every mode.
+- Executive PDF variants are links in the export menu instead of a picker dialog. The PDFs are unchanged.
+- Annotations show as type and description in the test detail, without coloured badges. Stability grades move from list rows to the detail header.
+- `maxEmbeddedSize` is deprecated and has no effect. Traces are copied to `traces/` next to the report and never embedded, so the reporter no longer reads each trace into memory.
+
+### Fixed
+- A breached quality gate set in the reporter options (`qualityGates`) now fails the Playwright run (exit code 1). In 2.x Playwright overrode the exit code, so a breached gate was only logged when every test passed.
+- Large suites no longer fail with `RangeError: Invalid string length` (#19). In the benchmark 2.x failed at 14,000 tests; 3.x completes.
+- The report no longer requests Google Fonts, so it renders the same offline.
+- A cspSafe report no longer needs `'unsafe-inline'` for the app: it renders under `default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'` (the trace viewer still does; see Known limitations).
+- The Live tab's filter clear no longer replaces the test list's clear-filters action (2.x bug).
+- A failed report write no longer skips history, exports, notifications, or quality gates.
+
+### Known limitations
+- The trace viewer is carried over from 2.x and uses inline event handlers. Under an enforced strict CSP its controls do not work; download the trace and run `npx playwright show-trace <file>`.
+- Local model support is tested against a stub OpenAI-compatible server. It has not yet been run end to end against a real Ollama instance.
+
+### Migration from 2.x
+- Copy or upload `<name>-data.js` (and, with `cspSafe`, `<name>.css` and `<name>.js`) together with the HTML report.
+- If you used a novelty preset for its background colours, set `theme.background`, `theme.surface`, and `theme.text` instead.
+- See "Upgrading from 2.x" in the README.
+
 ## [2.2.0] - 2026-09-01
 
 ### Added
