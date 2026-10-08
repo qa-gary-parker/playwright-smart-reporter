@@ -3,14 +3,15 @@ import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
 import { renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
+import { stepDurationsOf } from '../analyzers/causal-timeline';
 
 /**
  * Manages test history persistence and retrieval
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -77,6 +78,7 @@ export class HistoryCollector {
       quarantine: options.quarantine,
       live: options.live,
       exportPdfFull: options.exportPdfFull,
+      enableCausalTimeline: options.enableCausalTimeline,
     };
     this.outputDir = outputDir;
     this.currentRun = {
@@ -139,6 +141,7 @@ export class HistoryCollector {
         ...(this.options.enableHistoryDrilldown ? { runId } : {}),
         skipped: result.status === 'skipped',
         retry: result.retry, // NEW: Track retry count
+        ...this.stepDurationsEntry(result),
       });
 
       // Keep only last N runs
@@ -265,6 +268,12 @@ export class HistoryCollector {
     // Save to disk
     const historyPath = path.resolve(this.outputDir, this.options.historyFile);
     fs.writeFileSync(historyPath, JSON.stringify(this.history, null, 2));
+  }
+
+  private stepDurationsEntry(result: TestResultData): { stepDurations?: Record<string, number> } {
+    if (this.options.enableCausalTimeline === false) return {};
+    const stepDurations = stepDurationsOf(result.steps ?? []);
+    return stepDurations ? { stepDurations } : {};
   }
 
   /**

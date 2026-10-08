@@ -2,18 +2,21 @@ import { describe, it, expect } from 'vitest';
 import { StepCollector } from './step-collector';
 import type { TestResult } from '@playwright/test/reporter';
 
+const ATTEMPT_START = new Date('2024-01-01T10:00:00.000Z');
+
 function makeStep(
   title: string,
   duration: number,
   category: string,
-  nestedSteps: TestResult['steps'] = []
+  nestedSteps: TestResult['steps'] = [],
+  startOffset = 0
 ): TestResult['steps'][0] {
   return {
     title,
     duration,
     category,
     steps: nestedSteps,
-    startTime: new Date(),
+    startTime: new Date(ATTEMPT_START.getTime() + startOffset),
     location: undefined as any,
     error: undefined,
     parent: undefined as any,
@@ -30,7 +33,7 @@ function makeTestResult(steps: TestResult['steps']): TestResult {
     annotations: [],
     status: 'passed',
     duration: 1000,
-    startTime: new Date(),
+    startTime: ATTEMPT_START,
     retry: 0,
     parallelIndex: 0,
     workerIndex: 0,
@@ -56,12 +59,39 @@ describe('StepCollector', () => {
         title: 'Click button',
         duration: 50,
         category: 'pw:api',
+        startTime: 0,
       });
       expect(steps[1]).toEqual({
         title: 'Fill form',
         duration: 80,
         category: 'pw:api',
+        startTime: 0,
       });
+    });
+
+    it('records each step start as an offset from the attempt start', () => {
+      const result = makeTestResult([
+        makeStep('Open app', 120, 'test.step', [makeStep('page.goto', 100, 'pw:api', [], 15)], 10),
+        makeStep('expect.toHaveText', 900, 'expect', [], 250),
+      ]);
+
+      const steps = new StepCollector().extractSteps(result);
+
+      expect(steps.map(s => [s.title, s.startTime])).toEqual([
+        ['Open app', 10],
+        ['page.goto', 15],
+        ['expect.toHaveText', 250],
+      ]);
+    });
+
+    it('marks steps that carry an error as failed', () => {
+      const failing = makeStep('expect.toHaveText', 900, 'expect', [], 250);
+      failing.error = { message: 'Timed out' };
+      const result = makeTestResult([makeStep('Open app', 120, 'test.step', [], 10), failing]);
+
+      const steps = new StepCollector().extractSteps(result);
+
+      expect(steps.map(s => s.failed)).toEqual([undefined, true]);
     });
 
     it('returns empty array when result has no steps', () => {
@@ -138,6 +168,7 @@ describe('StepCollector', () => {
         title: 'expect.toBeVisible',
         duration: 40,
         category: 'expect',
+        startTime: 0,
       });
     });
 

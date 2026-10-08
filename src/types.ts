@@ -178,6 +178,8 @@ export interface SmartReporterOptions {
   // Phase 10: Accessibility
   // Read by withAccessibility() and injected into `use.smartReporterA11y`
   accessibility?: AccessibilityConfig;
+  // Phase 4: Causal failure timeline
+  enableCausalTimeline?: boolean;  // Default: true (timeline + first-anomaly suggestion on failed tests)
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
@@ -201,6 +203,9 @@ export interface TestHistoryEntry {
   skipped?: boolean;
   retry?: number;  // NEW: Track retry count in history
   runId?: string;  // NEW: Run identifier for drilldown
+
+  // Phase 4: Causal failure timeline
+  stepDurations?: Record<string, number>;  // test.step title -> duration (ms), the slow-step baseline
 }
 
 export interface RunSummary {
@@ -270,6 +275,10 @@ export interface StepData {
   duration: number;
   category: string;
   isSlowest?: boolean;
+
+  // Phase 4: Causal failure timeline
+  startTime?: number;  // ms offset from the attempt's start
+  failed?: boolean;
 }
 
 // Test annotation (beyond tags) - captures @slow, @fixme, custom annotations
@@ -340,6 +349,8 @@ export interface TestResultData {
   ownerSource?: 'codeowners' | 'git';
   // Phase 10: Accessibility
   a11y?: A11yResult;
+  // Phase 4: Causal failure timeline
+  timeline?: CausalTimeline;           // Failed attempts only
 }
 
 // NEW: Retry Analysis
@@ -691,4 +702,54 @@ export interface A11ySummary {
   byImpact: Record<A11yImpact, number>;
   byRule: A11yRuleSummary[];        // most-hit rule first
   rating: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+// ============================================================================
+// Phase 4: Causal failure timeline
+// ============================================================================
+
+// All times are ms offsets from the failed attempt's start (TestResult.startTime).
+
+export interface TimelineStep {
+  title: string;
+  start: number;
+  end: number;
+  category: string;
+  failed?: boolean;
+}
+
+export interface TimelineRequest {
+  start: number;
+  end: number;               // equals start for failed requests; the timeline end for requests still in flight
+  method: string;
+  url: string;
+  status: number;            // -1 when no response arrived
+  failure?: string;          // e.g. 'net::ERR_CONNECTION_REFUSED'
+}
+
+export interface TimelineConsoleEvent {
+  at: number;
+  level: string;             // console message type; uncaught page errors are 'error' with an "Uncaught " prefix
+  text: string;
+}
+
+/**
+ * Heuristic suggestion, not a diagnosis: the earliest unusual event before the failure.
+ */
+export interface TimelineAnomaly {
+  kind: 'network-error' | 'console-error' | 'slow-step';
+  at: number;
+  summary: string;
+  ref: { lane: 'network' | 'console' | 'steps'; index: number };
+}
+
+export interface CausalTimeline {
+  duration: number;
+  lanes: {
+    steps: TimelineStep[];
+    network: TimelineRequest[];
+    console: TimelineConsoleEvent[];
+  };
+  /** Suggestion only (heuristic). Absent when nothing unusual happened before the failure. */
+  firstAnomaly?: TimelineAnomaly;
 }

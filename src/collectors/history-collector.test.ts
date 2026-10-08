@@ -211,6 +211,37 @@ describe('HistoryCollector', () => {
       expect(history.tests['test-1'][0].retry).toBe(2);
     });
 
+    it('records test.step durations as the slow-step baseline', () => {
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([
+        createTestResult({
+          testId: 'test-1',
+          steps: [
+            { title: 'load orders', duration: 42, category: 'test.step', startTime: 160 },
+            { title: 'Click', duration: 39, category: 'pw:api', startTime: 161 },
+          ],
+        }),
+        createTestResult({ testId: 'test-2', steps: [{ title: 'Click', duration: 39, category: 'pw:api' }] }),
+      ]);
+
+      const history = collector.getHistory();
+      expect(history.tests['test-1'][0].stepDurations).toEqual({ 'load orders': 42 });
+      expect('stepDurations' in history.tests['test-2'][0]).toBe(false);
+    });
+
+    it('does not record step durations when the causal timeline is disabled', () => {
+      const collector = new HistoryCollector({ enableCausalTimeline: false }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([
+        createTestResult({ testId: 'test-1', steps: [{ title: 'load orders', duration: 42, category: 'test.step' }] }),
+      ]);
+
+      expect('stepDurations' in collector.getHistory().tests['test-1'][0]).toBe(false);
+    });
+
     it('marks skipped tests in history', () => {
       const collector = new HistoryCollector({}, outputDir);
       collector.loadHistory();

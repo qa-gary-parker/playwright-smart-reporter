@@ -7,6 +7,7 @@ import type {
   RunComparison,
   FailureCluster,
   A11yResult,
+  CausalTimeline,
 } from '../types';
 
 export function getReporterVersion(): string {
@@ -67,6 +68,8 @@ interface JsonTestEntry {
   aiSuggestion?: string;
   // Phase 10: Accessibility
   a11y?: A11yResult;
+  // Phase 4: Causal failure timeline
+  timeline?: CausalTimeline;
 }
 
 interface JsonClusterEntry {
@@ -132,6 +135,7 @@ export function exportJsonData(
     project: r.project,
     aiSuggestion: r.aiSuggestion,
     a11y: r.a11y,
+    timeline: r.timeline,
   }));
 
   const clusters: JsonClusterEntry[] | undefined = failureClusters?.map(c => ({

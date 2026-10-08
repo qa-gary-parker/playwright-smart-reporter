@@ -1,6 +1,7 @@
 import type { FullConfig, TestCase, TestError, TestResult } from '@playwright/test/reporter';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { TimelineAnomaly } from '../types';
 
 // Mirrors Playwright HTML reporter "Copy prompt" structure (see playwright-core HTML report bundle).
 const PLAYWRIGHT_COPY_PROMPT_INSTRUCTIONS = `
@@ -129,8 +130,9 @@ export function buildPlaywrightStyleAiPrompt(params: {
   config: FullConfig;
   test: TestCase;
   result: TestResult;
+  firstAnomaly?: TimelineAnomaly;
 }): string {
-  const { config, test, result } = params;
+  const { config, test, result, firstAnomaly } = params;
 
   const testFile = safeRelativePath(config.rootDir, test.location.file);
   const testInfo = [
@@ -151,6 +153,19 @@ export function buildPlaywrightStyleAiPrompt(params: {
 
   lines.push('', '# Error details');
   for (const errorText of errorsForPrompt) lines.push('', '```', stripAnsi(errorText), '```');
+
+  if (firstAnomaly) {
+    lines.push(
+      '',
+      '# Possible first anomaly (heuristic)',
+      '',
+      "A suggestion from Smart Reporter's failure timeline, not a diagnosis: the earliest unusual event before the failure.",
+      '',
+      `- Kind: ${firstAnomaly.kind}`,
+      `- At: ${firstAnomaly.at}ms after the test started`,
+      `- Detail: ${firstAnomaly.summary}`,
+    );
+  }
 
   // This is where Playwright includes the page snapshot for AI ("aria snapshot") as markdown:
   // it attaches error-context.md with "# Page snapshot" and a ```yaml block.

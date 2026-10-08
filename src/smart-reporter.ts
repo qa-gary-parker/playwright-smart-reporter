@@ -68,6 +68,8 @@ import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlakyTest } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
+import { readTrace, type TraceContents } from './collectors/trace-reader';
+import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
 import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
@@ -384,20 +386,6 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
-    if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
-      try {
-        testData.aiPrompt = buildPlaywrightStyleAiPrompt({
-          config: this.fullConfig,
-          test,
-          result,
-        });
-      } catch (err) {
-        // Prompt building should never fail the reporter
-        console.warn(`Failed to build AI prompt for "${test.title}":`, err);
-      }
-    }
-
     // Backwards compatibility: extract first screenshot for legacy code
     if (attachments.screenshots.length > 0) {
       testData.screenshot = attachments.screenshots[0];
@@ -412,6 +400,8 @@ class SmartReporter implements Reporter {
     const traceAttachment = result.attachments.find(
       a => a.name === 'trace' && a.contentType === 'application/zip'
     );
+    const wantTimeline = (result.status === 'failed' || result.status === 'timedOut') && this.options.enableCausalTimeline !== false;
+    let trace: TraceContents | undefined;
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
       // Embed trace as base64 for one-click viewing (skip in CSP-safe mode)
@@ -428,10 +418,18 @@ class SmartReporter implements Reporter {
           // If we can't read the trace, just use the path
         }
       }
-      // Extract network logs from trace (enabled by default when traces exist)
-      if (this.options.enableNetworkLogs !== false) {
+      // One trace read feeds both the network log and the causal timeline
+      if (this.options.enableNetworkLogs !== false || wantTimeline) {
         try {
-          const networkLogs = await this.networkCollector.collectFromTrace(traceAttachment.path);
+          trace = readTrace(traceAttachment.path, { timeline: wantTimeline });
+        } catch (err) {
+          console.warn(`Failed to parse trace file: ${traceAttachment.path}`, err);
+        }
+      }
+      // Extract network logs from trace (enabled by default when traces exist)
+      if (trace && this.options.enableNetworkLogs !== false) {
+        try {
+          const networkLogs = this.networkCollector.collectFromContents(trace);
           if (networkLogs.entries.length > 0) {
             testData.networkLogs = networkLogs;
           }
@@ -447,6 +445,37 @@ class SmartReporter implements Reporter {
       if (a11y) testData.a11y = a11y;
     } catch (err) {
       console.warn(`Smart Reporter: could not read accessibility results for "${test.title}":`, err);
+    }
+
+    if (wantTimeline) {
+      try {
+        const attemptStart = result.startTime.getTime();
+        testData.timeline = buildCausalTimeline({
+          attemptStart,
+          attemptDuration: result.duration,
+          steps,
+          failureAt: findFailureMoment(result.steps, attemptStart),
+          trace,
+          history,
+        });
+      } catch (err) {
+        console.warn(`Failed to build causal timeline for "${test.title}":`, err);
+      }
+    }
+
+    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
+    if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
+      try {
+        testData.aiPrompt = buildPlaywrightStyleAiPrompt({
+          config: this.fullConfig,
+          test,
+          result,
+          firstAnomaly: testData.timeline?.firstAnomaly,
+        });
+      } catch (err) {
+        // Prompt building should never fail the reporter
+        console.warn(`Failed to build AI prompt for "${test.title}":`, err);
+      }
     }
 
     // Run all analyzers (flakiness, performance, retries, stability)

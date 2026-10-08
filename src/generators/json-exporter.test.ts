@@ -204,6 +204,23 @@ describe('json-exporter', () => {
       expect(test.aiSuggestion).toBe('Add wait before click');
     });
 
+    it('carries the causal timeline of a failed test', () => {
+      const timeline: TestResultData['timeline'] = {
+        duration: 1_210,
+        lanes: {
+          steps: [{ title: 'load orders', start: 160, end: 200, category: 'test.step' }],
+          network: [{ start: 170, end: 185, method: 'GET', url: 'http://app.test/api/orders', status: 500 }],
+          console: [],
+        },
+        firstAnomaly: { kind: 'network-error', at: 185, summary: 'GET http://app.test/api/orders returned 500', ref: { lane: 'network', index: 0 } },
+      };
+
+      exportJsonData([createTestResult({ status: 'failed', timeline })], createTestHistory(), Date.now(), {});
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.tests[0].timeline).toEqual(timeline);
+    });
+
     it('failure clusters are included when present', () => {
       const clusterTest = createTestResult({ testId: 'fail-1', status: 'failed' });
       const clusters: FailureCluster[] = [
