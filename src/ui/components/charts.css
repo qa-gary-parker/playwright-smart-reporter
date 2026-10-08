@@ -58,5 +58,16 @@
 
 .strip__cell {
   width: 6px;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
+}
+
+button.strip__cell {
+  width: 8px;
+  cursor: pointer;
+}
+
+button.strip__cell:hover {
+  opacity: 0.7;
 }

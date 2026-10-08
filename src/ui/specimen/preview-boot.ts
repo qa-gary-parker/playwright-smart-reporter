@@ -1,0 +1,79 @@
+import type { ReportData } from '../../report-data/schema';
+import fixture from './report-fixture.json';
+import { SYNTHETIC } from './synthetic';
+
+const params = new URLSearchParams(location.search);
+const screen = params.get('screen') ?? 'failures';
+const data = JSON.parse(JSON.stringify(fixture)) as ReportData;
+const textCluster = data.clusters.find((c) => /toHaveText/.test(c.errorType));
+data.tests = [{ ...SYNTHETIC, clusterId: textCluster?.id }, ...data.tests];
+if (textCluster) textCluster.testIds = [SYNTHETIC.testId, ...textCluster.testIds];
+
+if (screen === 'green') {
+  for (const t of data.tests) {
+    if (t.outcome === 'unexpected') {
+      t.status = 'passed';
+      t.outcome = 'expected';
+      t.error = undefined;
+      t.signals = t.signals.filter((s) => s !== 'new-failure');
+    }
+  }
+  data.clusters = [];
+}
+
+// ?scale=N clones the fixture up to N tests to exercise virtualization.
+const scale = Number(params.get('scale') ?? 0);
+if (scale > data.tests.length) {
+  const base = data.tests;
+  data.tests = Array.from({ length: scale }, (_, i) => {
+    const t = base[i % base.length];
+    // Uniform passing tests keep list order equal to index, so rows are checkable by position.
+    return { ...t, testId: `scaled-${i}`, title: `${t.title} #${i}`, file: `scaled/${Math.floor(i / 50)}.spec.ts`, status: 'passed', outcome: 'expected', signals: [] };
+  });
+}
+
+// One recorded run as a drilldown snapshot, so History can open a past run.
+const past = data.trends[data.trends.length - 2];
+if (past) {
+  data.config.features.historyDrilldown = true;
+  data.historySnapshots = {
+    [past.runId]: {
+      runId: past.runId,
+      timestamp: past.timestamp,
+      tests: Object.fromEntries(
+        data.tests.slice(0, 12).map((t, i) => [
+          t.testId,
+          { testId: t.testId, title: t.title, file: t.file, status: i < 3 ? 'failed' : 'passed', duration: t.duration, retry: 0, steps: [] },
+        ]),
+      ),
+    },
+  };
+}
+
+window.__SMART_DATA__ = data;
+
+try {
+  localStorage.removeItem('smart-reporter:theme');
+  localStorage.removeItem('smart-reporter:sections');
+} catch {
+  // storage may be unavailable
+}
+const mode = params.get('mode');
+if (mode && mode !== 'system') document.documentElement.dataset.mode = mode;
+const accent = params.get('accent');
+if (accent && accent !== 'default') document.documentElement.dataset.accent = accent;
+
+const test = params.get('test');
+const HASH: Record<string, string> = {
+  failures: '#/q/failures',
+  flaky: '#/q/flaky',
+  green: '#/q/flaky',
+  all: '#/q/all',
+  insights: '#/insights',
+  history: `#/history/${params.get('tab') ?? 'trends'}`,
+  gallery: '#/gallery',
+  live: '#/live',
+  keymap: '#/q/failures',
+};
+// An explicit hash is a deep link under test; keep it.
+if (!location.hash) location.replace(`${HASH[screen] ?? '#/q/failures'}${test ? `?test=${encodeURIComponent(test)}` : ''}`);

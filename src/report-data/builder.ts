@@ -1,6 +1,15 @@
-import type { HtmlGeneratorData } from '../generators/html-generator';
 import { getReporterVersion } from '../generators/json-exporter';
-import type { TestResultData } from '../types';
+import type {
+  CIInfo,
+  FailureCluster,
+  QualityGateResult,
+  QuarantineEntry,
+  RunComparison,
+  RunSnapshotFile,
+  SmartReporterOptions,
+  TestHistory,
+  TestResultData,
+} from '../types';
 import { isFlakyTest } from '../utils/flakiness';
 import {
   SCHEMA_VERSION,
@@ -10,6 +19,23 @@ import {
   type ReportTest,
   type Signal,
 } from './schema';
+
+export interface ReportInput {
+  results: TestResultData[];
+  history: TestHistory;
+  startTime: number;
+  options: SmartReporterOptions;
+  comparison?: RunComparison;
+  historyRunSnapshots?: Record<string, RunSnapshotFile>;
+  failureClusters?: FailureCluster[];
+  ciInfo?: CIInfo;
+  outputBasename?: string;
+  qualityGateResult?: QualityGateResult;
+  quarantinedTestIds?: Set<string>;
+  quarantineEntries?: QuarantineEntry[];
+  quarantineThreshold?: number;
+  aiSuiteHealthSummary?: string;
+}
 
 const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements'];
 
@@ -35,7 +61,7 @@ export function summarize(results: TestResultData[], duration: number): ReportSu
   };
 }
 
-export function buildReportData(input: HtmlGeneratorData, now: number = Date.now()): ReportData {
+export function buildReportData(input: ReportInput, now: number = Date.now()): ReportData {
   const { results, options, comparison } = input;
 
   const changes = Object.fromEntries(
@@ -87,6 +113,7 @@ export function buildReportData(input: HtmlGeneratorData, now: number = Date.now
         networkLogs: options.enableNetworkLogs !== false,
       },
       exports: { json: !!options.exportJson, junit: !!options.exportJunit, pdf: !!options.exportPdf },
+      live: options.live?.enabled ? { jsonlFile: options.live.outputFile ?? '.smart-live-results.jsonl' } : undefined,
     },
     summary: summarize(results, now - input.startTime),
     tests,

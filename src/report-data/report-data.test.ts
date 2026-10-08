@@ -3,9 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vm from 'vm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { HtmlGeneratorData } from '../generators/html-generator';
 import type { TestResultData } from '../types';
-import { buildReportData } from './builder';
+import { buildReportData, type ReportInput } from './builder';
 import type { ReportData } from './schema';
 import { customThemeCss, serializeData, themeAttributes, writeReport } from './writer';
 
@@ -13,7 +12,7 @@ function result(over: Partial<TestResultData> & { testId: string }): TestResultD
   return { title: over.testId, file: 'a.spec.ts', status: 'passed', duration: 100, retry: 0, steps: [], history: [], outcome: 'expected', ...over };
 }
 
-function input(results: TestResultData[], over: Partial<HtmlGeneratorData> = {}): HtmlGeneratorData {
+function input(results: TestResultData[], over: Partial<ReportInput> = {}): ReportInput {
   return {
     results,
     history: { runs: [], tests: {}, summaries: [] },

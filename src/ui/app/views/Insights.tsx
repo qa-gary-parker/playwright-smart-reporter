@@ -1,0 +1,206 @@
+import type { ComponentChildren } from 'preact';
+import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
+import { displayStatus, formatDate, formatDuration, isFailing, suiteHealth, type ReportTest } from '../data';
+import { formatRoute } from '../router';
+import { data, runTests, testsById } from '../store';
+import { Markdown } from './Markdown';
+
+function Panel({ title, meta, children }: { title: string; meta?: string; children: ComponentChildren }) {
+  return (
+    <section class="panel">
+      <header class="panel__head">
+        <h2 class="panel__title">{title}</h2>
+        {meta && <span class="panel__meta">{meta}</span>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function TestLines({ tests, value }: { tests: ReportTest[]; value: (t: ReportTest) => string }) {
+  if (tests.length === 0) return <p class="panel__empty">None this run.</p>;
+  return (
+    <ul class="lines">
+      {tests.map((t) => (
+        <li class="lines__item">
+          <StatusGlyph status={displayStatus(t)} />
+          <a class="lines__label" href={formatRoute({ view: 'queue', queue: 'all', q: '', test: t.testId })}>
+            {t.title}
+          </a>
+          <span class="lines__value mono">{value(t)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+type Extras = {
+  forecastSummary?: { atRisk: string[]; threshold: number; minRuns: number };
+  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
+};
+
+export function Insights() {
+  const d = data.value;
+  const s = d.summary;
+  const trends = d.trends;
+  const health = suiteHealth(s);
+  const tests = runTests.value;
+  const byId = testsById.value;
+  const ids = (list: string[] | undefined) => (list ?? []).map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);
+  const extras = d as typeof d & Extras;
+
+  return (
+    <div class="page">
+      <header class="page__head">
+        <h1 class="page__title">Insights</h1>
+        <span class="faint">
+          Run of {formatDate(d.meta.startTime, true)}
+          {trends.length > 1 ? ` · compared with the previous ${trends.length - 1} runs` : ''}
+        </span>
+      </header>
+      <div class="stats">
+        <div class="stat">
+          <span class="stat__label">Pass rate</span>
+          <span class="stat__value">{s.passRate}%</span>
+          <Sparkline label="Pass rate, recent runs" values={trends.map((r) => r.passRate)} width={88} />
+        </div>
+        <div class="stat">
+          <span class="stat__label">Duration</span>
+          <span class="stat__value">{formatDuration(s.duration)}</span>
+          <Sparkline label="Duration, recent runs" values={trends.map((r) => r.duration)} width={88} />
+        </div>
+        <div class="stat">
+          <span class="stat__label">Tests</span>
+          <span class="stat__value">{s.total}</span>
+          <span class="stat__sub">{s.newTests ? `${s.newTests} new` : 'no new tests'}</span>
+        </div>
+        <div class="stat">
+          <span class="stat__label">Flaky</span>
+          <span class="stat__value">{s.flaky}</span>
+          <Sparkline label="Flaky tests, recent runs" values={trends.map((r) => r.flaky)} width={88} />
+        </div>
+        <div class="stat">
+          <span class="stat__label">Health</span>
+          <span class="stat__value">{health.grade}</span>
+          <span class="stat__sub">
+            {health.score} · pass {health.pass} · stability {health.stability} · perf {health.perf}
+          </span>
+        </div>
+      </div>
+      <div class="stats-bar">
+        <MiniBar
+          segments={[
+            { tone: 'pass', value: tests.filter((t) => displayStatus(t) === 'passed').length, label: 'passed' },
+            { tone: 'fail', value: tests.filter(isFailing).length, label: 'failed' },
+            { tone: 'flaky', value: tests.filter((t) => displayStatus(t) === 'flaky').length, label: 'flaky' },
+            { tone: 'skip', value: tests.filter((t) => t.status === 'skipped').length, label: 'skipped' },
+          ]}
+        />
+      </div>
+      <div class="panels">
+        <Panel title="AI summary">
+          {d.ai.suiteHealthSummary ? <Markdown text={d.ai.suiteHealthSummary} /> : <p class="panel__empty">Not configured. Set an AI provider key, or a local model, to get a plain-language summary of this run.</p>}
+        </Panel>
+        <Panel title="Quality gate" meta={d.gates ? (d.gates.passed ? 'passed' : 'failed') : undefined}>
+          {d.gates ? (
+            <ul class="lines">
+              {d.gates.rules.map((rule) => (
+                <li class="lines__item">
+                  <StatusGlyph status={rule.skipped ? 'skipped' : rule.passed ? 'passed' : 'failed'} />
+                  <span class="lines__label">{rule.rule}</span>
+                  <span class="lines__value mono">
+                    {rule.actual} / {rule.threshold}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="panel__empty">No quality gate configured.</p>
+          )}
+        </Panel>
+        <Panel title="Failure clusters" meta={d.clusters.length ? `${d.clusters.length} clusters` : undefined}>
+          {d.clusters.length ? (
+            <ul class="lines">
+              {d.clusters.map((c) => (
+                <li class="lines__item">
+                  <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
+                    {c.errorType}
+                  </a>
+                  <span class="lines__value">
+                    <Count status="failed" value={c.testIds.length} label="" />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="panel__empty">No failures to cluster.</p>
+          )}
+        </Panel>
+        {extras.forecastSummary && (
+          <Panel title="At risk" meta={`passing, trending unstable`}>
+            <TestLines
+              tests={ids(extras.forecastSummary.atRisk).slice(0, 8)}
+              value={(t) => {
+                const f = (t as ReportTest & { forecast?: { state: string; risk?: number } }).forecast;
+                return f?.state === 'scored' && f.risk !== undefined ? `${Math.round(f.risk * 100)}% risk` : '';
+              }}
+            />
+          </Panel>
+        )}
+        <Panel title="Regressions">
+          <TestLines tests={tests.filter((t) => t.signals.includes('regression')).slice(0, 8)} value={(t) => (t.performanceMetrics ? `+${Math.round(t.performanceMetrics.percentChange)}%` : formatDuration(t.duration))} />
+        </Panel>
+        <Panel title="Slowest">
+          <TestLines tests={[...tests].sort((a, b) => b.duration - a.duration).slice(0, 5)} value={(t) => formatDuration(t.duration)} />
+        </Panel>
+        <Panel title="Most flaky">
+          <TestLines
+            tests={tests.filter((t) => (t.flakinessScore ?? 0) > 0 && (t.flakinessScore ?? 0) < 1).sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0)).slice(0, 5)}
+            value={(t) => `${Math.round((t.flakinessScore ?? 0) * 100)}%`}
+          />
+        </Panel>
+        <Panel title="Fixed">
+          <TestLines tests={ids(d.comparison?.changes.fixedTests)} value={(t) => formatDuration(t.duration)} />
+        </Panel>
+        <Panel title="New tests">
+          <TestLines tests={tests.filter((t) => t.signals.includes('new')).slice(0, 8)} value={(t) => formatDuration(t.duration)} />
+        </Panel>
+        <Panel title="Quarantine" meta={d.quarantine ? `threshold ${d.quarantine.threshold ?? ''}` : undefined}>
+          {d.quarantine ? (
+            d.quarantine.entries.length ? (
+              <ul class="lines">
+                {d.quarantine.entries.map((e) => (
+                  <li class="lines__item">
+                    <StatusGlyph status="quarantined" />
+                    <span class="lines__label">{e.title}</span>
+                    <span class="lines__value mono">{Math.round(e.flakinessScore * 100)}%</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="panel__empty">No tests quarantined.</p>
+            )
+          ) : (
+            <p class="panel__empty">Not enabled for this project.</p>
+          )}
+        </Panel>
+        {extras.ownership && (
+          <Panel title="Owners" meta={`${extras.ownership.owners.length} owners`}>
+            <ul class="lines">
+              {extras.ownership.owners.map((o) => (
+                <li class="lines__item">
+                  <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'all', q: `owner:${o.owner}`, group: 'owner' })}>
+                    {o.owner}
+                  </a>
+                  <span class="lines__value">
+                    {o.failed > 0 && <Count status="failed" value={o.failed} label="" />} {o.passRate}% of {o.total}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
+      </div>
+    </div>
+  );
+}

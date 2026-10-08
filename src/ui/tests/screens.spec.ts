@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DIR = path.resolve(__dirname, '../../../.ui-specimen');
-const url = (query: string) => pathToFileURL(path.join(DIR, 'index.html')).href + `?${query}`;
+const url = (query: string) => pathToFileURL(path.join(DIR, 'preview.html')).href + `?${query}`;
 
 const SCREENS: Array<[string, string]> = [
   ['failures', 'screen=failures'],
@@ -14,7 +14,10 @@ const SCREENS: Array<[string, string]> = [
   ['history-trends', 'screen=history&tab=trends'],
   ['history-compare', 'screen=history&tab=compare'],
   ['palette', 'screen=failures&overlay=palette'],
-  ['keymap', 'screen=keymap'],
+  ['keymap', 'screen=keymap&overlay=keymap'],
+  ['heatmap', 'screen=history&tab=heatmap'],
+  ['gallery', 'screen=gallery'],
+  ['live', 'screen=live'],
 ];
 const MODES = ['light', 'dark', 'hc'];
 
@@ -34,7 +37,7 @@ for (const [name, query] of SCREENS) {
 test('failures screen lands on the new failure, grouped by cluster', async ({ page }) => {
   await page.goto(url('screen=failures&mode=light'));
   const tree = page.getByRole('tree', { name: 'Failures' });
-  await expect(tree.getByRole('treeitem', { level: 1 }).first()).toContainText('toHaveText failed');
+  await expect(tree.getByRole('treeitem', { level: 1 }).first()).toContainText('toHaveText');
   await expect(tree.getByRole('treeitem', { level: 2, selected: true })).toContainText('pays with a saved card');
   await expect(page.getByRole('article', { name: 'Test detail' }).getByRole('heading', { level: 2 })).toContainText('pays with a saved card');
 });
@@ -72,7 +75,7 @@ test.describe('screenshots', () => {
 
   for (const [name, query] of [
     ['failures', 'screen=failures'],
-    ['detail', 'screen=failures&test=synthetic::saved-card'],
+    ['detail', `screen=failures&test=${encodeURIComponent('synthetic::saved-card')}`],
   ]) {
     test(`narrow ${name}`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });

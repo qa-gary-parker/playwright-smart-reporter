@@ -9,11 +9,11 @@ const require = createRequire(import.meta.url);
 const OUT = path.join(root, 'dist/ui');
 const SPECIMEN_OUT = path.join(root, '.ui-specimen');
 // Fonts dominate: two Latin-subset variable woff2 files, base64-encoded.
-const BUDGET = { 'report.css': 24 * 1024, 'fonts.css': 80 * 1024 };
+const BUDGET = { 'report.css': 48 * 1024, 'fonts.css': 80 * 1024, 'app.js': 128 * 1024 };
 
-async function loadTokens() {
+async function loadTs(entry) {
   const result = await esbuild.build({
-    entryPoints: [path.join(root, 'src/ui/styles/tokens.ts')],
+    entryPoints: [path.join(root, entry)],
     bundle: true,
     format: 'esm',
     platform: 'neutral',
@@ -21,6 +21,37 @@ async function loadTokens() {
   });
   const source = Buffer.from(result.outputFiles[0].text).toString('base64');
   return import(`data:text/javascript;base64,${source}`);
+}
+
+// The 2.x trace viewer is reused as-is; its old variable names alias the v3 tokens.
+const TRACE_ALIASES =
+  '.trace-modal{--accent-blue:var(--accent);--border-subtle:var(--border);--text-primary:var(--text);' +
+  '--text-secondary:var(--text-muted);--bg-primary:var(--bg);--bg-secondary:var(--bg-subtle);--bg-card:var(--bg);' +
+  '--bg-card-hover:var(--bg-hover);--accent-red:var(--fail-fg);--accent-green:var(--pass-fg);' +
+  '--accent-yellow:var(--flaky-fg);--border-default:var(--border-strong);font-family:var(--font-sans)}';
+
+async function traceViewerAssets() {
+  const tv = await loadTs('src/generators/trace-viewer-generator.ts');
+  return {
+    'trace-viewer.html': tv.generateTraceViewerHtml(),
+    'trace-viewer.css': TRACE_ALIASES + tv.generateTraceViewerStyles('var(--font-mono)'),
+    'trace-viewer.js': tv.generateJSZipScript() + '\n' + tv.generateTraceViewerScript(),
+  };
+}
+
+async function bundleApp() {
+  const result = await esbuild.build({
+    entryPoints: [path.join(root, 'src/ui/app/main.tsx')],
+    bundle: true,
+    format: 'iife',
+    target: 'es2020',
+    jsx: 'automatic',
+    jsxImportSource: 'preact',
+    minify: true,
+    legalComments: 'none',
+    write: false,
+  });
+  return result.outputFiles[0].text;
 }
 
 async function fontsCss() {
@@ -49,19 +80,21 @@ async function bundleCss(entry) {
 }
 
 async function buildReportAssets() {
-  const { renderTokensCss } = await loadTokens();
+  const { renderTokensCss } = await loadTs('src/ui/styles/tokens.ts');
   const assets = {
     'report.css': renderTokensCss() + '\n' + (await bundleCss(path.join(root, 'src/ui/styles/index.css'))),
     'fonts.css': await fontsCss(),
+    'app.js': await bundleApp(),
+    ...(await traceViewerAssets()),
   };
   await mkdir(OUT, { recursive: true });
   for (const [name, content] of Object.entries(assets)) {
     const size = Buffer.byteLength(content);
-    if (size > BUDGET[name]) {
+    if (BUDGET[name] && size > BUDGET[name]) {
       throw new Error(`${name} is ${size} bytes, over its ${BUDGET[name]} byte budget`);
     }
     await writeFile(path.join(OUT, name), content);
-    console.log(`dist/ui/${name}  ${(size / 1024).toFixed(1)} KB (budget ${BUDGET[name] / 1024} KB)`);
+    console.log(`dist/ui/${name}  ${(size / 1024).toFixed(1)} KB${BUDGET[name] ? ` (budget ${BUDGET[name] / 1024} KB)` : ''}`);
   }
   await copyFile(require.resolve('@fontsource-variable/geist/LICENSE'), path.join(OUT, 'OFL-Geist.txt'));
   return assets;
@@ -85,6 +118,28 @@ ${withFonts ? '<link rel="stylesheet" href="fonts.css">\n' : ''}<link rel="style
 `;
 }
 
+// The app on fixture data, with the trace viewer markup the report shell adds.
+function previewPage(assets) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report preview</title>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="report.css">
+<style>${assets['trace-viewer.css']}</style>
+</head>
+<body>
+<div id="app"></div>
+${assets['trace-viewer.html']}
+<script>${assets['trace-viewer.js'].replace(/<\/script/gi, '<\\/script')}</script>
+<script src="preview.js"></script>
+</body>
+</html>
+`;
+}
+
 async function buildSpecimen(assets) {
   await rm(SPECIMEN_OUT, { recursive: true, force: true });
   await mkdir(SPECIMEN_OUT, { recursive: true });
@@ -98,10 +153,20 @@ async function buildSpecimen(assets) {
     jsxImportSource: 'preact',
     minify: true,
   });
-  const specimenCss = await Promise.all(['specimen.css', 'screens.css'].map((f) => bundleCss(path.join(root, 'src/ui/specimen', f))));
-  await writeFile(path.join(SPECIMEN_OUT, 'specimen.css'), specimenCss.join('\n'));
-  for (const [name, content] of Object.entries(assets)) {
-    await writeFile(path.join(SPECIMEN_OUT, name), content);
+  await writeFile(path.join(SPECIMEN_OUT, 'specimen.css'), await bundleCss(path.join(root, 'src/ui/specimen/specimen.css')));
+  await esbuild.build({
+    entryPoints: [path.join(root, 'src/ui/specimen/preview.tsx')],
+    outfile: path.join(SPECIMEN_OUT, 'preview.js'),
+    bundle: true,
+    format: 'iife',
+    target: 'es2022',
+    jsx: 'automatic',
+    jsxImportSource: 'preact',
+    minify: true,
+  });
+  await writeFile(path.join(SPECIMEN_OUT, 'preview.html'), previewPage(assets));
+  for (const name of ['report.css', 'fonts.css']) {
+    await writeFile(path.join(SPECIMEN_OUT, name), assets[name]);
   }
   await writeFile(path.join(SPECIMEN_OUT, 'index.html'), page('UI specimen', true));
   await writeFile(path.join(SPECIMEN_OUT, 'csp.html'), page('UI specimen (cspSafe)', false));

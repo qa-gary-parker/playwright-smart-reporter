@@ -78,12 +78,24 @@ const STRIP_TONE: Record<TestStatus, Tone> = {
   quarantined: 'skip',
 };
 
-export function OutcomeStrip({ runs, label }: { runs: Array<{ status: TestStatus; title?: string }>; label: string }) {
+export function OutcomeStrip({
+  runs,
+  label,
+}: {
+  runs: Array<{ status: TestStatus; title?: string; onClick?: () => void }>;
+  label: string;
+}) {
+  const interactive = runs.some((r) => r.onClick);
   return (
-    <div class="strip" role="img" aria-label={label}>
-      {runs.map((r) => (
-        <span class={cx('strip__cell', `seg-${STRIP_TONE[r.status]}`)} title={r.title ?? statusLabel(r.status)} />
-      ))}
+    <div class="strip" role={interactive ? 'group' : 'img'} aria-label={label}>
+      {runs.map((r) => {
+        const title = r.title ?? statusLabel(r.status);
+        return r.onClick ? (
+          <button type="button" class={cx('strip__cell', `seg-${STRIP_TONE[r.status]}`)} title={title} aria-label={title} onClick={r.onClick} />
+        ) : (
+          <span class={cx('strip__cell', `seg-${STRIP_TONE[r.status]}`)} title={title} />
+        );
+      })}
     </div>
   );
 }

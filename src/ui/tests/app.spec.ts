@@ -1,0 +1,147 @@
+import { expect, test } from '@playwright/test';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const DIR = path.resolve(__dirname, '../../../.ui-specimen');
+const url = (query: string, hash = '') => pathToFileURL(path.join(DIR, 'preview.html')).href + `?${query}` + hash;
+const detailHeading = (page: import('@playwright/test').Page) => page.getByRole('article', { name: 'Test detail' }).getByRole('heading', { level: 2 });
+
+test('a deep link restores queue, filter, and test from a cold load over file://', async ({ page }) => {
+  const id = '[Desktop Chrome] feature-demo.spec.ts::@regression docs link navigates correctly';
+  await page.goto(url('mode=light', `#/q/all?q=${encodeURIComponent('tag:@regression')}&test=${encodeURIComponent(id)}`));
+  await expect(page.getByRole('link', { name: /All tests/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('search').getByText('@regression')).toBeVisible();
+  await expect(page.locator('.pane__count')).toHaveText('2');
+  await expect(detailHeading(page)).toHaveText(/@regression docs link navigates correctly/);
+});
+
+test('j and k move the selection through the list and the hash follows', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  const tree = page.getByRole('tree', { name: 'Failures' });
+  const selected = tree.getByRole('treeitem', { selected: true });
+  await expect(selected).toContainText('pays with a saved card');
+  await page.keyboard.press('j');
+  await expect(selected).toContainText('incorrect text content causes failure');
+  const hashQuery = new URLSearchParams(new URL(page.url()).hash.split('?')[1]);
+  expect(hashQuery.get('test')).toBe('[Desktop Chrome] feature-demo.spec.ts::incorrect text content causes failure');
+  await page.keyboard.press('k');
+  await expect(selected).toContainText('pays with a saved card');
+});
+
+test('the palette finds a test from part of its name and opens it on Enter', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  await page.keyboard.press('ControlOrMeta+k');
+  const input = page.getByRole('combobox', { name: 'Search tests, views, filters, and actions' });
+  await expect(input).toBeFocused();
+  await input.fill('multi-step');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(detailHeading(page)).toHaveText(/multi-step user journey/);
+});
+
+test('filter tokens narrow the list and Backspace removes the last token', async ({ page }) => {
+  await page.goto(url('screen=all&mode=light'));
+  await expect(page.locator('.pane__count')).toHaveText('57');
+  const input = page.getByRole('textbox', { name: 'Filter tests' });
+  await input.fill('status:skipped ');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('search').getByText('skipped', { exact: true })).toBeVisible();
+  await expect(page.locator('.pane__count')).toHaveText('6');
+  await input.fill('');
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.pane__count')).toHaveText('57');
+});
+
+test('group counts add up to the queue total in single-key groupings', async ({ page }) => {
+  // Tall enough that the virtual list renders every group header.
+  await page.setViewportSize({ width: 1280, height: 4000 });
+  for (const g of ['file', 'project', 'status', 'grade', 'suite', 'cluster']) {
+    await page.goto(url('mode=light', `#/q/all?g=${g}`));
+    const total = Number(await page.locator('.pane__count').textContent());
+    const counts = await page.locator('.group__count').allTextContents();
+    expect(counts.reduce((n, c) => n + Number(c), 0), `grouping ${g}`).toBe(total);
+  }
+});
+
+test('the group-by menu switches grouping and the URL records it', async ({ page }) => {
+  await page.goto(url('screen=all&mode=light'));
+  await page.getByRole('button', { name: 'Group by' }).click();
+  await page.getByRole('menuitemradio', { name: 'Tag' }).click();
+  await expect(page.getByRole('treeitem', { level: 1, name: /@smoke/ })).toBeVisible();
+  expect(new URL(page.url()).hash).toContain('g=tag');
+});
+
+test('c copies a failure summary of the selected test', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto(url('screen=failures&mode=light'));
+  await page.keyboard.press('c');
+  await expect(page.getByRole('status')).toHaveText('Failure summary copied');
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text.split('\n').slice(0, 2)).toEqual([
+    '**FAILED** Desktop Chrome › checkout › saved cards › pays with a saved card and applies the loyalty discount when the basket holds a subscription',
+    '`checkout/payments/saved-card.spec.ts:128` · Desktop Chrome · 6.4s · 4 attempts',
+  ]);
+});
+
+test('? opens the keymap with every binding', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  await page.keyboard.press('?');
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await expect(dialog).toBeVisible();
+  for (const label of ['Next or previous test', 'Previous or next failure', 'Next flaky test', 'Command palette', 'Filter tests', 'Copy failure summary', 'Toggle sidebar']) {
+    await expect(dialog.getByText(label)).toBeVisible();
+  }
+});
+
+test('g then i goes to Insights, and 1 returns to Failures', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  await page.keyboard.press('g');
+  await page.keyboard.press('i');
+  await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
+  await page.keyboard.press('1');
+  await expect(page.getByRole('heading', { level: 1, name: 'Failures' })).toBeVisible();
+});
+
+test('the theme menu applies a mode and remembers it', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  await page.getByRole('button', { name: 'Theme' }).click();
+  await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+  expect(await page.evaluate(() => localStorage.getItem('smart-reporter:theme'))).toBe('{"mode":"dark","accent":"default"}');
+});
+
+test('a trend bar opens the recorded run read-only, and Back returns', async ({ page }) => {
+  await page.goto(url('screen=history&tab=trends&mode=light'));
+  await page.locator('.trend').first().locator('rect.trend__bar').nth(-2).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Read only' })).toBeVisible();
+  await expect(page.locator('.pane__count')).toHaveText('12');
+  await page.getByRole('button', { name: 'Back to current run' }).click();
+  await expect(page.locator('.pane__count')).toHaveText('57');
+});
+
+test('10,000 rows render a window, scroll smoothly, and show the right rows', async ({ page }) => {
+  await page.goto(url('screen=all&mode=light&scale=10000', '#/q/all?g=none'));
+  await expect(page.locator('.pane__count')).toHaveText('10000');
+  const scroller = page.getByRole('tree', { name: 'All tests' });
+  expect(await page.locator('.vlist__item').count()).toBeLessThan(80);
+
+  const frames = await scroller.evaluate(async (el) => {
+    const deltas: number[] = [];
+    let last = performance.now();
+    for (let i = 0; i < 90; i++) {
+      el.scrollTop = (el.scrollHeight - el.clientHeight) * (i / 89);
+      await new Promise(requestAnimationFrame);
+      const now = performance.now();
+      deltas.push(now - last);
+      last = now;
+    }
+    deltas.sort((a, b) => a - b);
+    return { p95: deltas[Math.floor(deltas.length * 0.95)] };
+  });
+  expect(frames.p95).toBeLessThan(50);
+
+  for (const index of [0, 5000, 9999]) {
+    await scroller.evaluate((el, i) => (el.scrollTop = i * 32), index);
+    await expect(page.locator('.row__name').filter({ hasText: new RegExp(` #${index}$`) })).toHaveCount(1);
+  }
+});

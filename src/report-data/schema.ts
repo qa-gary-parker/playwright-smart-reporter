@@ -73,6 +73,7 @@ export interface ReportData {
     branding?: BrandingConfig;
     features: ReportFeatures;
     exports: { json: boolean; junit: boolean; pdf: boolean };
+    live?: { jsonlFile: string };
   };
   summary: ReportSummary;
   tests: ReportTest[];

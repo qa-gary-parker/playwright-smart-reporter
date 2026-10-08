@@ -26,7 +26,6 @@ import {
   type TestStatus,
 } from '../components';
 import { ACCENT_NAMES, NEUTRAL_ROLES, SCALE, STATUSES } from '../styles/tokens';
-import { Screen } from './screens';
 import { applyTheme } from './theme';
 
 const params = new URLSearchParams(location.search);
@@ -386,5 +385,4 @@ function Specimen() {
   );
 }
 
-const screen = params.get('screen');
-render(screen ? <Screen name={screen} /> : <Specimen />, document.getElementById('app')!);
+render(<Specimen />, document.getElementById('app')!);

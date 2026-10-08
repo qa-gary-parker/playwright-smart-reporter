@@ -54,8 +54,9 @@ import {
 // Imports: Generators & Notifiers
 // ============================================================================
 
-import { generateHtml, type HtmlGeneratorData, type GeneratedReport } from './generators/html-generator';
-import { buildComparison } from './generators/comparison-generator';
+import { buildComparison } from './report-data/comparison';
+import { buildReportData, type ReportInput } from './report-data/builder';
+import { loadUiAssets, writeReport } from './report-data/writer';
 import { exportJsonData } from './generators/json-exporter';
 import { exportJunitXml } from './generators/junit-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
@@ -669,36 +670,31 @@ class SmartReporter implements Reporter {
       }
     }
 
-	    const htmlData: HtmlGeneratorData = {
-	      results: this.results,
-	      history: this.historyCollector.getHistory(),
-	      startTime: this.startTime,
-	      options: this.options,
-	      comparison,
-	      historyRunSnapshots,
-	      failureClusters,
-	      ciInfo: this.ciInfo,
-	      outputBasename: path.basename(outputPath, '.html'),
-	      qualityGateResult,
-	      quarantinedTestIds,
-	      quarantineEntries: quarantineResult?.entries,
-	      quarantineThreshold: this.options.quarantine?.threshold,
-	      aiSuiteHealthSummary,
-	    };
+    const reportInput: ReportInput = {
+      results: this.results,
+      history: this.historyCollector.getHistory(),
+      startTime: this.startTime,
+      options: this.options,
+      comparison,
+      historyRunSnapshots,
+      failureClusters,
+      ciInfo: this.ciInfo,
+      outputBasename: path.basename(outputPath, '.html'),
+      qualityGateResult,
+      quarantinedTestIds,
+      quarantineEntries: quarantineResult?.entries,
+      quarantineThreshold: this.options.quarantine?.threshold,
+      aiSuiteHealthSummary,
+    };
 
-    // Generate and save HTML report (with optional companion CSS/JS for CSP-safe mode)
-    const report = generateHtml(htmlData);
-    fs.writeFileSync(outputPath, report.html);
-    if (report.css || report.js) {
-      const outputDir = path.dirname(outputPath);
-      const basename = path.basename(outputPath, '.html');
-      if (report.css) {
-        fs.writeFileSync(path.join(outputDir, `${basename}.css`), report.css);
-      }
-      if (report.js) {
-        fs.writeFileSync(path.join(outputDir, `${basename}.js`), report.js);
-      }
-    }
+    const written = await writeReport(buildReportData(reportInput), {
+      outputPath,
+      assets: loadUiAssets(),
+      cspSafe: this.options.cspSafe,
+      assetMode: this.options.assetMode,
+    });
+    const dataMb = (written.dataBytes / (1024 * 1024)).toFixed(1);
+    console.log(`\n   Report data: ${dataMb} MB, ${written.mode === 'inline' ? 'inline in the HTML' : `in ${path.basename(written.files.find((f) => f.endsWith('-data.js')) ?? '')}`}`);
 
     // Issue #15: Better console output with command to open report
     console.log(`\n📊 Smart Report: ${outputPath}`);
@@ -716,7 +712,7 @@ class SmartReporter implements Reporter {
           comparison,
           failureClusters,
           exportDir,
-          htmlData.outputBasename,
+          reportInput.outputBasename,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
@@ -726,7 +722,7 @@ class SmartReporter implements Reporter {
 
     if (this.options.exportJunit) {
       try {
-        const junitPath = exportJunitXml(this.results, this.options, exportDir, htmlData.outputBasename);
+        const junitPath = exportJunitXml(this.results, this.options, exportDir, reportInput.outputBasename);
         console.log(`   JUnit XML: ${junitPath}`);
       } catch (err) {
         console.warn('⚠️  JUnit export failed:', err);
@@ -760,13 +756,13 @@ class SmartReporter implements Reporter {
           for (const pdfTheme of pdfThemes) {
             let pdfPath: string;
             try {
-              pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+              pdfPath = generateExecutivePdf(pdfData, exportDir, reportInput.outputBasename, pdfTheme);
             } catch (err) {
               // a font can pass the register-time check but still fail during subsetting
               if (!pdfData.pdfFont) throw err;
               console.warn(`⚠️  PDF generation failed with the custom font (${pdfData.pdfFont.regular}); retrying without it:`, err instanceof Error ? err.message : err);
               pdfData.pdfFont = undefined;
-              pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+              pdfPath = generateExecutivePdf(pdfData, exportDir, reportInput.outputBasename, pdfTheme);
             }
             if (pdfTheme === 'corporate') {
               console.log(`   PDF executive summary: ${pdfPath}`);

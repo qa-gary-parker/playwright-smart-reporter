@@ -9,6 +9,7 @@ export interface UiAssets {
   css: string;
   fonts: string;
   js: string;
+  traceViewer?: { html: string; css: string; js: string };
 }
 
 export interface WriteReportOptions {
@@ -37,7 +38,12 @@ export function loadUiAssets(dir: string = path.resolve(__dirname, '../ui')): Ui
     }
     return fs.readFileSync(file, 'utf8');
   };
-  return { css: read('report.css'), fonts: read('fonts.css'), js: read('app.js') };
+  return {
+    css: read('report.css'),
+    fonts: read('fonts.css'),
+    js: read('app.js'),
+    traceViewer: { html: read('trace-viewer.html'), css: read('trace-viewer.css'), js: read('trace-viewer.js') },
+  };
 }
 
 // JSON is embedded in <script>; escaping "<" keeps "</script>" and "<!--" inert.
@@ -117,6 +123,9 @@ export async function writeReport(data: ReportData, opts: WriteReportOptions): P
 
   const title = escapeHtml(data.config.branding?.title || 'Smart Test Report');
   const themeCss = customThemeCss(data.config.theme);
+  const trace = data.config.features.traceViewer ? assets.traceViewer : undefined;
+  const css = assets.css + (trace ? `\n${trace.css}` : '') + (themeCss ? `\n${themeCss}` : '');
+  const appJs = (trace ? `${trace.js}\n` : '') + assets.js;
   const files = [outputPath];
   const head: string[] = [
     '<!doctype html>\n',
@@ -124,18 +133,20 @@ export async function writeReport(data: ReportData, opts: WriteReportOptions): P
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n',
     `<meta name="generator" content="playwright-smart-reporter ${escapeHtml(data.meta.reporterVersion)}">\n`,
     `<title>${title}</title>\n`,
+    // playwright-smart-reporter-serve replaces these placeholders to enable SSE and the Run button.
+    '<meta name="smart-live-sse" content="__SSE_URL__">\n<meta name="smart-live-run" content="__RUN_ENABLED__">\n',
   ];
 
   if (cspSafe) {
     const cssFile = path.join(dir, `${base}.css`);
-    fs.writeFileSync(cssFile, assets.css + (themeCss ? `\n${themeCss}` : ''));
+    fs.writeFileSync(cssFile, css);
     files.push(cssFile);
     head.push(`<link rel="stylesheet" href="./${encodeURI(base)}.css">\n`);
   } else {
-    head.push(`<style>${assets.fonts}</style>\n<style>${assets.css}${themeCss}</style>\n`);
+    head.push(`<style>${assets.fonts}</style>\n<style>${css}</style>\n`);
   }
 
-  const body = ['</head>\n<body>\n<div id="app"></div>\n'];
+  const body = ['</head>\n<body>\n<div id="app"></div>\n', ...(trace ? [trace.html, '\n'] : [])];
   if (mode === 'external') {
     const dataFile = path.join(dir, `${base}-data.js`);
     await writeChunks(dataFile, ['window.__SMART_DATA__=', ...chunks, ';\n']);
@@ -145,13 +156,13 @@ export async function writeReport(data: ReportData, opts: WriteReportOptions): P
 
   if (cspSafe) {
     const jsFile = path.join(dir, `${base}.js`);
-    fs.writeFileSync(jsFile, assets.js);
+    fs.writeFileSync(jsFile, appJs);
     files.push(jsFile);
     body.push(`<script src="./${encodeURI(base)}.js"></script>\n`);
   }
 
   const inlineData = mode === 'inline' ? ['<script>window.__SMART_DATA__=', ...chunks, ';</script>\n'] : [];
-  const inlineApp = cspSafe ? [] : [`<script>${assets.js.replace(/<\/script/gi, '<\\/script')}</script>\n`];
+  const inlineApp = cspSafe ? [] : [`<script>${appJs.replace(/<\/script/gi, '<\\/script')}</script>\n`];
 
   await writeChunks(outputPath, [...head, ...body, ...inlineData, ...inlineApp, '</body>\n</html>\n']);
   return { mode, dataBytes, files };

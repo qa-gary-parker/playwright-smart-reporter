@@ -30,12 +30,14 @@ export function Menu({
   onSelect,
   children,
   align = 'end',
+  triggerClass = 'btn btn--secondary',
 }: {
   label: string;
   items: MenuItem[];
   onSelect: (id: string) => void;
   children: ComponentChildren;
   align?: 'start' | 'end';
+  triggerClass?: string;
 }) {
   const id = useId();
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -84,7 +86,7 @@ export function Menu({
       <button
         ref={btnRef}
         type="button"
-        class="btn btn--secondary"
+        class={triggerClass}
         popovertarget={id}
         aria-haspopup="menu"
         aria-expanded={open}
