@@ -77,7 +77,7 @@ export interface ReportData {
     theme?: ThemeConfig;
     branding?: BrandingConfig;
     features: ReportFeatures;
-    exports: { json: boolean; junit: boolean; pdf: boolean };
+    exports: { json: boolean; junit: boolean; pdf: boolean; ctrf: boolean; failures: boolean };
     live?: { jsonlFile: string };
   };
   summary: ReportSummary;

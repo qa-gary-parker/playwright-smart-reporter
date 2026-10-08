@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Dialog, FilterToken, Icon, Kbd, StatusGlyph } from '../../components';
-import { displayStatus, isFailing, location, type ReportTest } from '../data';
+import { displayStatus, isFailing, location, titlePath, type ReportTest } from '../data';
 import { QUEUES, QUEUE_IDS } from '../queues';
 import type { Route } from '../router';
-import { applyTheme, data, keymapOpen, navigate, paletteOpen, route, runTests, summaryOpen, theme } from '../store';
+import { applyTheme, data, keymapOpen, multiProject, navigate, paletteOpen, route, runTests, summaryOpen, theme } from '../store';
 import { exportCsv, exportJson } from './Exports';
 
 interface Command {
@@ -35,13 +35,19 @@ export function fuzzyScore(needle: string, hay: string): number {
   return score;
 }
 
-const GOTO: Array<[string, Route, string?]> = [
-  ...QUEUE_IDS.map((id): [string, Route, string?] => [QUEUES[id].label, { view: 'queue', queue: id, q: '' }, id === 'failures' ? 'g f' : id === 'flaky' ? 'g l' : undefined]),
-  ['Insights', { view: 'insights' }, 'g i'],
-  ['History', { view: 'history', tab: 'trends' }, 'g h'],
-  ['Gallery', { view: 'gallery' }],
-  ['Live', { view: 'live' }],
-];
+function gotoTargets(): Array<[string, Route, string?]> {
+  const d = data.value;
+  const f = d.config.features;
+  return [
+    ...QUEUE_IDS.map((id): [string, Route, string?] => [QUEUES[id].label, { view: 'queue', queue: id, q: '' }, id === 'failures' ? 'g f' : id === 'flaky' ? 'g l' : undefined]),
+    ['Insights', { view: 'insights' }, 'g i'],
+    ['History', { view: 'history', tab: f.trends ? 'trends' : 'heatmap' }, 'g h'],
+    ...(f.gallery ? [['Gallery', { view: 'gallery' }] as [string, Route]] : []),
+    ...(f.live ? [['Live', { view: 'live' }] as [string, Route]] : []),
+    ...(d.coverage ? [['Coverage', { view: 'coverage' }] as [string, Route]] : []),
+    ...(d.a11y ? [['Accessibility', { view: 'a11y' }] as [string, Route]] : []),
+  ];
+}
 
 function buildCommands(query: string): Command[] {
   const close = () => (paletteOpen.value = false);
@@ -50,15 +56,15 @@ function buildCommands(query: string): Command[] {
   const out: Command[] = [];
 
   const scored = tests
-    .map((t) => ({ t, s: Math.max(fuzzyScore(q, t.title), fuzzyScore(q, t.file) * 0.8) + (isFailing(t) ? 0.5 : 0) }))
+    .map((t) => ({ t, s: Math.max(fuzzyScore(q, titlePath(t, multiProject.value).join(' ')), fuzzyScore(q, t.file) * 0.8) + (isFailing(t) ? 0.5 : 0) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, q ? 8 : 5);
   for (const { t } of scored) {
-    out.push({ id: `t:${t.testId}`, group: 'Tests', label: t.title, hint: location(t), test: t, run: () => (navigate({ view: 'queue', queue: isFailing(t) ? 'failures' : 'all', q: '', test: t.testId }), close()) });
+    out.push({ id: `t:${t.testId}`, group: 'Tests', label: titlePath(t, multiProject.value).join(' › '), hint: location(t), test: t, run: () => (navigate({ view: 'queue', queue: isFailing(t) ? 'failures' : 'all', q: '', test: t.testId }), close()) });
   }
 
-  for (const [label, to, kbd] of GOTO) {
+  for (const [label, to, kbd] of gotoTargets()) {
     if (fuzzyScore(q, label) > 0) out.push({ id: `g:${label}`, group: 'Go to', label, kbd, run: () => (navigate(to), close()) });
   }
 
@@ -66,6 +72,10 @@ function buildCommands(query: string): Command[] {
     ['tag', new Set(tests.flatMap((t) => t.tags ?? []))],
     ['project', new Set(tests.map((t) => t.project).filter((p): p is string => !!p))],
     ['file', new Set(tests.map((t) => t.file))],
+    ['suite', new Set(tests.flatMap((t) => t.suites ?? []).filter((x) => !x.includes('.spec.') && !x.includes('.test.')))],
+    ['owner', new Set(tests.flatMap((t) => t.owners ?? []))],
+    ['grade', new Set(tests.map((t) => t.stabilityScore?.grade).filter((g): g is 'A' | 'B' | 'C' | 'D' | 'F' => !!g))],
+    ['signal', new Set(tests.flatMap((t) => t.signals))],
     ['status', new Set(['failed', 'flaky', 'passed', 'skipped'])],
   ]);
   const filters: Command[] = [];

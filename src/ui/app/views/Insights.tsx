@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing, plural, suiteHealth, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
@@ -70,7 +70,7 @@ export function Insights() {
         </div>
         <div class="stat">
           <span class="stat__label">Flaky</span>
-          <span class="stat__value">{s.flaky}</span>
+          <span class="stat__value" title="Flaky in this run or by recent history">{s.flaky}</span>
           <Sparkline label="Flaky tests, recent runs" values={trends.map((r) => r.flaky)} width={88} />
         </div>
         <div class="stat">
@@ -83,12 +83,12 @@ export function Insights() {
       </div>
       <div class="stats-bar">
         <MiniBar
-          segments={[
-            { tone: 'pass', value: tests.filter((t) => displayStatus(t) === 'passed').length, label: 'passed' },
-            { tone: 'fail', value: tests.filter(isFailing).length, label: 'failed' },
-            { tone: 'flaky', value: tests.filter((t) => displayStatus(t) === 'flaky').length, label: 'flaky' },
-            { tone: 'skip', value: tests.filter((t) => t.status === 'skipped').length, label: 'skipped' },
-          ]}
+          segments={(({ passed, failed, flaky, skipped }) => [
+            { tone: 'pass' as const, value: passed, label: 'passed' },
+            { tone: 'fail' as const, value: failed, label: 'failed' },
+            { tone: 'flaky' as const, value: flaky, label: 'flaky this run' },
+            { tone: 'skip' as const, value: skipped, label: 'skipped' },
+          ])(outcomeCounts(tests))}
         />
       </div>
       <div class="panels">

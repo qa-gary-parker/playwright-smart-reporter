@@ -89,9 +89,10 @@ function Steps({ t }: { t: ReportTest }) {
 
 function Attempts({ t }: { t: ReportTest }) {
   const attempts = t.attempts ?? [];
+  // Side by side only makes sense when one attempt failed and a later one passed.
   const failedAttempt = attempts.find((a) => a.status === 'failed' || a.status === 'timedOut');
-  const finalAttempt = attempts[attempts.length - 1];
-  const compare = failedAttempt && finalAttempt && failedAttempt !== finalAttempt ? [failedAttempt, finalAttempt] : undefined;
+  const passedAttempt = [...attempts].reverse().find((a) => a.status === 'passed');
+  const compare = failedAttempt && passedAttempt ? [failedAttempt, passedAttempt] : undefined;
   const rows = compare ? Math.max(compare[0].steps.length, compare[1].steps.length) : 0;
   return (
     <div class="attempts">

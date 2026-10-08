@@ -1,5 +1,5 @@
 import { Button, Dialog, Icon, Menu, MiniBar } from '../../components';
-import { csvCell, displayStatus, formatDate, formatDuration, isFailing } from '../data';
+import { csvCell, displayStatus, formatDate, formatDuration, isFailing, outcomeCounts } from '../data';
 import { data, runTests, summaryOpen } from '../store';
 import { copyText } from './Detail';
 
@@ -56,7 +56,7 @@ export function summaryMarkdown(): string {
 }
 
 export function SummaryDialog() {
-  const s = data.value.summary;
+  const c = outcomeCounts(runTests.value);
   return (
     <Dialog
       open={summaryOpen.value}
@@ -74,10 +74,10 @@ export function SummaryDialog() {
       <div class="summary-card">
         <MiniBar
           segments={[
-            { tone: 'pass', value: s.passed - s.flaky > 0 ? s.passed - s.flaky : s.passed, label: 'passed' },
-            { tone: 'fail', value: s.failed, label: 'failed' },
-            { tone: 'flaky', value: s.flaky, label: 'flaky' },
-            { tone: 'skip', value: s.skipped, label: 'skipped' },
+            { tone: 'pass', value: c.passed, label: 'passed' },
+            { tone: 'fail', value: c.failed, label: 'failed' },
+            { tone: 'flaky', value: c.flaky, label: 'flaky' },
+            { tone: 'skip', value: c.skipped, label: 'skipped' },
           ]}
         />
         <pre class="summary-card__text">{summaryMarkdown()}</pre>
@@ -102,6 +102,8 @@ export function ExportMenu() {
       : []),
     ...(d.config.exports.json ? [{ id: 'file:-data.json', label: 'Full data (JSON)', icon: 'braces', group: 'Files' }] : []),
     ...(d.config.exports.junit ? [{ id: 'file:-junit.xml', label: 'JUnit XML', icon: 'file', group: 'Files' }] : []),
+    ...(d.config.exports.ctrf ? [{ id: 'file:-ctrf.json', label: 'CTRF JSON', icon: 'braces', group: 'Files' }] : []),
+    ...(d.config.exports.failures ? [{ id: 'file:-failures.json', label: 'Failure bundle for agents', icon: 'bot', group: 'Files' }] : []),
   ].map((it) => ({ group: 'Export', ...it }));
   return (
     <Menu

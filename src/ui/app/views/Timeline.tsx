@@ -30,43 +30,46 @@ export function CausalTimeline({ timeline }: { timeline: Timeline }) {
         </div>
       )}
       <div class="timeline__grid">
-        <span class="timeline__lane-label">Steps</span>
-        <div class="timeline__lane">
-          {lanes.steps.map((s) => (
-            <span
-              class="timeline__bar"
-              data-failed={s.failed ? '' : undefined}
-              style={{ left: pct(s.start, duration), width: pct(Math.max(s.end - s.start, duration / 400), duration) }}
-              title={`${s.title} · ${formatDuration(s.end - s.start)}`}
-            />
-          ))}
+        <div class="timeline__labels" aria-hidden="true">
+          <span>Steps</span>
+          <span>Network</span>
+          <span>Console</span>
         </div>
-        <span class="timeline__lane-label">Network</span>
-        <div class="timeline__lane">
-          {lanes.network.map((n) => (
-            <span
-              class="timeline__bar timeline__bar--net"
-              data-failed={requestFailed(n.status) ? '' : undefined}
-              style={{ left: pct(n.start, duration), width: pct(Math.max(n.end - n.start, duration / 400), duration) }}
-              title={`${n.method} ${n.url} · ${n.status > 0 ? n.status : n.failure ?? 'failed'} · ${formatDuration(n.end - n.start)}`}
-            />
-          ))}
-        </div>
-        <span class="timeline__lane-label">Console</span>
-        <div class="timeline__lane">
-          {lanes.console.map((c) => (
-            <span class="timeline__dot" data-level={c.level} style={{ left: pct(c.at, duration) }} title={`${c.level}: ${c.text}`} />
-          ))}
-        </div>
-        <span />
-        <div class="timeline__axis" aria-hidden="true">
-          {firstAnomaly && <span class="timeline__marker" style={{ left: pct(firstAnomaly.at, duration) }} />}
-          <span class="timeline__playhead" style={{ left: pct(at, duration) }} />
-          {ticks.map((tk, i) => (
-            <span class="timeline__tick" data-edge={i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : undefined} style={{ left: pct(tk, duration) }}>
-              {formatDuration(tk)}
-            </span>
-          ))}
+        <div class="timeline__track">
+          <div class="timeline__lane" aria-label="Steps">
+            {lanes.steps.map((s) => (
+              <span
+                class="timeline__bar"
+                data-failed={s.failed ? '' : undefined}
+                style={{ left: pct(s.start, duration), width: pct(Math.max(s.end - s.start, duration / 400), duration) }}
+                title={`${s.title} · ${formatDuration(s.end - s.start)}`}
+              />
+            ))}
+          </div>
+          <div class="timeline__lane" aria-label="Network">
+            {lanes.network.map((n) => (
+              <span
+                class="timeline__bar timeline__bar--net"
+                data-failed={requestFailed(n.status) ? '' : undefined}
+                style={{ left: pct(n.start, duration), width: pct(Math.max(n.end - n.start, duration / 400), duration) }}
+                title={`${n.method} ${n.url} · ${n.status > 0 ? n.status : n.failure ?? 'failed'} · ${formatDuration(n.end - n.start)}`}
+              />
+            ))}
+          </div>
+          <div class="timeline__lane" aria-label="Console">
+            {lanes.console.map((c) => (
+              <span class="timeline__dot" data-level={c.level} style={{ left: pct(c.at, duration) }} title={`${c.level}: ${c.text}`} />
+            ))}
+          </div>
+          <div class="timeline__axis" aria-hidden="true">
+            {ticks.map((tk, i) => (
+              <span class="timeline__tick" data-edge={i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : undefined} style={{ left: pct(tk, duration) }}>
+                {formatDuration(tk)}
+              </span>
+            ))}
+          </div>
+          {firstAnomaly && <span class="timeline__marker" aria-hidden="true" style={{ left: pct(firstAnomaly.at, duration) }} />}
+          <span class="timeline__playhead" aria-hidden="true" style={{ left: pct(at, duration) }} />
         </div>
       </div>
       <input

@@ -44,8 +44,9 @@ test('failures screen lands on the new failure, grouped by cluster', async ({ pa
   await expect(page.getByRole('article', { name: 'Test detail' }).getByRole('heading', { level: 2 })).toContainText('pays with a saved card');
 });
 
-test('green run opens on the flaky queue and reports no failures', async ({ page }) => {
+test('a green run with no deep link opens on the flaky queue and reports no failures', async ({ page }) => {
   await page.goto(url('screen=green&mode=light'));
+  expect(new URL(page.url()).hash).toMatch(/^#\/q\/flaky(\?|$)/);
   await expect(page.getByRole('link', { name: /Flaky/ })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByLabel('Run result')).toContainText('No failures');
 });

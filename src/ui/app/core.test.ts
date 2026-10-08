@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportTest } from '../../report-data/schema';
-import { csvCell, displayStatus, formatDuration, isFailing, titlePath } from './data';
+import { csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, titlePath, trendStats } from './data';
 import { formatQuery, matchesQuery, parseQuery } from './filters';
 import { groupTests } from './grouping';
 import { QUEUES } from './queues';
@@ -27,6 +27,15 @@ describe('status helpers', () => {
     expect(titlePath(failed, true)).toEqual(['chromium', 'f']);
     const withFileSuite = t({ testId: 'w', file: 'parallel/test2.spec.ts', suites: ['parallel/test2.spec.ts', 'Header'] });
     expect(titlePath(withFileSuite, false)).toEqual(['Header', 'w']);
+  });
+
+  it('counts each test in exactly one outcome bucket, even when history marks a failure as flaky', () => {
+    const historicallyFlakyFailure = t({ testId: 'hf', status: 'failed', outcome: 'unexpected', flakinessScore: 0.4, signals: ['flaky'] });
+    const interrupted = t({ testId: 'i', status: 'interrupted', outcome: 'unexpected' });
+    const skipped = t({ testId: 's', status: 'skipped', outcome: 'skipped' });
+    const counts = outcomeCounts([failed, timedOut, flaky, expectedFail, passed, historicallyFlakyFailure, interrupted, skipped]);
+    expect(counts).toEqual({ failed: 3, flaky: 1, passed: 2, skipped: 2 });
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(8);
   });
 
   it('formats durations', () => {
@@ -81,7 +90,13 @@ describe('grouping', () => {
       '@payments': ['m'],
       '(none)': ['p'],
     });
-    for (const by of ['file', 'project', 'suite', 'status', 'grade', 'owner', 'none'] as const) {
+    const shared = t({ testId: 'o', owners: ['@a', '@b'] });
+    expect(groupTests([shared, passed], 'owner', data).map((g) => [g.label, g.tests.map((x) => x.testId)])).toEqual([
+      ['@a', ['o']],
+      ['@b', ['o']],
+      ['Unowned', ['p']],
+    ]);
+    for (const by of ['file', 'project', 'suite', 'status', 'grade', 'none'] as const) {
       expect(groupTests([failed, flaky, passed], by, data).reduce((n, g) => n + g.tests.length, 0)).toBe(3);
     }
   });
@@ -141,5 +156,19 @@ describe('csv export', () => {
       "'@user",
       '42',
     ]);
+  });
+});
+
+describe('trend statistics', () => {
+  it('averages the last three runs and flags runs beyond two standard deviations', () => {
+    const { average, anomalies } = trendStats([90, 92, 91, 93, 92, 91, 40, 92]);
+    expect(average.slice(0, 3)).toEqual([null, null, 91]);
+    expect(average[7]).toBeCloseTo((40 + 92 + 91) / 3, 5);
+    expect(anomalies).toEqual([false, false, false, false, false, false, true, false]);
+  });
+
+  it('flags nothing on short or flat series', () => {
+    expect(trendStats([10, 90, 10, 90]).anomalies).toEqual([false, false, false, false]);
+    expect(trendStats([5, 5, 5, 5, 5, 5]).anomalies.every((a) => !a)).toBe(true);
   });
 });

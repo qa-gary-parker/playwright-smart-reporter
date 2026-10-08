@@ -70,7 +70,8 @@ const test = params.get('test');
 const HASH: Record<string, string> = {
   failures: '#/q/failures',
   flaky: '#/q/flaky',
-  green: '#/q/flaky',
+  // The app picks the green-run landing itself.
+  green: '',
   all: '#/q/all',
   insights: '#/insights',
   history: `#/history/${params.get('tab') ?? 'trends'}`,
@@ -81,4 +82,5 @@ const HASH: Record<string, string> = {
   keymap: '#/q/failures',
 };
 // An explicit hash is a deep link under test; keep it.
-if (!location.hash) location.replace(`${HASH[screen] ?? '#/q/failures'}${test ? `?test=${encodeURIComponent(test)}` : ''}`);
+const target = HASH[screen] ?? '#/q/failures';
+if (!location.hash && target) location.replace(`${target}${test ? `?test=${encodeURIComponent(test)}` : ''}`);

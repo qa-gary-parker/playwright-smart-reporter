@@ -1,35 +1,42 @@
 import { GroupHeader, ListRow, Tabs, type TestStatus } from '../../components';
-import { displayStatus, formatDate, formatDuration, location, plural, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, location, plural, titlePath, trendStats, type ReportTest } from '../data';
 import type { ComparisonKey } from '../../../report-data/schema';
 import { formatRoute, type HistoryTab } from '../router';
-import { data, navigate, testsById } from '../store';
+import { data, multiProject, navigate, testsById } from '../store';
 
 function TrendChart({ title, values, dates, format, tone, onPick }: { title: string; values: number[]; dates: string[]; format: (v: number) => string; tone?: string; onPick?: (i: number) => void }) {
   const w = 320;
   const h = 96;
   const max = Math.max(...values, 1);
   const bw = w / Math.max(values.length, 1);
+  const y = (v: number) => h - (v / max) * (h - 8);
+  const { average, anomalies } = trendStats(values);
+  const avgPoints = average.map((a, i) => (a === null ? null : `${i * bw + bw / 2},${y(a)}`)).filter(Boolean);
+  const outliers = anomalies.filter(Boolean).length;
   return (
     <figure class="trend">
       <figcaption class="trend__head">
         <span class="trend__title">{title}</span>
         <span class="trend__value">{values.length ? format(values[values.length - 1]) : '—'}</span>
       </figcaption>
-      <svg viewBox={`0 0 ${w} ${h}`} class="trend__svg" role="img" aria-label={`${title}: ${values.map(format).join(', ')}`}>
+      <svg viewBox={`0 0 ${w} ${h}`} class="trend__svg" role="img" aria-label={`${title}: ${values.map(format).join(', ')}${outliers ? `; ${plural(outliers, 'unusual run')}` : ''}`}>
         <line x1="0" x2={w} y1={h - 0.5} y2={h - 0.5} class="trend__axis" />
         {values.map((v, i) => (
           <rect
             x={i * bw + 2}
             width={Math.max(1, bw - 4)}
-            y={h - (v / max) * (h - 8)}
+            y={y(v)}
             height={Math.max(1, (v / max) * (h - 8))}
             rx="2"
             class={`trend__bar${i === values.length - 1 ? ` trend__bar--last ${tone ?? ''}` : ''}${onPick ? ' trend__bar--pick' : ''}`}
+            data-anomaly={anomalies[i] ? '' : undefined}
             onClick={onPick ? () => onPick(i) : undefined}
           >
-            <title>{`${dates[i]}: ${format(v)}`}</title>
+            <title>{`${dates[i]}: ${format(v)}${anomalies[i] ? ' (unusual: more than 2 standard deviations from the mean)' : ''}`}</title>
           </rect>
         ))}
+        {avgPoints.length > 1 && <polyline class="trend__avg" points={avgPoints.join(' ')} fill="none" />}
+        {anomalies.map((a, i) => (a ? <circle class="trend__anomaly" cx={i * bw + bw / 2} cy={Math.max(4, y(values[i]) - 6)} r="3" /> : null))}
       </svg>
       <div class="trend__dates" aria-hidden="true">
         <span>{dates[0]}</span>
@@ -42,17 +49,24 @@ function TrendChart({ title, values, dates, format, tone, onPick }: { title: str
 function Trends() {
   const d = data.value;
   const runs = d.trends;
-  if (runs.length === 0) return <p class="panel__empty">No history yet. Trends appear after the second run.</p>;
+  if (runs.length === 0) return <p class="panel__empty">No runs recorded.</p>;
   const dates = runs.map((r) => formatDate(r.timestamp));
   const drill = d.config.features.historyDrilldown;
   const pick = drill ? (i: number) => d.historySnapshots?.[runs[i].runId] && navigate({ view: 'queue', queue: 'all', q: '', run: runs[i].runId }) : undefined;
   return (
-    <div class="trends">
+    <>
+      {runs.length === 1 ? (
+        <p class="panel__empty trends__note">This is the first recorded run. Trends build up from the next run.</p>
+      ) : (
+        <p class="faint trends__note">Line: three-run average. Dot: a run more than two standard deviations from the mean.</p>
+      )}
+      <div class="trends">
       <TrendChart title="Pass rate" values={runs.map((r) => r.passRate)} dates={dates} format={(v) => `${v}%`} onPick={pick} />
       <TrendChart title="Duration" values={runs.map((r) => r.duration)} dates={dates} format={formatDuration} onPick={pick} />
       <TrendChart title="Flaky tests" values={runs.map((r) => r.flaky)} dates={dates} format={(v) => `${v}`} tone="tone-flaky" onPick={pick} />
       <TrendChart title="Slow tests" values={runs.map((r) => r.slow)} dates={dates} format={(v) => `${v}`} onPick={pick} />
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -74,7 +88,7 @@ function Heatmap() {
       {tests.map(({ t, cells }) => (
         <div class="heatmap__row" role="row">
           <a role="rowheader" class="heatmap__label" href={formatRoute({ view: 'queue', queue: 'all', q: '', test: t.testId })} title={location(t)}>
-            {t.title}
+            {titlePath(t, multiProject.value).join(' › ')}
           </a>
           <span class="heatmap__cells" style={{ gridTemplateColumns: `repeat(${width}, 10px)` }}>
             {cells.map((c, i) => (
@@ -135,7 +149,7 @@ function Compare() {
               {tests.map((t) => (
                 <ListRow
                   status={displayStatus(t)}
-                  path={[t.title]}
+                  path={titlePath(t, multiProject.value)}
                   location={location(t)}
                   duration={formatDuration(t.duration)}
                   level={2}

@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { Button, Count, Icon, IconButton, Menu, StatusGlyph } from '../../components';
 import { ACCENT_NAMES } from '../../styles/tokens';
-import { formatDate, formatDuration, isFailing, isFlaky } from '../data';
+import { formatDate, formatDuration, outcomeCounts } from '../data';
 import { QUEUES, QUEUE_IDS, type QueueId } from '../queues';
 import { formatRoute, type Route } from '../router';
 import { applyTheme, data, keymapOpen, navigate, paletteOpen, railOpen, route, runTests, theme } from '../store';
@@ -39,11 +39,7 @@ export function queueCount(id: QueueId): number {
 
 function TopBar() {
   const d = data.value;
-  const tests = runTests.value;
-  const failures = tests.filter(isFailing).length;
-  const passed = tests.filter((t) => !isFailing(t) && !isFlaky(t) && t.status !== 'skipped').length;
-  const flaky = tests.filter(isFlaky).length;
-  const skipped = tests.filter((t) => t.status === 'skipped').length;
+  const { failed: failures, passed, flaky, skipped } = outcomeCounts(runTests.value);
   const ci = d.meta.ci;
   const brand = d.config.branding;
   const toQueue = (queue: QueueId) => navigate({ view: 'queue', queue, q: '' });
@@ -51,8 +47,8 @@ function TopBar() {
     <header class="topbar">
       <IconButton icon="panel-left" label="Toggle sidebar (⌘B)" onClick={() => (railOpen.value = !railOpen.value)} />
       <span class="topbar__brand">
-        {brand?.logo && <img class="topbar__logo" src={brand.logo} alt="" />}
-        {brand?.title || 'Smart Reporter'}
+        {brand?.logo ? <img class="topbar__logo" src={brand.logo} alt={brand.title ? '' : 'Report logo'} /> : null}
+        {brand?.title || (brand?.logo ? null : 'Smart Reporter')}
       </span>
       <span class="topbar__run hide-narrow">
         {ci?.branch && (
@@ -131,7 +127,7 @@ function Rail() {
       </div>
       <div class="rail__group">
         <RailItem icon="gauge" label="Insights" to={{ view: 'insights' }} active={r.view === 'insights'} />
-        {(f.trends || f.comparison) && <RailItem icon="history" label="History" to={{ view: 'history', tab: f.trends ? 'trends' : 'compare' }} active={r.view === 'history'} />}
+        <RailItem icon="history" label="History" to={{ view: 'history', tab: f.trends ? 'trends' : 'heatmap' }} active={r.view === 'history'} />
         {f.gallery && <RailItem icon="image" label="Gallery" to={{ view: 'gallery', ...run }} active={r.view === 'gallery'} />}
         {f.live && <RailItem icon="radio" label="Live" to={{ view: 'live' }} active={r.view === 'live'} />}
         {data.value.coverage && <RailItem icon="target" label="Coverage" count={Math.floor(data.value.coverage.summary.lines.pct)} to={{ view: 'coverage' }} active={r.view === 'coverage'} />}

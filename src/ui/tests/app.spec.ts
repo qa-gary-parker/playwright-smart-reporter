@@ -185,3 +185,34 @@ test('filter edits replace the history entry instead of adding one per edit', as
   await expect(page.locator('.pane__count')).toHaveText('2');
   expect(await page.evaluate(() => history.length)).toBe(length);
 });
+
+test('timeline marker lines stay within the lanes and below the anomaly note', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  const note = page.getByRole('note');
+  await note.scrollIntoViewIfNeeded();
+  const noteBox = (await note.boundingBox())!;
+  const lanes = page.locator('.timeline__track .timeline__lane');
+  const firstLane = (await lanes.first().boundingBox())!;
+  const lastLane = (await lanes.last().boundingBox())!;
+  for (const line of ['.timeline__marker', '.timeline__playhead']) {
+    const box = (await page.locator(line).boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(noteBox.y + noteBox.height);
+    expect(Math.round(box.y)).toBe(Math.round(firstLane.y));
+    expect(Math.round(box.y + box.height)).toBe(Math.round(lastLane.y + lastLane.height));
+  }
+});
+
+test('the top bar counts each test once, so the counts add up to the total', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  const values = await page.getByLabel('Run result').locator('.count__value').allTextContents();
+  expect(values.map(Number).reduce((a, b) => a + b, 0)).toBe(57);
+});
+
+test('the retry comparison appears for a test that failed and then passed, and not for one that always failed', async ({ page }) => {
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.getByRole('table', { name: 'Steps by attempt' })).toBeVisible();
+  await page.goto(url('screen=failures&mode=light'));
+  await expect(page.getByRole('heading', { level: 2 })).toContainText('pays with a saved card');
+  await expect(page.getByRole('table', { name: 'Steps by attempt' })).toHaveCount(0);
+});

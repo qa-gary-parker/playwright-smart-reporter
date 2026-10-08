@@ -679,6 +679,25 @@ a.lines__label {
   fill: var(--flaky-fg);
 }
 
+.trend__avg {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.trend__anomaly {
+  fill: var(--fail-fg);
+}
+
+.trend__bar--pick {
+  cursor: pointer;
+}
+
+.trends__note {
+  padding-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+
 .trend__dates {
   display: flex;
   justify-content: space-between;
@@ -967,18 +986,27 @@ a.lines__label {
 .timeline__grid {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
-  gap: var(--space-2) var(--space-3);
-  align-items: center;
+  gap: var(--space-3);
 }
 
-.timeline__lane-label {
+.timeline__labels {
+  display: grid;
+  grid-auto-rows: 16px;
+  gap: var(--space-2);
+  align-items: center;
   color: var(--text-faint);
   font-size: var(--text-sm);
 }
 
+.timeline__track {
+  position: relative;
+  display: grid;
+  grid-auto-rows: 16px;
+  gap: var(--space-2);
+}
+
 .timeline__lane {
   position: relative;
-  height: 16px;
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
@@ -1020,16 +1048,16 @@ a.lines__label {
 
 .timeline__axis {
   position: relative;
-  height: 20px;
   border-top: 1px solid var(--border-strong);
 }
 
 .timeline__tick {
   position: absolute;
-  top: 4px;
+  top: 2px;
   color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+  line-height: var(--leading-xs);
   transform: translateX(-50%);
 }
 
@@ -1041,12 +1069,13 @@ a.lines__label {
   transform: translateX(-100%);
 }
 
+/* Spans the three lanes only: three 16px rows and the gaps between them. */
 .timeline__marker,
 .timeline__playhead {
   position: absolute;
-  bottom: 20px;
+  top: 0;
   width: 2px;
-  height: 120px;
+  height: calc(16px * 3 + var(--space-2) * 2);
   margin-left: -1px;
   pointer-events: none;
 }

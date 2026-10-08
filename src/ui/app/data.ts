@@ -64,3 +64,24 @@ export function csvCell(v: unknown): string {
   const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
+
+// Each test lands in exactly one bucket, so the buckets add up to the total.
+export function outcomeCounts(tests: ReportTest[]) {
+  const c = { failed: 0, flaky: 0, passed: 0, skipped: 0 };
+  for (const t of tests) {
+    if (isFailing(t)) c.failed++;
+    else if (t.status === 'skipped' || t.status === 'interrupted') c.skipped++;
+    else if (displayStatus(t) === 'flaky') c.flaky++;
+    else c.passed++;
+  }
+  return c;
+}
+
+// Three-run moving average, and runs more than two standard deviations from the mean.
+export function trendStats(values: number[]): { average: Array<number | null>; anomalies: boolean[] } {
+  const average = values.map((_, i) => (i < 2 ? null : (values[i] + values[i - 1] + values[i - 2]) / 3));
+  const mean = values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1);
+  const sd = Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(values.length, 1));
+  const anomalies = values.map((v) => values.length >= 5 && sd > 0 && Math.abs(v - mean) > 2 * sd);
+  return { average, anomalies };
+}
