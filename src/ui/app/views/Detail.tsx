@@ -15,7 +15,7 @@ import {
   statusLabel,
   type TestStatus,
 } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
+import { displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
 import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -180,8 +180,8 @@ function Attachments({ t }: { t: ReportTest }) {
   const [index, setIndex] = useState<number | null>(null);
   const media: MediaItem[] = useMemo(
     () => [
-      ...(att?.screenshots ?? []).map((src, i) => ({ kind: 'image' as const, src, caption: `Screenshot ${i + 1}` })),
-      ...(att?.videos ?? []).map((src, i) => ({ kind: 'video' as const, src, caption: `Video ${i + 1}` })),
+      ...(att?.screenshots ?? []).map((src, i) => ({ kind: 'image' as const, src: fileHref(src), caption: `Screenshot ${i + 1}` })),
+      ...(att?.videos ?? []).map((src, i) => ({ kind: 'video' as const, src: fileHref(src), caption: `Video ${i + 1}` })),
     ],
     [t.testId],
   );
@@ -204,14 +204,14 @@ function Attachments({ t }: { t: ReportTest }) {
                 Open
               </Button>
             )}
-            <a href={path} download>
+            <a href={fileHref(path)} download>
               Download
             </a>
           </span>
         </div>
       ))}
       {(att?.custom ?? []).map((c) => (
-        <a class="thumb" href={c.path ?? `data:${c.contentType};base64,${c.body ?? ''}`} download={c.name}>
+        <a class="thumb" href={c.path ? fileHref(c.path) : `data:${c.contentType};base64,${c.body ?? ''}`} download={c.name}>
           <Icon name="paperclip" size={20} />
           <span class="thumb__label mono">{c.name}</span>
         </a>

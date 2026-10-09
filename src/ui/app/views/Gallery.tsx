@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'preact/hooks';
 import { EmptyState, Icon, StatusGlyph, Tabs } from '../../components';
-import { displayStatus, plural, type ReportTest } from '../data';
+import { displayStatus, fileHref, plural, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests } from '../store';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -18,8 +18,8 @@ export function Gallery() {
   const tiles = useMemo<Tile[]>(
     () =>
       runTests.value.flatMap((test) => [
-        ...(test.attachments?.screenshots ?? []).map((src) => ({ kind: 'image' as const, src, test })),
-        ...(test.attachments?.videos ?? []).map((src) => ({ kind: 'video' as const, src, test })),
+        ...(test.attachments?.screenshots ?? []).map((src) => ({ kind: 'image' as const, src: fileHref(src), test })),
+        ...(test.attachments?.videos ?? []).map((src) => ({ kind: 'video' as const, src: fileHref(src), test })),
         ...(test.attachments?.traces ?? []).map((src) => ({ kind: 'trace' as const, src, test })),
       ]),
     [runTests.value],

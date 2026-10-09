@@ -85,3 +85,9 @@ export function trendStats(values: number[]): { average: Array<number | null>; a
   const anomalies = values.map((v) => values.length >= 5 && sd > 0 && Math.abs(v - mean) > 2 * sd);
   return { average, anomalies };
 }
+
+// Attachment paths are file paths: a # or % in a test title must not end or garble the URL.
+export function fileHref(p: string): string {
+  if (/^(data|blob|https?|file):/i.test(p)) return p;
+  return p.split('/').map((seg) => (seg === '.' || seg === '..' ? seg : encodeURIComponent(seg))).join('/');
+}

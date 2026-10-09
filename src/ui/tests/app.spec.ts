@@ -276,3 +276,21 @@ test('AI panels say AI is off when it was switched off, rather than not configur
     'AI analysis is off for this run (enableAIRecommendations is false). Copy AI prompt gives you the prompt to use elsewhere.',
   );
 });
+
+test('attachment links survive a # or % in the file name', async ({ page }) => {
+  // Change the data as the preview assigns it, before the app reads it.
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ attachments?: { traces: string[] } }> }) => {
+        d.tests[0].attachments!.traces = ['./traces/pays #1 at 100%-trace-0.zip'];
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=failures&mode=light'));
+  const download = page.getByRole('article', { name: 'Test detail' }).getByRole('link', { name: 'Download' });
+  expect(await download.getAttribute('href')).toBe('./traces/pays%20%231%20at%20100%25-trace-0.zip');
+});
