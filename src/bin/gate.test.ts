@@ -84,3 +84,29 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) accessibility', () => 
     expect(run('cli', ['gate', '--config', at, '--data', 'scanned-data.json']).status).toBe(0);
   });
 });
+
+describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
+  function runCli(args: string[]) {
+    const res = spawnSync(process.execPath, [bundle('cli'), ...args], { cwd: dir, encoding: 'utf-8' });
+    return { status: res.status, stderr: res.stderr.trim() };
+  }
+
+  it('exits 1 when the data file is not a JSON export, such as the failure bundle', () => {
+    const config = writeJson('rate.json', { minPassRate: 95 });
+    const bundleFile = writeJson('smart-report-failures.json', { format: 'playwright-smart-reporter/failures', failures: [{ id: 'a' }] });
+    expect(runCli(['gate', '--config', config, '--data', bundleFile])).toEqual({
+      status: 1,
+      stderr: `Error: ${bundleFile} is not a Smart Reporter JSON export (it has no tests and summary). Pass the file written by exportJson: true.`,
+    });
+  });
+
+  it('exits 1 when the config has a rule name it does not know, so a typo cannot pass the gate', () => {
+    const config = writeJson('typo.json', { minPassrate: 95 });
+    const res = runCli(['gate', '--config', config, '--data', 'scanned-data.json']);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toBe(
+      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage.',
+    );
+  });
+});
+

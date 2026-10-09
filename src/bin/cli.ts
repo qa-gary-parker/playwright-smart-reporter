@@ -2,6 +2,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import type { QualityGateConfig } from '../types';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -30,6 +31,8 @@ function parseFlag(flag: string): string | undefined {
 function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
+
+const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
 
 async function runGate(): Promise<void> {
   if (hasFlag('--help')) {
@@ -73,6 +76,18 @@ Options:
 
   const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+
+  if (!data || !Array.isArray(data.tests) || !data.summary) {
+    console.error(`Error: ${dataPath} is not a Smart Reporter JSON export (it has no tests and summary). Pass the file written by exportJson: true.`);
+    process.exitCode = 1;
+    return;
+  }
+  const unknown = Object.keys(config ?? {}).find((key) => !(GATE_RULES as readonly string[]).includes(key));
+  if (unknown) {
+    console.error(`Error: unknown quality gate rule "${unknown}". Known rules: ${GATE_RULES.join(', ')}.`);
+    process.exitCode = 1;
+    return;
+  }
 
   // Reconstruct minimal TestResultData from JSON export
   const results = (data.tests || []).map((t: any) => ({

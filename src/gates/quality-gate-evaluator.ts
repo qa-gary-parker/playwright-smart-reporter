@@ -77,8 +77,9 @@ export class QualityGateEvaluator {
       return {
         rule: 'minPassRate',
         passed: true,
-        actual: '0%',
+        actual: 'N/A',
         threshold: `≥ ${threshold}%`,
+        skipped: true,
       };
     }
 

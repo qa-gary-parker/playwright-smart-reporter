@@ -240,11 +240,10 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.passed).toBe(true);
     });
 
-    it('handles empty results array', () => {
+    it('skips the rule when no test ran, instead of reporting 0% as a pass', () => {
       const result = evaluator.evaluate({ minPassRate: 90 }, []);
       const rule = result.rules.find(r => r.rule === 'minPassRate');
-      expect(rule?.passed).toBe(true);
-      expect(rule?.actual).toBe('0%');
+      expect(rule).toEqual({ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true });
     });
   });
 
