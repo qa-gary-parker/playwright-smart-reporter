@@ -11,7 +11,7 @@ import type { A11yImpact, TestResultData } from '../types';
 let dir: string;
 const bundle = (name: string) => path.join(dir, `${name}.js`);
 
-function run(name: 'gate' | 'cli', args: string[]) {
+function run(name: 'gate' | 'cli' | 'view-trace', args: string[]) {
   const res = spawnSync(process.execPath, [bundle(name), ...args], { cwd: dir, encoding: 'utf-8' });
   return { status: res.status, stdout: res.stdout };
 }
@@ -34,7 +34,7 @@ function writeJson(name: string, value: unknown): string {
 
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-gate-'));
-  for (const name of ['gate', 'cli']) {
+  for (const name of ['gate', 'cli', 'view-trace']) {
     buildSync({ entryPoints: [path.join(__dirname, `${name}.ts`)], bundle: true, platform: 'node', format: 'cjs', outfile: bundle(name), logLevel: 'silent' });
   }
   // 4 violations: 1 critical, 2 serious, 1 minor
@@ -176,6 +176,22 @@ describe('playwright-smart-reporter failures (src/bin/cli.ts)', () => {
     const { status, stderr } = runIn(empty, ['failures']);
     expect(status).toBe(1);
     expect(stderr).toBe('Error: Data file not found: smart-report-failures.json or smart-report-data.json\nRun your tests with exportFailures: true (or exportJson: true) to generate it.');
+  });
+});
+
+describe('other commands reject bad input with a message', () => {
+  it('digest exits 1 on a format it cannot write', () => {
+    const res = spawnSync(process.execPath, [bundle('cli'), 'digest', '--format', 'html'], { cwd: dir, encoding: 'utf-8' });
+    expect([res.status, res.stderr.trim()]).toEqual([1, 'Error: Invalid format "html". Use markdown or text.']);
+  });
+
+  it('view-trace exits 1 with a message when playwright show-trace cannot start', () => {
+    const trace = path.join(dir, 'trace.zip');
+    fs.writeFileSync(trace, 'zip');
+    // An empty PATH means npx cannot be found, so show-trace never starts (and never opens a window).
+    const res = spawnSync(process.execPath, [bundle('view-trace'), trace], { cwd: dir, encoding: 'utf-8', env: { PATH: '' } });
+    expect(res.status).toBe(1);
+    expect(res.stderr.trim()).toMatch(/^Error: Could not run playwright show-trace: spawn npx\S* ENOENT$/);
   });
 });
 

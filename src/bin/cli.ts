@@ -145,6 +145,12 @@ Options:
   const output = parseFlag('--output');
   const format = (parseFlag('--format') ?? 'markdown') as 'markdown' | 'text';
 
+  if (!['markdown', 'text'].includes(format)) {
+    console.error(`Error: Invalid format "${format}". Use markdown or text.`);
+    process.exitCode = 1;
+    return;
+  }
+
   if (!['daily', 'weekly', 'monthly'].includes(period)) {
     console.error(`Error: Invalid period "${period}". Use daily, weekly, or monthly.`);
     process.exitCode = 1;
