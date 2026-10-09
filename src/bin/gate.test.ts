@@ -100,6 +100,15 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
     });
   });
 
+  it('failures names the data file when it is not valid JSON', () => {
+    const file = path.join(dir, 'truncated-failures.json');
+    fs.writeFileSync(file, '{"tests": [');
+    expect(runCli(['failures', '--data', file])).toEqual({
+      status: 1,
+      stderr: `Error: ${file} is not valid JSON: Unexpected end of JSON input`,
+    });
+  });
+
   it('exits 1 when the config has a rule name it does not know, so a typo cannot pass the gate', () => {
     const config = writeJson('typo.json', { minPassrate: 95 });
     const res = runCli(['gate', '--config', config, '--data', 'scanned-data.json']);

@@ -154,6 +154,15 @@ describe('MCP server over stdio (end to end)', () => {
     expect(textOf(await early.callTool({ name: 'list_failures', arguments: {} })).failures).toHaveLength(2);
   });
 
+  it('names the data file when it is not valid JSON', async () => {
+    const truncated = path.join(dir, 'truncated-failures.json');
+    fs.writeFileSync(truncated, '{"tests": [');
+    expect(await (await connect(truncated)).callTool({ name: 'list_failures', arguments: {} })).toEqual({
+      isError: true,
+      content: [{ type: 'text', text: `${truncated} is not valid JSON: Unexpected end of JSON input` }],
+    });
+  });
+
   it('serves the latest bundle after the tests run again', async () => {
     const rerun = { ...fixture, tests: fixture.tests.filter((t) => t.testId !== 'tests/export.spec.ts::exports a CSV') };
     writeFailureBundle(rerun, { ...OPTS, outputDir: dir });

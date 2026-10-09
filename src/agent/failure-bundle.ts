@@ -349,7 +349,12 @@ export function loadFailureBundle(file: string, opts: FailureBundleOptions): Fai
   let text = fs.readFileSync(file, 'utf8');
   const assignment = /^\s*window\.__SMART_DATA__\s*=/.exec(text);
   if (assignment) text = text.slice(assignment[0].length).replace(/;\s*$/, '');
-  const data = JSON.parse(text);
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${file} is not valid JSON: ${err instanceof Error ? err.message : err}`);
+  }
   if (data?.format === FAILURE_BUNDLE_FORMAT) return assertFailureBundle(data);
   if (data?.schemaVersion === SCHEMA_VERSION && data.meta && Array.isArray(data.tests)) return buildFailureBundle(data, opts);
   if (data?.metadata && Array.isArray(data.tests)) return buildFailureBundle(fromJsonExport(data), opts);
