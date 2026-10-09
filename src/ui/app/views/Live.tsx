@@ -33,15 +33,19 @@ export function Live() {
   const [counters, setCounters] = useState<Counters | null>(null);
   const [failures, setFailures] = useState<Failure[]>([]);
   const [started, setStarted] = useState<number | null>(null);
+  const [ended, setEnded] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
   const stop = useRef<() => void>(() => {});
 
-  function onEvent(ev: { event: string; counters?: Counters; testId?: string; title?: string; file?: string; status?: string; retry?: number; error?: string; totalExpected?: number }) {
+  function onEvent(ev: { event: string; timestamp?: string; counters?: Counters; testId?: string; title?: string; file?: string; status?: string; retry?: number; error?: string; totalExpected?: number }) {
+    // Time the run from its own events: a finished run's events all arrive at once.
+    const at = Date.parse(ev.timestamp ?? '') || Date.now();
     if (ev.event === 'start') {
       setPhase('running');
-      setStarted(Date.now());
+      setStarted(at);
+      setEnded(null);
       setCounters({ passed: 0, failed: 0, skipped: 0, flaky: 0, completed: 0, totalExpected: ev.totalExpected ?? 0 });
     } else if (ev.event === 'test') {
       if (ev.counters) setCounters(ev.counters);
@@ -53,6 +57,7 @@ export function Live() {
       }
     } else if (ev.event === 'complete') {
       if (ev.counters) setCounters(ev.counters);
+      setEnded(at);
       setPhase('completed');
     }
   }
@@ -128,6 +133,7 @@ export function Live() {
       if (!res.ok) throw new Error(`The server refused the run (HTTP ${res.status}).`);
       setPhase('running');
       setStarted(Date.now());
+      setEnded(null);
       connect();
     } catch (e) {
       setPhase('idle');
@@ -166,7 +172,7 @@ export function Live() {
           <span class="live-status__dot" aria-hidden="true" />
           {label[phase]}
         </span>
-        {started && <span class="mono faint">{formatDuration((phase === 'running' ? now : Date.now()) - started)}</span>}
+        {started && <span class="mono faint">{formatDuration(Math.max(0, (ended ?? now) - started))}</span>}
       </header>
       {canRun && (
         <div class="live-run">

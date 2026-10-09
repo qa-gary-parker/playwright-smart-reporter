@@ -9,10 +9,10 @@ import fixture from '../specimen/report-fixture.json';
 // Writes real reports from the fixture with the built UI assets (dist/ui, made by npm run ui:specimen).
 const OUT = path.resolve(__dirname, '../../../test-results/ui/report-files');
 
-async function write(name: string, opts: { assetMode?: 'inline' | 'external'; cspSafe?: boolean }) {
+async function write(name: string, opts: { assetMode?: 'inline' | 'external'; cspSafe?: boolean }, data = fixture as unknown as ReportData) {
   const outputPath = path.join(OUT, name, 'smart-report.html');
   fs.rmSync(path.dirname(outputPath), { recursive: true, force: true });
-  const result = await writeReport(fixture as unknown as ReportData, { outputPath, assets: loadUiAssets(path.resolve(__dirname, '../../../dist/ui')), ...opts });
+  const result = await writeReport(data, { outputPath, assets: loadUiAssets(path.resolve(__dirname, '../../../dist/ui')), ...opts });
   return { outputPath, result };
 }
 
@@ -67,4 +67,22 @@ test('the inline report opens over file:// with no failed requests', async ({ pa
   await page.goto(pathToFileURL(outputPath).href);
   await expect(page.getByRole('tree', { name: 'Failures' })).toBeVisible();
   expect(failed).toEqual([]);
+});
+
+test('the Live view times a finished run from its events, not from when the page read them', async ({ page }) => {
+  const data = fixture as unknown as ReportData;
+  const { outputPath } = await write('live', { assetMode: 'inline' }, { ...data, config: { ...data.config, live: { jsonlFile: 'live.jsonl' } } });
+  const counters = { passed: 22, failed: 7, skipped: 3, flaky: 1, completed: 33, totalExpected: 33 };
+  const events = [
+    { event: 'start', timestamp: '2026-10-08T15:41:25.527Z', totalExpected: 33 },
+    { event: 'complete', timestamp: '2026-10-08T15:41:58.276Z', duration: 32749, counters },
+  ];
+  await page.route('http://report.test/**', (route) =>
+    new URL(route.request().url()).pathname === '/live.jsonl'
+      ? route.fulfill({ body: events.map((e) => JSON.stringify(e)).join('\n') + '\n', contentType: 'application/x-ndjson' })
+      : route.fulfill({ body: fs.readFileSync(outputPath), contentType: 'text/html' }),
+  );
+  await page.goto('http://report.test/smart-report.html#/live');
+  await expect(page.locator('.live-status')).toHaveText('Completed');
+  await expect(page.locator('.page__head > .mono')).toHaveText('32.7s');
 });
