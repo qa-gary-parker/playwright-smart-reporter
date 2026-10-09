@@ -139,10 +139,10 @@ class SmartReporter implements Reporter {
     });
     this.attachmentCollector = new AttachmentCollector();
 
-    // Note: NetworkCollector is initialized in onBegin when we have access to full config
     this.networkCollector = new NetworkCollector({
-      excludeStaticAssets: false,  // Show all network activity by default
-      maxEntries: 30,
+      urlFilter: options.networkLogFilter,
+      excludeStaticAssets: options.networkLogExcludeAssets ?? true,
+      maxEntries: options.networkLogMaxEntries ?? 50,
       includeBodies: true,
     });
 

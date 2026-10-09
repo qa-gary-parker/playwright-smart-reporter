@@ -79,6 +79,25 @@ describe('quarantine', () => {
   });
 });
 
+describe('network log options', () => {
+  const urls = (options: object) => {
+    const out = path.join(tmp, `network-${JSON.stringify(options).replace(/\W/g, '')}`);
+    runSuite(out, options, [], 'test', { ACCEPTANCE_MATCH: 'network.fixtures.ts' });
+    const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+    return data.tests[0].networkLogs?.entries.map((e) => new URL(e.url).pathname);
+  };
+
+  it('leaves out static assets by default', () => {
+    expect(urls({})).toEqual(['/', '/api/a', '/api/b', '/api/c']);
+  });
+
+  it('applies networkLogExcludeAssets, networkLogMaxEntries and networkLogFilter', () => {
+    expect(urls({ networkLogExcludeAssets: false })).toEqual(['/', '/logo.png', '/api/a', '/api/b', '/api/c']);
+    expect(urls({ networkLogMaxEntries: 2 })).toEqual(['/', '/api/a']);
+    expect(urls({ networkLogFilter: '/api/b' })).toEqual(['/api/b']);
+  });
+});
+
 describe('merge-reports', () => {
   it('reports the duration of the tests, not of the merge', () => {
     const blobs = path.join(tmp, 'blobs');
