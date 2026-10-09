@@ -11,6 +11,11 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
+// test.fail() tests that fail have outcome 'expected': they passed, as in the other exports.
+function isFailure(test: TestResultData): boolean {
+  return (test.status === 'failed' || test.status === 'timedOut') && test.outcome !== 'expected';
+}
+
 export function exportJunitXml(
   results: TestResultData[],
   options: SmartReporterOptions,
@@ -36,7 +41,7 @@ export function exportJunitXml(
   }
 
   const totalTests = results.length;
-  const totalFailures = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
+  const totalFailures = results.filter(isFailure).length;
   const totalSkipped = results.filter(r => r.status === 'skipped').length;
   const totalErrors = results.filter(r => r.status === 'interrupted').length;
   const totalTime = results.reduce((sum, r) => sum + r.duration, 0) / 1000;
@@ -47,7 +52,7 @@ export function exportJunitXml(
   xml += `<testsuites name="Smart Reporter" tests="${totalTests}" failures="${totalFailures}" errors="${totalErrors}" skipped="${totalSkipped}" time="${totalTime.toFixed(3)}">\n`;
 
   for (const [file, tests] of suites) {
-    const suiteFailures = tests.filter(t => t.status === 'failed' || t.status === 'timedOut').length;
+    const suiteFailures = tests.filter(isFailure).length;
     const suiteSkipped = tests.filter(t => t.status === 'skipped').length;
     const suiteErrors = tests.filter(t => t.status === 'interrupted').length;
     const suiteTime = tests.reduce((sum, t) => sum + t.duration, 0) / 1000;
@@ -83,7 +88,7 @@ export function exportJunitXml(
       }
       xml += `      </properties>\n`;
 
-      if (test.status === 'failed' || test.status === 'timedOut') {
+      if (isFailure(test)) {
         const failureType = test.status === 'timedOut' ? 'Timeout' : 'AssertionError';
         const message = test.error ? escapeXml(test.error.split('\n')[0]) : 'Test failed';
         const body = test.error ? escapeXml(test.error) : '';

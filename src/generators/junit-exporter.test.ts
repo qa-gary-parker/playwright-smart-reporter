@@ -377,6 +377,29 @@ describe('junit-exporter', () => {
       expect(xml).toMatch(/<testsuite name="tests\/auth\.spec\.ts"[^>]*skipped="1"/);
     });
 
+    it('counts a test.fail() expected failure as passed, not as a failure', () => {
+      const results = [
+        createTestResult({ testId: '1', title: 'passes' }),
+        createTestResult({ testId: '2', title: 'expected to fail', status: 'failed', outcome: 'expected', error: 'boom' }),
+        createTestResult({ testId: '3', title: 'times out as expected', status: 'timedOut', outcome: 'expected' }),
+        createTestResult({ testId: '4', title: 'breaks', status: 'failed', outcome: 'unexpected', error: 'boom' }),
+      ];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml).toMatch(/<testsuites [^>]*tests="4" failures="1" /);
+      expect(xml).toMatch(/<testsuite [^>]*tests="4" failures="1" /);
+      expect(xml.match(/<failure /g)).toHaveLength(1);
+      expect(xml).toContain(
+        '    <testcase name="expected to fail" classname="tests.example" time="1.000">\n' +
+        '      <properties>\n' +
+        '        <property name="outcome" value="expected" />\n' +
+        '      </properties>\n' +
+        '    </testcase>\n',
+      );
+    });
+
     it('properties block is always present even with no custom properties', () => {
       const results = [createTestResult()];
 
