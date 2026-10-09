@@ -125,3 +125,15 @@ describe('test.fail()', () => {
     expect(reportData(out).comparison?.changes).toMatchObject({ newFailures: [], fixedTests: [] });
   }, TIMEOUT);
 });
+
+describe('comparison', () => {
+  it('does not report a test that was skipped last run and passes now as fixed', () => {
+    const out = path.join(tmp, 'skipped-then-passed');
+    runSuite(out, {}, ['--grep', 'skipped when asked'], { ACCEPTANCE_SKIP: '1' });
+    expect(playwright(out)).toEqual({ total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0 });
+    runSuite(out, {}, ['--grep', 'skipped when asked']);
+
+    expect(playwright(out)).toEqual({ total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0 });
+    expect(reportData(out).comparison?.changes.fixedTests).toEqual([]);
+  }, TIMEOUT);
+});

@@ -627,7 +627,7 @@ class SmartReporter implements Reporter {
             if (matchingTest) {
               baselineTests.set(testId, {
                 ...matchingTest,
-                status: lastEntry.passed ? 'passed' : 'failed',
+                status: lastEntry.skipped ? 'skipped' : lastEntry.passed ? 'passed' : 'failed',
                 duration: lastEntry.duration,
               });
             }
