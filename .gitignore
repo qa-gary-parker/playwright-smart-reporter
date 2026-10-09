@@ -31,6 +31,7 @@ example/.smart-quarantine.json
 example/test-history-premium.json
 example/premium-report.html
 example/timeline/out/
+example/acceptance/out/
 example/coverage/app/dist/
 example/coverage/coverage-report/
 

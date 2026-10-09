@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import type {
   CIInfo,
   LiveStartEvent,
@@ -54,6 +55,7 @@ export class LiveWriter {
       ...(ciInfo ? { ciInfo } : {}),
     };
 
+    fs.mkdirSync(path.dirname(this.outputFile), { recursive: true });
     fs.writeFileSync(this.outputFile, JSON.stringify(event) + '\n');
   }
 

@@ -44,6 +44,7 @@
     "test:watch": "vitest",
     "test:live-filter": "LIVE_REPORT=1 vitest run src/live/live-filter-integration.test.ts",
     "test:timeline": "TIMELINE_E2E=1 vitest run example/timeline",
+    "test:acceptance": "ACCEPTANCE_E2E=1 vitest run example/acceptance",
     "test:coverage-example": "npm run build && COVERAGE_E2E=1 vitest run src/coverage/coverage-example.test.ts",
     "test:coverage": "vitest run --coverage",
     "test:demo": "playwright test --config=example/playwright.config.ts",

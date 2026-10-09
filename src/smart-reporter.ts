@@ -745,6 +745,7 @@ class SmartReporter implements Reporter {
       failureClusters,
       ciInfo: this.ciInfo,
       outputBasename: path.basename(outputPath, '.html'),
+      liveFile: this.options.live?.enabled ? path.relative(path.dirname(outputPath), path.resolve(this.liveWriter.getOutputPath())).split(path.sep).join('/') : undefined,
       qualityGateResult,
       quarantinedTestIds,
       quarantineEntries: quarantineResult?.entries,

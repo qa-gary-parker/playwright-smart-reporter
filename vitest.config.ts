@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', ...(process.env.TIMELINE_E2E ? ['example/timeline/*.acceptance.ts'] : [])],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', ...(process.env.TIMELINE_E2E ? ['example/timeline/*.acceptance.ts'] : []), ...(process.env.ACCEPTANCE_E2E ? ['example/acceptance/*.acceptance.ts'] : [])],
     exclude: [
       ...configDefaults.exclude,
       // Needs a report served on localhost:9222; run with `npm run test:live-filter`.

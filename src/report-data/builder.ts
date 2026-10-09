@@ -36,6 +36,8 @@ export interface ReportInput {
   failureClusters?: FailureCluster[];
   ciInfo?: CIInfo;
   outputBasename?: string;
+  // The live results file relative to the report, which is where the Live view fetches it from.
+  liveFile?: string;
   qualityGateResult?: QualityGateResult;
   quarantinedTestIds?: Set<string>;
   quarantineEntries?: QuarantineEntry[];
@@ -140,7 +142,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
         ctrf: !!options.exportCtrf,
         failures: !!options.exportFailures,
       },
-      live: options.live?.enabled ? { jsonlFile: options.live.outputFile ?? '.smart-live-results.jsonl' } : undefined,
+      live: options.live?.enabled ? { jsonlFile: input.liveFile ?? options.live.outputFile ?? '.smart-live-results.jsonl' } : undefined,
     },
     summary,
     tests,

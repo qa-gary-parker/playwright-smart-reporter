@@ -39,6 +39,8 @@ jobs:
 
       - name: Run causal timeline acceptance tests
         run: npm run test:timeline
+      - name: Run reporter acceptance tests
+        run: npm run test:acceptance
       - name: Run coverage acceptance tests
         run: COVERAGE_E2E=1 npx vitest run src/coverage/coverage-example.test.ts
 
