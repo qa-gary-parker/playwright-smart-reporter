@@ -291,7 +291,7 @@ describe('StepCollector', () => {
 
       const steps = collector.extractSteps(result);
 
-      expect(steps.every(s => s.isSlowest === undefined)).toBe(true);
+      expect(steps.map(s => [s.title, s.isSlowest])).toEqual([['Step A', undefined], ['Step B', undefined], ['Step C', undefined]]);
     });
 
     it('marks slowest step when exactly 101ms', () => {
@@ -315,7 +315,7 @@ describe('StepCollector', () => {
 
       const steps = collector.extractSteps(result);
 
-      expect(steps.every(s => s.isSlowest === undefined)).toBe(true);
+      expect(steps.map(s => [s.title, s.isSlowest])).toEqual([['Step A', undefined], ['Step B', undefined]]);
     });
   });
 
