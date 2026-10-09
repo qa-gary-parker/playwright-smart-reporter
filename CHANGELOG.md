@@ -40,6 +40,8 @@ All notable changes to this project will be documented in this file.
 - `maxEmbeddedSize` is deprecated and has no effect. Traces are copied to `traces/` next to the report and never embedded, so the reporter no longer reads each trace into memory.
 
 ### Fixed
+- **Security:** `serve --run-command` passed filter values from `POST /run` to a shell after only stripping some characters, so a `"` in a file or grep filter could run any command. Any website open in the browser could send that request. Filter values are now quoted as single arguments. `/run` accepts only JSON from the report's own origin. The server answers only requests addressed to localhost, which blocks DNS rebinding. Outside the report folder it serves only trace and media files, never files such as `.env`. The live stream is no longer readable by other origins. (2.x bug.)
+- `serve` no longer crashes on a malformed URL, a `--cwd` that does not exist, or a non-numeric `--port`. (2.x bug.)
 - A breached quality gate set in the reporter options (`qualityGates`) now fails the Playwright run (exit code 1). In 2.x Playwright overrode the exit code, so a breached gate was only logged when every test passed.
 - Large suites no longer fail with `RangeError: Invalid string length` (#19). In the benchmark 2.x failed at 14,000 tests; 3.x completes.
 - The report no longer requests Google Fonts, so it renders the same offline.
