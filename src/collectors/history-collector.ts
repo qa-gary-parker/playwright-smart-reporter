@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
-import { isFailedTest, isPassedTest, renderMarkdownLite } from '../utils';
+import { isFailedTest, isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
 import { stepDurationsOf } from '../analyzers/causal-timeline';
 import { runStabilityGrade } from '../analyzers/stability-scorer';
@@ -140,7 +140,7 @@ export class HistoryCollector {
         duration: result.duration,
         timestamp,
         ...(this.options.enableHistoryDrilldown ? { runId } : {}),
-        skipped: result.status === 'skipped',
+        skipped: isSkippedTest(result),
         retry: result.retry, // NEW: Track retry count
         ...this.stepDurationsEntry(result),
       });
@@ -156,7 +156,7 @@ export class HistoryCollector {
     // Add run summary
     const passed = results.filter(isPassedTest).length;
     const failed = results.filter(isFailedTest).length;
-    const skipped = results.filter(r => r.status === 'skipped').length;
+    const skipped = results.filter(isSkippedTest).length;
     const flaky = results.filter(r => r.outcome === 'flaky').length;
     const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
     const total = results.length;

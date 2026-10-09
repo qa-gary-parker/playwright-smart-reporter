@@ -37,3 +37,9 @@ test('skipped when asked', () => {
 test('runs for three seconds', async () => {
   await new Promise((resolve) => setTimeout(resolve, 3000));
 });
+
+// Gives a parallel worker time to start 'runs for three seconds', so --max-failures interrupts it.
+test('fails after a second', async () => {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  expect(1).toBe(2);
+});

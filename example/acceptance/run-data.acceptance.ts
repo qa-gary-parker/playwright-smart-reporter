@@ -137,3 +137,22 @@ describe('comparison', () => {
     expect(reportData(out).comparison?.changes.fixedTests).toEqual([]);
   }, TIMEOUT);
 });
+
+describe('interrupted and not-run tests', () => {
+  it('counts an interrupted test as not run, not as a failure', () => {
+    const out = path.join(tmp, 'interrupted');
+    runSuite(out, {}, ['--grep', 'three seconds|fails after a second', '--retries=0', '--workers=2', '--fully-parallel', '--max-failures=1']);
+
+    const data = reportData(out);
+    expect(data.tests.map((t) => [t.testId, t.status]).sort()).toEqual([[id('fails after a second'), 'failed'], [id('runs for three seconds'), 'interrupted']]);
+    expect(playwright(out)).toEqual({ total: 2, passed: 0, failed: 1, skipped: 1, flaky: 0 });
+    expect(counts(data.summary)).toEqual(playwright(out));
+    expect(counts(history(out).summaries!.at(-1)!)).toEqual(playwright(out));
+    expect(history(out).tests[id('runs for three seconds')].map((e) => [e.passed, e.skipped])).toEqual([[false, true]]);
+
+    runSuite(out, {}, ['--grep', 'three seconds']);
+    const next = reportData(out);
+    expect(next.tests[0].flakinessScore).toBeUndefined();
+    expect(next.comparison?.changes.fixedTests).toEqual([]);
+  }, TIMEOUT);
+});

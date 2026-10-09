@@ -11,7 +11,7 @@ import type {
   QualityGateResult,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
-import { isFailedTest, isPassedTest } from '../utils/flakiness';
+import { isFailedTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
 
 export function getReporterVersion(): string {
   try {
@@ -121,7 +121,7 @@ export function exportJsonData(
 
   const passed = results.filter(isPassedTest).length;
   const failed = results.filter(isFailedTest).length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
+  const skipped = results.filter(isSkippedTest).length;
   const flaky = results.filter(r => r.outcome === 'flaky').length;
   const duration = Date.now() - startTime;
 

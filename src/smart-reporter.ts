@@ -69,7 +69,7 @@ import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest, isPassedTest } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
 import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
@@ -563,7 +563,7 @@ class SmartReporter implements Reporter {
         if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
           const passed = this.results.filter(isPassedTest).length;
           const failed = this.results.filter(isFailedTest).length;
-          const skipped = this.results.filter(r => r.status === 'skipped').length;
+          const skipped = this.results.filter(isSkippedTest).length;
           const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
           const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
           const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
@@ -595,7 +595,7 @@ class SmartReporter implements Reporter {
         // Issue #16: Tests with expectedStatus='failed' that fail are counted as passed (expected behavior)
         const passed = this.results.filter(isPassedTest).length;
         const failed = this.results.filter(isFailedTest).length;
-        const skipped = this.results.filter(r => r.status === 'skipped').length;
+        const skipped = this.results.filter(isSkippedTest).length;
         // Flaky: tests that passed on retry (outcome === 'flaky')
         const flaky = this.results.filter(r => r.outcome === 'flaky').length;
         const slow = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;

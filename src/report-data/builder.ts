@@ -15,7 +15,7 @@ import type {
   TestResultData,
 } from '../types';
 import { summarizeA11y } from '../analyzers/a11y-analyzer';
-import { isFailedTest, isFlakyTest, isPassedTest } from '../utils/flakiness';
+import { isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
 import {
   SCHEMA_VERSION,
   type ComparisonKey,
@@ -61,7 +61,7 @@ export function summarize(results: TestResultData[], duration: number): ReportSu
     total: results.length,
     passed,
     failed,
-    skipped: results.filter((r) => r.status === 'skipped').length,
+    skipped: results.filter(isSkippedTest).length,
     flaky: results.filter((r) => isFlakyTest(r)).length,
     slow: results.filter((r) => r.performanceTrend?.startsWith('↑')).length,
     newTests: results.filter((r) => r.flakinessIndicator?.includes('New')).length,

@@ -29,6 +29,11 @@ export function isPassedTest(test: Pick<TestResultData, 'status' | 'outcome'>): 
   return test.outcome ? test.outcome === 'expected' || test.outcome === 'flaky' : test.status === 'passed';
 }
 
+/** Did not run: skipped, never started, or interrupted before it got a result. */
+export function isSkippedTest(test: Pick<TestResultData, 'status' | 'outcome'>): boolean {
+  return test.outcome ? test.outcome === 'skipped' : test.status === 'skipped' || test.status === 'interrupted';
+}
+
 /** True when the test should be treated as flaky (score or per-run outcome). */
 export function isFlakyTest(test: Pick<TestResultData, 'flakinessScore' | 'outcome'>, threshold = 0.3): boolean {
   return test.outcome === 'flaky' || isFlakyScore(test.flakinessScore, threshold);
