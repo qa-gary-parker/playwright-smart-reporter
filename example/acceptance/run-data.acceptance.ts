@@ -69,4 +69,21 @@ describe('test ids', () => {
     expect(counts(data.summary)).toEqual(playwright(out));
     expect(Object.keys(history(out).tests).sort()).toEqual(ids);
   }, TIMEOUT);
+
+  it('reports each --repeat-each copy as its own test, and only retries as attempts', () => {
+    const out = path.join(tmp, 'repeat-each');
+    runSuite(out, {}, ['--grep', 'fails when asked|passes on retry', '--repeat-each=2']);
+
+    const data = reportData(out);
+    const attempts = data.tests.map((t) => [t.testId, t.attempts?.map((a) => a.retry)] as const);
+    expect(attempts.sort(([a], [b]) => a.localeCompare(b))).toEqual([
+      [id('fails when asked'), [0]],
+      [id('fails when asked (repeat 1)'), [0]],
+      [id('passes on retry'), [0, 1]],
+      [id('passes on retry (repeat 1)'), [0, 1]],
+    ]);
+    expect(playwright(out)).toEqual({ total: 4, passed: 4, failed: 0, skipped: 0, flaky: 2 });
+    expect(counts(data.summary)).toEqual(playwright(out));
+    expect(Object.keys(history(out).tests)).toHaveLength(4);
+  }, TIMEOUT);
 });

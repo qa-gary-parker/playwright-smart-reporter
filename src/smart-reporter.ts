@@ -962,7 +962,8 @@ class SmartReporter implements Reporter {
   }
 
   // Only tests whose id collides (one title in two describe blocks) get their describe path in it:
-  // changing any other id would cut that test off from its history.
+  // changing any other id would cut that test off from its history. --repeat-each copies get a suffix,
+  // so each copy is its own result and attempts stay retries.
   private assignTestIds(tests: TestCase[]): void {
     const byId = new Map<string, TestCase[]>();
     for (const test of tests) {
@@ -973,7 +974,8 @@ class SmartReporter implements Reporter {
     for (const [id, same] of byId) {
       const collides = new Set(same.map((t) => describePath(t).join(' › '))).size > 1;
       for (const test of same) {
-        this.testIds.set(test.id, collides ? this.idFor(test, [...describePath(test), test.title]) : id);
+        const unique = collides ? this.idFor(test, [...describePath(test), test.title]) : id;
+        this.testIds.set(test.id, test.repeatEachIndex > 0 ? `${unique} (repeat ${test.repeatEachIndex})` : unique);
       }
     }
   }
