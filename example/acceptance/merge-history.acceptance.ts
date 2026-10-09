@@ -12,6 +12,12 @@ const CLI = path.join(ROOT, 'node_modules/@playwright/test/cli.js');
 const CONFIG = path.join(__dirname, 'playwright.config.ts');
 const MERGE_HISTORY = path.join(ROOT, 'dist/bin/merge-history.js');
 const GREP = 'passes$|fails$|passes on retry|is skipped';
+const THREE_RUNS = {
+  'suite.fixtures.ts::passes': 3,
+  'suite.fixtures.ts::fails': 3,
+  'suite.fixtures.ts::passes on retry': 3,
+  'suite.fixtures.ts::is skipped': 3,
+};
 
 let tmp: string;
 let shards: string[];
@@ -28,7 +34,10 @@ function runSuite(out: string, options: object, args: string[] = []) {
 
 function mergeHistory(name: string, args: string[]): TestHistory {
   const output = path.join(tmp, name);
-  const run = spawnSync(process.execPath, [MERGE_HISTORY, ...args, '-o', output], { cwd: tmp, encoding: 'utf8' });
+  // A copy outside this repo, so it cannot load packages that a real install does not have (such as glob)
+  const bin = path.join(tmp, 'merge-history.js');
+  fs.copyFileSync(MERGE_HISTORY, bin);
+  const run = spawnSync(process.execPath, [bin, ...args, '-o', output], { cwd: tmp, encoding: 'utf8' });
   expect(run.stderr).toBe('');
   expect(run.status).toBe(0);
   return JSON.parse(fs.readFileSync(output, 'utf8'));
@@ -78,12 +87,13 @@ describe('merge-history on sharded runs', () => {
   it('keeps one entry per test for each run', () => {
     const merged = mergeHistory('merged.json', shards);
 
-    expect(entriesPerTest(merged)).toEqual({
-      'suite.fixtures.ts::passes': 3,
-      'suite.fixtures.ts::fails': 3,
-      'suite.fixtures.ts::passes on retry': 3,
-      'suite.fixtures.ts::is skipped': 3,
-    });
+    expect(entriesPerTest(merged)).toEqual(THREE_RUNS);
+  });
+
+  it('expands quoted *, ? and ** patterns without the glob package', () => {
+    expect(entriesPerTest(mergeHistory('star.json', ['shard*/test-history.json']))).toEqual(THREE_RUNS);
+    expect(entriesPerTest(mergeHistory('question.json', ['shard?/test-history.json']))).toEqual(THREE_RUNS);
+    expect(entriesPerTest(mergeHistory('globstar.json', ['**/test-history.json']))).toEqual(THREE_RUNS);
   });
 
   it('--max-runs trims the per-test entries when runs[] is empty', () => {

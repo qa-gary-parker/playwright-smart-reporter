@@ -56,7 +56,8 @@ Examples:
   # Merge two history files
   merge-history history1.json history2.json -o merged.json
 
-  # Merge with glob pattern and limit to 10 runs
+  # Merge with a quoted pattern and limit to 10 runs
+  # (* and ? match within one folder or file name, ** matches any folders)
   merge-history 'blob-reports/**/test-history.json' -o test-history.json --max-runs 10
 
   # Merge with max-runs limit
@@ -252,6 +253,35 @@ function writeHistory(history: TestHistory, outputPath: string): void {
   }
 }
 
+function readDir(dir: string): fs.Dirent[] {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Files matching a pattern: * and ? match within one folder or file name, ** matches any folders
+ */
+function globFiles(pattern: string): string[] {
+  const root = path.parse(pattern).root;
+  let matches = [root || '.'];
+  for (const segment of pattern.slice(root.length).split(/[\\/]/).filter(Boolean)) {
+    if (segment === '**') {
+      const walk = (dir: string): string[] =>
+        [dir, ...readDir(dir).filter((e) => e.isDirectory()).flatMap((e) => walk(path.join(dir, e.name)))];
+      matches = matches.flatMap(walk);
+    } else if (/[*?]/.test(segment)) {
+      const regex = new RegExp(`^${segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`);
+      matches = matches.flatMap((dir) => readDir(dir).filter((e) => regex.test(e.name)).map((e) => path.join(dir, e.name)));
+    } else {
+      matches = matches.map((dir) => path.join(dir, segment));
+    }
+  }
+  return matches.filter((file) => fs.existsSync(file) && fs.statSync(file).isFile()).sort();
+}
+
 /**
  * Expand glob patterns in file paths
  */
@@ -259,20 +289,12 @@ function expandPaths(patterns: string[]): string[] {
   const expanded: string[] = [];
 
   for (const pattern of patterns) {
-    // Check if pattern contains glob characters
-    if (pattern.includes('*') || pattern.includes('?') || pattern.includes('[')) {
-      // Use glob expansion via shell
-      try {
-        const { globSync } = require('glob');
-        const matches = globSync(pattern);
-        if (matches.length === 0) {
-          console.warn(`Warning: No files matched pattern: ${pattern}`);
-        } else {
-          expanded.push(...matches);
-        }
-      } catch {
-        // Fallback: treat as literal path
-        expanded.push(pattern);
+    if (pattern.includes('*') || pattern.includes('?')) {
+      const matches = globFiles(pattern);
+      if (matches.length === 0) {
+        console.warn(`Warning: No files matched pattern: ${pattern}`);
+      } else {
+        expanded.push(...matches);
       }
     } else {
       expanded.push(pattern);
