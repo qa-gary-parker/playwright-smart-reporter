@@ -116,6 +116,19 @@ describe('analysis switches', () => {
   });
 });
 
+describe('report write failure', () => {
+  it('says the report could not be written, and does not print its path as if it was', () => {
+    const out = path.join(tmp, 'blocked');
+    fs.mkdirSync(out, { recursive: true });
+    // A file where the report folder should be makes the write fail.
+    fs.writeFileSync(path.join(out, 'not-a-folder'), '');
+    const run = runSuite(out, { outputFile: path.join(out, 'not-a-folder', 'smart-report.html'), exportJson: true }, ['--grep', 'passes$']);
+
+    expect(run.output).toContain('Smart Reporter could not write the HTML report');
+    expect(run.output).not.toContain('📊 Smart Report:');
+  });
+});
+
 describe('merge-reports', () => {
   it('reports the duration of the tests, not of the merge', () => {
     const blobs = path.join(tmp, 'blobs');

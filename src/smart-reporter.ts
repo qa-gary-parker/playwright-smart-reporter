@@ -770,6 +770,7 @@ class SmartReporter implements Reporter {
 
     const reportData = buildReportData(reportInput);
     // A failed write must not skip history, exports, notifications, or gates below.
+    let reportWritten = false;
     try {
       const written = await writeReport(reportData, {
         outputPath,
@@ -779,14 +780,17 @@ class SmartReporter implements Reporter {
       });
       const dataMb = (written.dataBytes / (1024 * 1024)).toFixed(1);
       console.log(`\n   Report data: ${dataMb} MB, ${written.mode === 'inline' ? 'inline in the HTML' : `in ${path.basename(written.files.find((f) => f.endsWith('-data.js')) ?? '')}`}`);
+      reportWritten = true;
     } catch (err) {
       console.error('❌ Smart Reporter could not write the HTML report:', err);
     }
 
     // Issue #15: Better console output with command to open report
-    console.log(`\n📊 Smart Report: ${outputPath}`);
-    console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
-    console.log(`   Or open directly: open "${outputPath}"`);
+    if (reportWritten) {
+      console.log(`\n📊 Smart Report: ${outputPath}`);
+      console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
+      console.log(`   Or open directly: open "${outputPath}"`);
+    }
     if (coverage) {
       const { lines } = coverage.summary;
       console.log(`   Coverage: ${lines.pct}% of lines (${lines.covered}/${lines.total}) across ${coverage.files.length} file(s)`);
