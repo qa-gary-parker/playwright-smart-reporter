@@ -246,7 +246,7 @@ describe('Notification boundary conditions', () => {
       expect(mockSendMessage).toHaveBeenCalledOnce();
     });
 
-    it('maxPassRate: 100 — does NOT notify when all tests pass (100% pass rate)', async () => {
+    it('maxPassRate: 100 — notifies when all tests pass (100% is not above 100%)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
       vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
@@ -257,11 +257,7 @@ describe('Notification boundary conditions', () => {
       const results = Array(5).fill(null).map(() => makePass());
       await manager.notify(results, Date.now());
 
-      // passRate (100) is NOT > maxPassRate (100), so condition is met → should notify
-      // The check is: if passRate > maxPassRate, return false
-      // 100 > 100 is false, so the condition passes and notification IS sent
-      expect(SlackNotifier).toHaveBeenCalled();
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(mockSendMessage.mock.calls).toEqual([['Test Run: 5/5 passed (100%) — 0 failures']]);
     });
 
     it('maxPassRate: 100 — still notifies when pass rate is 99%', async () => {
@@ -316,9 +312,23 @@ describe('Notification boundary conditions', () => {
 
   describe('empty results array', () => {
     it('does not crash with an empty results array', async () => {
-      const manager = new NotificationManager([slackConfig({ minFailures: 1 })]);
+      const { SlackNotifier } = await import('./slack-notifier');
+      const { TeamsNotifier } = await import('./teams-notifier');
+      const mockTeamsSendMessage = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(TeamsNotifier).mockImplementationOnce(() => ({
+        sendMessage: mockTeamsSendMessage,
+      } as any));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const manager = new NotificationManager([
+        slackConfig({ minFailures: 1 }),
+        { channel: 'teams', config: { webhookUrl: 'https://teams' } },
+      ]);
 
-      await expect(manager.notify([], Date.now())).resolves.not.toThrow();
+      await manager.notify([], Date.now());
+
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(SlackNotifier).not.toHaveBeenCalled();
+      expect(mockTeamsSendMessage.mock.calls).toEqual([['Test Run: 0/0 passed (0%) — 0 failures']]);
     });
 
     it('does not notify on empty results when minFailures: 1 (0 < 1)', async () => {
@@ -340,20 +350,17 @@ describe('Notification boundary conditions', () => {
       expect(SlackNotifier).not.toHaveBeenCalled();
     });
 
-    it('does not notify on empty results when no conditions are set', async () => {
+    it('notifies on empty results when no conditions are set', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
       vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
         sendMessage: mockSendMessage,
       } as any));
-      // No conditions → always notifies regardless of results
       const manager = new NotificationManager([slackConfig()]);
 
       await manager.notify([], Date.now());
 
-      // No conditions means always fires
-      expect(SlackNotifier).toHaveBeenCalled();
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(mockSendMessage.mock.calls).toEqual([['Test Run: 0/0 passed (0%) — 0 failures']]);
     });
   });
 

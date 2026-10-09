@@ -1,32 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NotificationManager } from './notification-manager';
-import type { TestResultData, NotificationConfig, RunComparison, RunSummary } from '../types';
+import { SlackNotifier } from './slack-notifier';
+import { TeamsNotifier } from './teams-notifier';
+import { PagerDutyNotifier } from './pagerduty-notifier';
+import type { TestResultData, NotificationConfig, RunComparison, RunSummary, StabilityScore } from '../types';
 
-vi.mock('./slack-notifier', () => ({
-  SlackNotifier: vi.fn().mockImplementation(() => ({
-    sendMessage: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
-vi.mock('./teams-notifier', () => ({
-  TeamsNotifier: vi.fn().mockImplementation(() => ({
-    sendMessage: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
-vi.mock('./pagerduty-notifier', () => ({
-  PagerDutyNotifier: vi.fn().mockImplementation(() => ({
-    trigger: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
-vi.mock('./email-notifier', () => ({
-  EmailNotifier: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
-vi.mock('./custom-webhook-notifier', () => ({
-  CustomWebhookNotifier: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+const NOW = 1_700_000_000_000;
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+let fetchMock: ReturnType<typeof vi.fn<(url: string, init: RequestInit) => Promise<Response>>>;
+
+function requests() {
+  return fetchMock.mock.calls.map(([url, init]) => ({
+    url,
+    method: init.method,
+    headers: init.headers,
+    body: JSON.parse(init.body as string),
+  }));
+}
+
+const urls = () => fetchMock.mock.calls.map(([url]) => url);
+
+const slackPost = (url: string, text: string) => ({ url, method: 'POST', headers: JSON_HEADERS, body: { text } });
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
   return {
@@ -41,6 +36,10 @@ function createTestResult(overrides: Partial<TestResultData> = {}): TestResultDa
     ...overrides,
   };
 }
+
+const failing = (overrides: Partial<TestResultData> = {}) => createTestResult({ status: 'failed', outcome: 'unexpected', ...overrides });
+
+const score = (grade: StabilityScore['grade']): StabilityScore => ({ overall: 0, flakiness: 0, performance: 0, reliability: 0, grade, needsAttention: false });
 
 function createRunSummary(overrides: Partial<RunSummary> = {}): RunSummary {
   return {
@@ -60,7 +59,10 @@ function createRunSummary(overrides: Partial<RunSummary> = {}): RunSummary {
 
 describe('NotificationManager', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response('ok'));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(Date, 'now').mockReturnValue(NOW);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -70,281 +72,127 @@ describe('NotificationManager', () => {
 
   describe('conditions', () => {
     it('minFailures: does not notify when failures below threshold', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { minFailures: 5 },
-      };
-      const manager = new NotificationManager([config]);
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/five' }, conditions: { minFailures: 5 } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/two' }, conditions: { minFailures: 2 } },
+      ]).notify([failing(), failing({ testId: '2' })], NOW);
 
-      const results = [
-        createTestResult({ status: 'failed', outcome: 'unexpected' }),
-        createTestResult({ testId: '2', status: 'failed', outcome: 'unexpected' }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(SlackNotifier).not.toHaveBeenCalled();
+      expect(urls()).toEqual(['https://hooks.slack.com/two']);
     });
 
     it('minFailures: notifies when failures meet threshold', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: mockSendMessage,
-      } as any));
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' }, conditions: { minFailures: 1 } },
+      ]).notify([failing()], NOW);
 
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { minFailures: 1 },
-      };
-      const manager = new NotificationManager([config]);
-
-      const results = [
-        createTestResult({ status: 'failed', outcome: 'unexpected' }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(SlackNotifier).toHaveBeenCalled();
-      expect(mockSendMessage).toHaveBeenCalledOnce();
-      expect(mockSendMessage).toHaveBeenCalledWith(expect.stringContaining('1 failures'));
+      expect(requests()).toEqual([slackPost('https://hooks.slack.com/test', 'Test Run: 0/1 passed (0%) — 1 failures')]);
     });
 
     it('maxPassRate: does not notify when pass rate above threshold', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { maxPassRate: 50 },
-      };
-      const manager = new NotificationManager([config]);
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/49' }, conditions: { maxPassRate: 49 } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/50' }, conditions: { maxPassRate: 50 } },
+      ]).notify([createTestResult(), failing({ testId: '2' })], NOW);
 
-      const results = [
-        createTestResult({ status: 'passed' }),
-        createTestResult({ testId: '2', status: 'passed' }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(SlackNotifier).not.toHaveBeenCalled();
+      expect(urls()).toEqual(['https://hooks.slack.com/50']);
     });
 
     it('tags: only notifies when tagged tests fail', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: mockSendMessage,
-      } as any));
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' }, conditions: { tags: ['@critical'] } },
+      ]).notify([failing({ tags: ['@critical'] })], NOW);
 
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { tags: ['@critical'] },
-      };
-      const manager = new NotificationManager([config]);
-
-      const results = [
-        createTestResult({
-          status: 'failed',
-          outcome: 'unexpected',
-          tags: ['@critical'],
-        }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(SlackNotifier).toHaveBeenCalled();
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(requests()).toEqual([slackPost('https://hooks.slack.com/test', 'Test Run: 0/1 passed (0%) — 1 failures')]);
     });
 
     it('tags: does not notify when only non-tagged tests fail', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { tags: ['@critical'] },
-      };
-      const manager = new NotificationManager([config]);
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/critical' }, conditions: { tags: ['@critical'] } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/smoke' }, conditions: { tags: ['@smoke'] } },
+      ]).notify([failing({ tags: ['@smoke'] }), createTestResult({ testId: '2', tags: ['@critical'] })], NOW);
 
-      const results = [
-        createTestResult({
-          status: 'failed',
-          outcome: 'unexpected',
-          tags: ['@smoke'],
-        }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(SlackNotifier).not.toHaveBeenCalled();
+      expect(urls()).toEqual(['https://hooks.slack.com/smoke']);
     });
   });
 
   describe('stabilityGradeDrop', () => {
+    const comparedTo = (stabilityGrade?: StabilityScore['grade']): RunComparison => ({
+      baselineRun: createRunSummary({ passRate: 100, stabilityGrade }),
+      currentRun: createRunSummary({ passRate: 100 }),
+      changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
+    });
+    const dropOrAll = () => new NotificationManager([
+      { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/drop' }, conditions: { stabilityGradeDrop: true } },
+      { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/all' } },
+    ]);
+
     it('notifies when stability grade has dropped', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: mockSendMessage,
-      } as any));
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' }, conditions: { stabilityGradeDrop: true } },
+      ]).notify([createTestResult({ stabilityScore: score('D') })], NOW, comparedTo('A'));
 
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { stabilityGradeDrop: true },
-      };
-      const manager = new NotificationManager([config]);
-
-      const results = [
-        createTestResult({
-          stabilityScore: { overall: 60, flakiness: 60, performance: 60, reliability: 60, grade: 'D', needsAttention: true },
-        }),
-      ];
-
-      const comparison: RunComparison = {
-        baselineRun: createRunSummary({ passRate: 90, stabilityGrade: 'A' }),
-        currentRun: createRunSummary({ passRate: 60 }),
-        changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
-      };
-
-      await manager.notify(results, Date.now(), comparison);
-
-      expect(SlackNotifier).toHaveBeenCalled();
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(requests()).toEqual([slackPost('https://hooks.slack.com/test', 'Test Run: 1/1 passed (100%) — 0 failures')]);
     });
 
     it('does not notify when stability grade has improved', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { stabilityGradeDrop: true },
-      };
-      const manager = new NotificationManager([config]);
+      await dropOrAll().notify([createTestResult({ stabilityScore: score('A') })], NOW, comparedTo('D'));
 
-      const results = [
-        createTestResult({
-          stabilityScore: { overall: 95, flakiness: 95, performance: 95, reliability: 95, grade: 'A', needsAttention: false },
-        }),
-      ];
-
-      const comparison: RunComparison = {
-        baselineRun: createRunSummary({ passRate: 60, stabilityGrade: 'D' }),
-        currentRun: createRunSummary({ passRate: 95 }),
-        changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
-      };
-
-      await manager.notify(results, Date.now(), comparison);
-
-      expect(SlackNotifier).not.toHaveBeenCalled();
+      expect(urls()).toEqual(['https://hooks.slack.com/all']);
     });
 
     it('fires only when the run grade is below the baseline run grade', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const sent: string[] = [];
-      vi.mocked(SlackNotifier).mockImplementation(() => ({
-        sendMessage: vi.fn(async (message: string) => { sent.push(message); }),
-      } as any));
       const manager = new NotificationManager([{
         channel: 'slack',
         config: { webhookUrl: 'https://hooks.slack.com/test' },
         conditions: { stabilityGradeDrop: true },
         template: 'grade {{grade}}',
       }]);
-      const graded = (...grades: Array<'A' | 'B' | 'C' | 'D' | 'F'>) => grades.map((grade, i) => createTestResult({
-        testId: `t${i}`,
-        stabilityScore: { overall: 0, flakiness: 0, performance: 0, reliability: 0, grade, needsAttention: false },
-      }));
-      const against = (stabilityGrade?: 'A' | 'B' | 'C' | 'D' | 'F'): RunComparison => ({
-        baselineRun: createRunSummary({ passRate: 100, stabilityGrade }),
-        currentRun: createRunSummary({ passRate: 100 }),
-        changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
-      });
+      const graded = (...grades: Array<StabilityScore['grade']>) => grades.map((grade, i) => createTestResult({ testId: `t${i}`, stabilityScore: score(grade) }));
 
-      await manager.notify(graded('A', 'A', 'C', 'A', 'A'), Date.now(), against('A'));
-      await manager.notify(graded('B', 'B'), Date.now(), against('B'));
-      await manager.notify(graded('A', 'B', 'C'), Date.now(), against('C'));
-      await manager.notify(graded('C', 'C'), Date.now(), against());
-      await manager.notify(graded('C', 'C'), Date.now(), against('A'));
+      await manager.notify(graded('A', 'A', 'C', 'A', 'A'), NOW, comparedTo('A'));
+      await manager.notify(graded('B', 'B'), NOW, comparedTo('B'));
+      await manager.notify(graded('A', 'B', 'C'), NOW, comparedTo('C'));
+      await manager.notify(graded('C', 'C'), NOW, comparedTo());
+      await manager.notify(graded('C', 'C'), NOW, comparedTo('A'));
 
-      expect(sent).toEqual(['grade C']);
+      expect(requests().map(r => r.body.text)).toEqual(['grade C']);
     });
 
     it('does not notify when stabilityGradeDrop is true but no comparison data', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-        conditions: { stabilityGradeDrop: true },
-      };
-      const manager = new NotificationManager([config]);
+      await dropOrAll().notify([createTestResult({ stabilityScore: score('D') })], NOW);
 
-      const results = [
-        createTestResult({
-          stabilityScore: { overall: 60, flakiness: 60, performance: 60, reliability: 60, grade: 'D', needsAttention: true },
-        }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(SlackNotifier).not.toHaveBeenCalled();
+      expect(urls()).toEqual(['https://hooks.slack.com/all']);
     });
   });
 
   describe('template rendering', () => {
     it('renders template with all variables', async () => {
-      const sendMessageSpy = vi.fn().mockResolvedValue(undefined);
-      const { SlackNotifier } = await import('./slack-notifier');
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: sendMessageSpy,
-      } as any));
-
-      const config: NotificationConfig = {
+      await new NotificationManager([{
         channel: 'slack',
         config: { webhookUrl: 'https://hooks.slack.com/test' },
         template: '{{total}} tests, {{passed}} passed, {{failed}} failed, {{skipped}} skipped, {{flaky}} flaky, {{passRate}}% pass rate, {{duration}}s, grade {{grade}}, failures: {{failedTests}}',
-      };
-      const manager = new NotificationManager([config]);
+      }]).notify([
+        createTestResult({ stabilityScore: score('A') }),
+        createTestResult({ testId: '2', title: 'Retried Test', outcome: 'flaky', stabilityScore: score('C') }),
+        createTestResult({ testId: '3', title: 'Skipped Test', status: 'skipped', outcome: 'skipped' }),
+        failing({ testId: '4', title: 'Failing Test' }),
+      ], NOW - 4_200);
 
-      const results = [
-        createTestResult({ status: 'passed' }),
-        createTestResult({ testId: '2', title: 'Failing Test', status: 'failed', outcome: 'unexpected' }),
-      ];
-
-      await manager.notify(results, Date.now());
-
-      expect(sendMessageSpy).toHaveBeenCalledTimes(1);
-      const message = sendMessageSpy.mock.calls[0][0];
-      expect(message).toContain('2 tests');
-      expect(message).toContain('1 passed');
-      expect(message).toContain('1 failed');
-      expect(message).toContain('0 skipped');
-      expect(message).toContain('0 flaky');
-      expect(message).toContain('50%');
-      expect(message).toContain('Failing Test');
+      expect(requests()).toEqual([slackPost(
+        'https://hooks.slack.com/test',
+        '4 tests, 2 passed, 1 failed, 1 skipped, 1 flaky, 50% pass rate, 4s, grade B, failures: Failing Test',
+      )]);
     });
   });
 
   describe('webhook payloadTemplate', () => {
     it('JSON-escapes values in the webhook body and leaves Slack text unescaped', async () => {
-      const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response('ok'));
-      vi.stubGlobal('fetch', fetchMock);
-      vi.spyOn(console, 'log').mockImplementation(() => {});
-      const { CustomWebhookNotifier } = await import('./custom-webhook-notifier');
-      const { SlackNotifier } = await import('./slack-notifier');
-      const actualWebhook = await vi.importActual<typeof import('./custom-webhook-notifier')>('./custom-webhook-notifier');
-      const actualSlack = await vi.importActual<typeof import('./slack-notifier')>('./slack-notifier');
-      vi.mocked(CustomWebhookNotifier).mockImplementationOnce((url: string) => new actualWebhook.CustomWebhookNotifier(url));
-      vi.mocked(SlackNotifier).mockImplementationOnce((url?: string) => new actualSlack.SlackNotifier(url) as any);
       const title = 'says "hi" from C:\\tmp $\' end';
 
       await new NotificationManager([
         { channel: 'webhook', config: { url: 'https://hooks.example.test/webhook', payloadTemplate: '{"text":"{{failed}} failed: {{failedTests}}"}' } },
         { channel: 'slack', config: { webhookUrl: 'https://hooks.example.test/slack' }, template: '{{failedTests}}' },
-      ]).notify([createTestResult({ title, status: 'failed', outcome: 'unexpected' })], Date.now());
+      ]).notify([failing({ title })], NOW);
 
       const sent = fetchMock.mock.calls.map(([url, init]) => [url, init.body]);
       expect(sent).toEqual([
@@ -354,23 +202,47 @@ describe('NotificationManager', () => {
       expect(JSON.parse(sent[0][1] as string)).toEqual({ text: `1 failed: ${title}` });
       expect(JSON.parse(sent[1][1] as string)).toEqual({ text: title });
     });
+
+    it('posts the rendered payloadTemplate with the configured headers', async () => {
+      await new NotificationManager([{
+        channel: 'webhook',
+        config: { url: 'https://hooks.example.test/webhook', payloadTemplate: '{"n":"{{failed}}"}', headers: '{"X-Key":"v","Content-Type":"application/vnd.ci+json"}' },
+      }]).notify([failing()], NOW);
+
+      expect(fetchMock.mock.calls).toEqual([[
+        'https://hooks.example.test/webhook',
+        { method: 'POST', headers: { 'Content-Type': 'application/vnd.ci+json', 'X-Key': 'v' }, body: '{"n":"1"}' },
+      ]]);
+    });
+
+    it('drops headers that are not a JSON object and warns when they are not JSON', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await new NotificationManager([
+        { channel: 'webhook', config: { url: 'https://hooks.example.test/a', payloadTemplate: '{}', headers: 'X-Key: v' } },
+        { channel: 'webhook', config: { url: 'https://hooks.example.test/b', payloadTemplate: '{}', headers: '["X-Key"]' } },
+      ]).notify([failing()], NOW);
+
+      expect(requests().map(r => [r.url, r.headers])).toEqual([
+        ['https://hooks.example.test/a', JSON_HEADERS],
+        ['https://hooks.example.test/b', JSON_HEADERS],
+      ]);
+      expect(warn.mock.calls).toEqual([['Smart Reporter: Invalid webhook headers JSON. Skipping headers.']]);
+    });
   });
 
   describe('pagerduty', () => {
     it('triggers an incident only for a run with failures', async () => {
-      const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response('ok'));
-      vi.stubGlobal('fetch', fetchMock);
-      vi.spyOn(console, 'log').mockImplementation(() => {});
-      const { PagerDutyNotifier } = await import('./pagerduty-notifier');
-      const actual = await vi.importActual<typeof import('./pagerduty-notifier')>('./pagerduty-notifier');
-      vi.mocked(PagerDutyNotifier).mockImplementation((key: string) => new actual.PagerDutyNotifier(key));
       const manager = new NotificationManager([{ channel: 'pagerduty', config: { routingKey: 'rk' } }]);
 
-      await manager.notify([createTestResult(), createTestResult({ testId: '2' })], Date.now());
-      await manager.notify([createTestResult(), createTestResult({ testId: '2', status: 'failed', outcome: 'unexpected' })], Date.now());
+      await manager.notify([createTestResult(), createTestResult({ testId: '2' })], NOW);
+      await manager.notify([createTestResult(), failing({ testId: '2' })], NOW);
 
-      expect(fetchMock.mock.calls.map(([url, init]) => [url, JSON.parse(init.body as string)])).toEqual([
-        ['https://events.pagerduty.com/v2/enqueue', {
+      expect(requests()).toEqual([{
+        url: 'https://events.pagerduty.com/v2/enqueue',
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: {
           routing_key: 'rk',
           event_action: 'trigger',
           payload: {
@@ -380,92 +252,183 @@ describe('NotificationManager', () => {
             component: 'test-suite',
             custom_details: { failures: 1, total: 2, passRate: 50 },
           },
-        }],
+        },
+      }]);
+    });
+
+    it('sets severity from the failure share: >50% critical, >20% error, else warning', async () => {
+      const notifier = new PagerDutyNotifier('rk');
+
+      for (const failures of [6, 5, 3, 2]) await notifier.trigger('s', failures, 10);
+
+      expect(requests().map(r => [r.body.payload.custom_details.failures, r.body.payload.severity])).toEqual([
+        [6, 'critical'], [5, 'error'], [3, 'error'], [2, 'warning'],
+      ]);
+    });
+
+    it('sends nothing without a routing key and warns when PagerDuty rejects the event', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      fetchMock.mockResolvedValueOnce(new Response('Invalid routing key', { status: 400 }));
+
+      await new PagerDutyNotifier('').trigger('s', 1, 1);
+      await new PagerDutyNotifier('bad').trigger('s', 1, 1);
+
+      expect(urls()).toEqual(['https://events.pagerduty.com/v2/enqueue']);
+      expect(warn.mock.calls).toEqual([['PagerDuty alert failed: 400 Invalid routing key']]);
+    });
+  });
+
+  describe('email', () => {
+    const sendgrid = { sendgridApiKey: 'SG.key', from: 'noreply@example.com', to: 'team@example.com' };
+
+    it('sends the message through SendGrid', async () => {
+      await new NotificationManager([{ channel: 'email', config: sendgrid }])
+        .notify([createTestResult(), failing({ testId: '2' })], NOW);
+
+      expect(requests()).toEqual([{
+        url: 'https://api.sendgrid.com/v3/mail/send',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer SG.key' },
+        body: {
+          personalizations: [{ to: [{ email: 'team@example.com' }] }],
+          from: { email: 'noreply@example.com' },
+          subject: 'Test Report: 1/2 passed (50%)',
+          content: [{ type: 'text/plain', value: 'Test Run: 1/2 passed (50%) — 1 failures' }],
+        },
+      }]);
+    });
+
+    it('warns instead of sending when SendGrid settings are missing or rejected', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      fetchMock.mockResolvedValueOnce(new Response('forbidden', { status: 403 }));
+
+      await new NotificationManager([
+        { channel: 'email', config: { from: sendgrid.from, to: sendgrid.to } },
+        { channel: 'email', config: { sendgridApiKey: 'SG.key', to: sendgrid.to } },
+        { channel: 'email', config: sendgrid },
+      ]).notify([failing()], NOW);
+
+      expect(urls()).toEqual(['https://api.sendgrid.com/v3/mail/send']);
+      expect(warn.mock.calls).toEqual([
+        ['Email notification: Set sendgridApiKey in notification config, or use a webhook channel for SMTP relay.'],
+        ['Email notification: sendgridApiKey, from, and to are required'],
+        ['Email notification failed: 403 forbidden'],
       ]);
     });
   });
 
   describe('channel dispatch', () => {
     it('dispatches to slack', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: mockSendMessage,
-      } as any));
+      await new NotificationManager([{ channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' } }])
+        .notify([createTestResult()], NOW);
 
-      const config: NotificationConfig = {
-        channel: 'slack',
-        config: { webhookUrl: 'https://hooks.slack.com/test' },
-      };
-      const manager = new NotificationManager([config]);
-      await manager.notify([createTestResult()], Date.now());
-
-      expect(SlackNotifier).toHaveBeenCalledWith('https://hooks.slack.com/test');
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(requests()).toEqual([slackPost('https://hooks.slack.com/test', 'Test Run: 1/1 passed (100%) — 0 failures')]);
     });
 
     it('dispatches to teams', async () => {
-      const { TeamsNotifier } = await import('./teams-notifier');
-      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(TeamsNotifier).mockImplementationOnce(() => ({ sendMessage: mockSendMessage } as any));
+      await new NotificationManager([{ channel: 'teams', config: { webhookUrl: 'https://teams.webhook/test' } }])
+        .notify([createTestResult()], NOW);
 
-      const config: NotificationConfig = {
-        channel: 'teams',
-        config: { webhookUrl: 'https://teams.webhook/test' },
-      };
-      const manager = new NotificationManager([config]);
-      await manager.notify([createTestResult()], Date.now());
-
-      expect(TeamsNotifier).toHaveBeenCalledWith('https://teams.webhook/test');
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(requests()).toEqual([{
+        url: 'https://teams.webhook/test',
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: { '@type': 'MessageCard', '@context': 'http://schema.org/extensions', text: 'Test Run: 1/1 passed (100%) — 0 failures' },
+      }]);
     });
 
     it('dispatches to pagerduty', async () => {
-      const { PagerDutyNotifier } = await import('./pagerduty-notifier');
-      const mockTrigger = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(PagerDutyNotifier).mockImplementationOnce(() => ({ trigger: mockTrigger } as any));
+      await new NotificationManager([{ channel: 'pagerduty', config: { routingKey: 'test-routing-key' } }])
+        .notify([failing()], NOW);
 
-      const config: NotificationConfig = {
-        channel: 'pagerduty',
-        config: { routingKey: 'test-routing-key' },
-      };
-      const manager = new NotificationManager([config]);
-      await manager.notify([createTestResult()], Date.now());
-
-      expect(PagerDutyNotifier).toHaveBeenCalledWith('test-routing-key');
-      expect(mockTrigger).toHaveBeenCalledOnce();
-    });
-
-    it('dispatches to email', async () => {
-      const { EmailNotifier } = await import('./email-notifier');
-      const mockSend = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(EmailNotifier).mockImplementationOnce(() => ({ send: mockSend } as any));
-
-      const config: NotificationConfig = {
-        channel: 'email',
-        config: { to: 'test@example.com', from: 'noreply@example.com' },
-      };
-      const manager = new NotificationManager([config]);
-      await manager.notify([createTestResult()], Date.now());
-
-      expect(EmailNotifier).toHaveBeenCalledWith({ to: 'test@example.com', from: 'noreply@example.com' });
-      expect(mockSend).toHaveBeenCalledOnce();
+      expect(requests().map(r => [r.url, r.body.routing_key, r.body.payload.summary, r.body.payload.severity])).toEqual([
+        ['https://events.pagerduty.com/v2/enqueue', 'test-routing-key', 'Test Failures: Test Run: 0/1 passed (0%) — 1 failures', 'critical'],
+      ]);
     });
 
     it('dispatches to custom webhook', async () => {
-      const { CustomWebhookNotifier } = await import('./custom-webhook-notifier');
-      const mockSend = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(CustomWebhookNotifier).mockImplementationOnce(() => ({ send: mockSend } as any));
+      await new NotificationManager([{ channel: 'webhook', config: { url: 'https://custom.webhook/endpoint' } }])
+        .notify([createTestResult({ stabilityScore: score('B') }), failing({ testId: '2', title: 'Broken' })], NOW - 1_500);
 
-      const config: NotificationConfig = {
-        channel: 'webhook',
-        config: { url: 'https://custom.webhook/endpoint' },
-      };
-      const manager = new NotificationManager([config]);
-      await manager.notify([createTestResult()], Date.now());
+      expect(requests()).toEqual([{
+        url: 'https://custom.webhook/endpoint',
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: { total: 2, passed: 1, failed: 1, skipped: 0, flaky: 0, passRate: 50, duration: 1_500, grade: 'B', failedTests: 'Broken' },
+      }]);
+    });
 
-      expect(CustomWebhookNotifier).toHaveBeenCalledWith('https://custom.webhook/endpoint');
-      expect(mockSend).toHaveBeenCalledOnce();
+    it('refuses webhook URLs that are not https', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'http://hooks.slack.com/test' } },
+        { channel: 'teams', config: { webhookUrl: 'http://teams.webhook/test' } },
+        { channel: 'webhook', config: { url: 'http://custom.webhook/endpoint' } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/secure' } },
+      ]).notify([failing()], NOW);
+      await new SlackNotifier('http://hooks.slack.com/legacy').notify([failing()]);
+      await new TeamsNotifier('http://teams.webhook/legacy').notify([failing()]);
+
+      expect(urls()).toEqual(['https://hooks.slack.com/secure']);
+      expect(warn.mock.calls).toEqual(Array(5).fill(['[smart-reporter] Webhook URL must use HTTPS']));
+    });
+  });
+
+  describe('legacy slackWebhook / teamsWebhook', () => {
+    const run = () => [
+      ...Array.from({ length: 6 }, (_, i) => failing({ testId: `f${i}`, title: `fails ${i}` })),
+      failing({ testId: 't', title: 'times out', status: 'timedOut' }),
+      createTestResult({ testId: 'p1', title: 'passes' }),
+      createTestResult({ testId: 'p2', title: 'passes too' }),
+      createTestResult({ testId: 's', title: 'skipped', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const failedList = '• fails 0\n• fails 1\n• fails 2\n• fails 3\n• fails 4';
+
+    it('posts a Slack summary of the first five failures, and nothing for a run without failures', async () => {
+      const slack = new SlackNotifier('https://hooks.slack.com/legacy');
+
+      await slack.notify([createTestResult(), createTestResult({ testId: '2', status: 'skipped' })]);
+      await new SlackNotifier(undefined).notify(run());
+      await slack.notify(run());
+
+      expect(requests()).toEqual([{
+        url: 'https://hooks.slack.com/legacy',
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: {
+          text: '🔴 Test Run Failed: 7/10 tests failed (2 passed)',
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: '*🔴 Test Run Failed: 7/10 tests failed (2 passed)*' } },
+            { type: 'section', text: { type: 'mrkdwn', text: `*Failed Tests:*\n${failedList}\n_...and 2 more failures_` } },
+          ],
+        },
+      }]);
+    });
+
+    it('posts a Teams MessageCard of the first five failures, and nothing for a run without failures', async () => {
+      const teams = new TeamsNotifier('https://teams.webhook/legacy');
+
+      await teams.notify([createTestResult()]);
+      await new TeamsNotifier(undefined).notify(run());
+      await teams.notify(run());
+
+      expect(requests()).toEqual([{
+        url: 'https://teams.webhook/legacy',
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: {
+          '@type': 'MessageCard',
+          '@context': 'http://schema.org/extensions',
+          themeColor: 'FF4444',
+          summary: '🔴 Test Run Failed: 7/10 tests failed (2 passed)',
+          sections: [{
+            activityTitle: '🔴 Test Run Failed: 7/10 tests failed (2 passed)',
+            facts: [{ name: 'Total', value: '10' }, { name: 'Passed', value: '2' }, { name: 'Failed', value: '7' }],
+            text: `**Failed Tests:**\n${failedList}\n\n_...and 2 more failures_`,
+          }],
+        },
+      }]);
     });
   });
 
@@ -478,15 +441,8 @@ describe('NotificationManager', () => {
     ];
 
     async function sentBySlack(configs: NotificationConfig[]): Promise<Array<[string, string]>> {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const sent: Array<[string, string]> = [];
-      for (let i = 0; i < configs.length; i++) {
-        vi.mocked(SlackNotifier).mockImplementationOnce((url?: string) => ({
-          sendMessage: vi.fn(async (message: string) => { sent.push([url ?? '', message]); }),
-        } as any));
-      }
-      await new NotificationManager(configs).notify(run(), Date.now());
-      return sent;
+      await new NotificationManager(configs).notify(run(), NOW);
+      return requests().map(r => [r.url, r.body.text]);
     }
 
     it('sends each owner a notification listing only the failures they own', async () => {
@@ -526,27 +482,29 @@ describe('NotificationManager', () => {
 
   describe('error handling', () => {
     it('failed notifier does not crash others', async () => {
-      const { SlackNotifier } = await import('./slack-notifier');
-      const { TeamsNotifier } = await import('./teams-notifier');
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      // Make slack throw
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: vi.fn().mockRejectedValue(new Error('Slack error')),
-      } as any));
+      await new NotificationManager([
+        { channel: 'slack' } as NotificationConfig,
+        { channel: 'teams', config: { webhookUrl: 'https://teams.webhook/test' } },
+      ]).notify([createTestResult()], NOW);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(urls()).toEqual(['https://teams.webhook/test']);
+      expect(error.mock.calls).toEqual([["Failed to send slack notification: Cannot read properties of undefined (reading 'webhookUrl')"]]);
+    });
 
-      const configs: NotificationConfig[] = [
+    it('logs a rejected request and still sends the next notification', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const offline = new TypeError('fetch failed');
+      fetchMock.mockRejectedValueOnce(offline);
+
+      await new NotificationManager([
         { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' } },
         { channel: 'teams', config: { webhookUrl: 'https://teams.webhook/test' } },
-      ];
-      const manager = new NotificationManager(configs);
-      await manager.notify([createTestResult()], Date.now());
+      ]).notify([createTestResult()], NOW);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to send slack notification'),
-      );
-      expect(TeamsNotifier).toHaveBeenCalled();
+      expect(urls()).toEqual(['https://hooks.slack.com/test', 'https://teams.webhook/test']);
+      expect(error.mock.calls).toEqual([['Failed to send Slack message:', offline]]);
     });
   });
 });
