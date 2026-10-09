@@ -202,6 +202,20 @@ test('timeline marker lines stay within the lanes and below the anomaly note', a
   }
 });
 
+test('clicking the timeline slider moves the playhead to the point clicked', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  const scrub = page.getByRole('slider', { name: 'Scrub the test timeline' });
+  await scrub.scrollIntoViewIfNeeded();
+  const track = (await page.locator('.timeline__track').boundingBox())!;
+  const slider = (await scrub.boundingBox())!;
+  for (const f of [0.25, 0.75]) {
+    const x = track.x + track.width * f;
+    await page.mouse.click(x, slider.y + slider.height / 2);
+    const head = (await page.locator('.timeline__playhead').boundingBox())!;
+    expect(Math.abs(head.x + head.width / 2 - x)).toBeLessThanOrEqual(3);
+  }
+});
+
 test('the top bar counts each test once, so the counts add up to the total', async ({ page }) => {
   await page.goto(url('screen=insights&mode=light'));
   const values = await page.getByLabel('Run result').locator('.count__value').allTextContents();

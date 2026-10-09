@@ -71,17 +71,17 @@ export function CausalTimeline({ timeline }: { timeline: Timeline }) {
           {firstAnomaly && <span class="timeline__marker" aria-hidden="true" style={{ left: pct(firstAnomaly.at, duration) }} />}
           <span class="timeline__playhead" aria-hidden="true" style={{ left: pct(at, duration) }} />
         </div>
+        <input
+          class="timeline__scrub"
+          type="range"
+          min={0}
+          max={Math.max(1, Math.round(duration))}
+          value={Math.round(at)}
+          onInput={(e) => setAt(Number((e.currentTarget as HTMLInputElement).value))}
+          aria-label="Scrub the test timeline"
+          aria-valuetext={formatDuration(at)}
+        />
       </div>
-      <input
-        class="timeline__scrub"
-        type="range"
-        min={0}
-        max={Math.max(1, Math.round(duration))}
-        value={Math.round(at)}
-        onInput={(e) => setAt(Number((e.currentTarget as HTMLInputElement).value))}
-        aria-label="Scrub the test timeline"
-        aria-valuetext={formatDuration(at)}
-      />
       <dl class="timeline__now">
         <dt>At {formatDuration(at)}</dt>
         <dd>

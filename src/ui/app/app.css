@@ -1089,8 +1089,11 @@ a.lines__label {
   background: var(--accent);
 }
 
+/* Under the track, widened by half the 16px thumb on each side so the thumb centre lines up with the playhead. */
 .timeline__scrub {
-  width: 100%;
+  grid-column: 2;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
   accent-color: var(--accent);
 }
 
