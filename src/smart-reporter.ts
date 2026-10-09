@@ -125,6 +125,7 @@ class SmartReporter implements Reporter {
   private liveWriter: LiveWriter;
   private liveFirstFailureSent: boolean = false;
   private ownership = new Map<string, OwnerInfo>();
+  private testIds = new Map<string, string>(); // Playwright's test.id -> the id results and history are keyed on
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -174,6 +175,7 @@ class SmartReporter implements Reporter {
     // When relativeToCwd is true, use process.cwd() instead of config.rootDir
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
     this.fullConfig = config;
+    this.assignTestIds(suite.allTests());
 
     // Auto-detect CI environment
     this.ciInfo = detectCIInfo();
@@ -947,14 +949,44 @@ class SmartReporter implements Reporter {
    * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login Test")
    */
   private getTestId(test: TestCase): string {
+    return this.testIds.get(test.id) ?? this.idFor(test, [test.title]);
+  }
+
+  private idFor(test: TestCase, titles: string[]): string {
     const file = path.relative(this.outputDir, test.location.file)
       .replace(/\\/g, '/')       // Normalize to forward slashes
       .replace(/^\.\//, '');     // Strip leading ./
     const project = test.parent?.project?.()?.name;
     const prefix = project?.trim() ? `[${project}] ` : '';
-    return `${prefix}${file}::${test.title}`;
+    return `${prefix}${file}::${titles.join(' › ')}`;
   }
 
+  // Only tests whose id collides (one title in two describe blocks) get their describe path in it:
+  // changing any other id would cut that test off from its history.
+  private assignTestIds(tests: TestCase[]): void {
+    const byId = new Map<string, TestCase[]>();
+    for (const test of tests) {
+      const id = this.idFor(test, [test.title]);
+      if (!byId.has(id)) byId.set(id, []);
+      byId.get(id)!.push(test);
+    }
+    for (const [id, same] of byId) {
+      const collides = new Set(same.map((t) => describePath(t).join(' › '))).size > 1;
+      for (const test of same) {
+        this.testIds.set(test.id, collides ? this.idFor(test, [...describePath(test), test.title]) : id);
+      }
+    }
+  }
+
+}
+
+// The describe blocks around a test: its suites below root > project > file.
+function describePath(test: TestCase): string[] {
+  const titles: string[] = [];
+  for (let s: Suite | undefined = test.parent; s?.parent?.parent?.parent; s = s.parent) {
+    if (s.title) titles.unshift(s.title);
+  }
+  return titles;
 }
 
 // ============================================================================

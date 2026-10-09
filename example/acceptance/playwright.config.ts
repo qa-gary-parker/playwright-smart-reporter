@@ -20,5 +20,7 @@ export default defineConfig({
       enableAIRecommendations: false,
       ...options,
     }],
+    // Playwright's own counts, the oracle the reporter's numbers are checked against.
+    ['json', { outputFile: path.join(out, 'pw.json') }],
   ],
 });
