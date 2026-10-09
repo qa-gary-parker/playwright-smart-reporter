@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { TestResult } from '@playwright/test/reporter';
 import type { AttachmentData, CustomAttachment } from '../types';
 import { COVERAGE_ATTACHMENT_NAME } from '../coverage/payload';
+import { A11Y_ATTACHMENT_NAME } from './a11y-collector';
 
 export interface AttachmentCollectorOptions {
   cspSafe?: boolean;           // If true, save screenshots as files instead of base64
@@ -67,7 +68,7 @@ export class AttachmentCollector {
 
     // Standard Playwright attachment names to exclude from custom collection
     // Coverage payloads are raw V8 data for the coverage collector, not something to show per test.
-    const standardNames = new Set(['screenshot', 'video', 'trace', COVERAGE_ATTACHMENT_NAME]);
+    const standardNames = new Set(['screenshot', 'video', 'trace', COVERAGE_ATTACHMENT_NAME, A11Y_ATTACHMENT_NAME]);
 
     // Collect screenshots (both standard and custom image attachments)
     const screenshots = result.attachments.filter(
@@ -108,7 +109,7 @@ export class AttachmentCollector {
 
     for (const video of videos) {
       if (video.path) {
-        attachments.videos.push(video.path);
+        attachments.videos.push(this.linkPath(video.path));
       }
     }
 
@@ -135,7 +136,7 @@ export class AttachmentCollector {
       };
 
       if (custom.path) {
-        customData.path = custom.path;
+        customData.path = this.linkPath(custom.path);
       } else if (custom.body) {
         // Convert body to base64 for inline display
         customData.body = custom.body.toString('base64');
@@ -145,6 +146,11 @@ export class AttachmentCollector {
     }
 
     return attachments;
+  }
+
+  // The report links files relative to itself, so they still resolve when it is served or moved with them.
+  private linkPath(file: string): string {
+    return this.options.outputDir ? path.relative(this.options.outputDir, file).split(path.sep).join('/') : file;
   }
 
   /**

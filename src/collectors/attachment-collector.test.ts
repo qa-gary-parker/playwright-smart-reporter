@@ -110,6 +110,17 @@ describe('AttachmentCollector', () => {
       expect(attachments.videos).toEqual(['/tmp/video.webm']);
     });
 
+    it('links videos and file attachments relative to the report, so they work when the report is served or moved', () => {
+      const result = makeTestResult([
+        { name: 'video', contentType: 'video/webm', path: '/work/test-results/login/video.webm' },
+        { name: 'error-context', contentType: 'text/markdown', path: '/work/test-results/login/error-context.md' },
+      ]);
+      const attachments = new AttachmentCollector({ outputDir: '/work/reports' }).collectAttachments(result);
+
+      expect(attachments.videos).toEqual(['../test-results/login/video.webm']);
+      expect(attachments.custom).toEqual([{ name: 'error-context', contentType: 'text/markdown', path: '../test-results/login/error-context.md' }]);
+    });
+
     it('ignores video without path', () => {
       const result = makeTestResult([
         { name: 'video', contentType: 'video/webm' },
@@ -190,6 +201,11 @@ describe('AttachmentCollector', () => {
 
       expect(attachments.custom.length).toBe(1);
       expect(attachments.custom[0].name).toBe('custom-data');
+    });
+
+    it('excludes accessibility scan payloads from custom attachments', () => {
+      const result = makeTestResult([{ name: 'smart-reporter-a11y', contentType: 'application/json', body: Buffer.from('{}') }]);
+      expect(new AttachmentCollector().collectAttachments(result).custom).toEqual([]);
     });
 
     it('excludes coverage payloads from custom attachments', () => {
