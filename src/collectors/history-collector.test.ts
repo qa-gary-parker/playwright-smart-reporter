@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { HistoryCollector } from './history-collector';
 import type { TestHistory, TestResultData, SmartReporterOptions } from '../types';
@@ -351,6 +352,37 @@ describe('HistoryCollector', () => {
 
       expect(collector.getHistory().forecasts).toEqual({ 'run-b': { x: 0.2 }, 'run-c': { x: 0.3 }, 'run-42': { x: 0.9 } });
       expect(Object.keys(collector.getHistory().forecasts!)).toEqual(['run-b', 'run-c', 'run-42']);
+    });
+  });
+
+  describe('saving', () => {
+    it('leaves the saved history whole when a write fails part-way', async () => {
+      const realFs = await vi.importActual<typeof fs>('fs');
+      const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'smart-history-'));
+      const historyPath = path.join(dir, 'test-history.json');
+      const saved: TestHistory = { runs: [], tests: { a: [{ passed: true, duration: 1, timestamp: '2026-01-01T00:00:00.000Z' }] }, summaries: [] };
+      realFs.writeFileSync(historyPath, JSON.stringify(saved));
+      mockFs.existsSync.mockImplementation(realFs.existsSync);
+      mockFs.readFileSync.mockImplementation(realFs.readFileSync);
+      mockFs.mkdirSync.mockImplementation(realFs.mkdirSync);
+      mockFs.renameSync.mockImplementation(realFs.renameSync);
+      mockFs.rmSync.mockImplementation(realFs.rmSync);
+      // A crash or a full disk part-way through writing
+      mockFs.writeFileSync.mockImplementation((file, data) => {
+        realFs.writeFileSync(file, String(data).slice(0, 10));
+        throw new Error('ENOSPC: no space left on device');
+      });
+
+      try {
+        const collector = new HistoryCollector({}, dir);
+        collector.loadHistory();
+        expect(() => collector.updateHistory([createTestResult({ testId: 'b' })])).toThrow('ENOSPC');
+
+        expect(JSON.parse(realFs.readFileSync(historyPath, 'utf8'))).toEqual(saved);
+        expect(realFs.readdirSync(dir)).toEqual(['test-history.json']);
+      } finally {
+        realFs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 

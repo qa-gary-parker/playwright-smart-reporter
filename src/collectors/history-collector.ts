@@ -262,10 +262,17 @@ export class HistoryCollector {
       }
     }
 
-    // Save to disk
+    // Write beside the history and rename over it, so a crash or a concurrent run leaves the old file or the new one, never half of one
     const historyPath = path.resolve(this.outputDir, this.options.historyFile);
     fs.mkdirSync(path.dirname(historyPath), { recursive: true });
-    fs.writeFileSync(historyPath, JSON.stringify(this.history, null, 2));
+    const tmpPath = `${historyPath}.${process.pid}-${Date.now()}.tmp`;
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(this.history, null, 2));
+      fs.renameSync(tmpPath, historyPath);
+    } catch (err) {
+      fs.rmSync(tmpPath, { force: true });
+      throw err;
+    }
   }
 
   private stepDurationsEntry(result: TestResultData): { stepDurations?: Record<string, number> } {
