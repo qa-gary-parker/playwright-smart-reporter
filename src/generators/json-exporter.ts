@@ -81,6 +81,8 @@ export interface JsonTestEntry {
   a11y?: A11yResult;
   // Phase 4: Causal failure timeline
   timeline?: CausalTimeline;
+  owners?: string[];
+  ownerSource?: TestResultData['ownerSource'];
   // Phase 5: CI surface integrations
   line?: number;
   column?: number;
@@ -154,6 +156,8 @@ export function exportJsonData(
     aiSuggestion: r.aiSuggestion,
     a11y: r.a11y,
     timeline: r.timeline,
+    owners: r.owners,
+    ownerSource: r.ownerSource,
     line: r.line,
     column: r.column,
     errorLocation: r.errorLocation,

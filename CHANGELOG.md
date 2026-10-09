@@ -29,7 +29,7 @@ All notable changes to this project will be documented in this file.
 - **GitHub integration**: `playwright-smart-reporter github` and a composite action (`action.yml`) write a job summary, error annotations at the failing assertion, and one sticky pull request comment.
 - **Agent-ready output**: `exportFailures` writes a redacted `<name>-failures.json`; `playwright-smart-reporter failures [--json]` prints it; `playwright-smart-reporter mcp` serves it over MCP (`list_failures`, `get_failure`, `get_trace_context`).
 - `assetMode` option (`'inline'`, `'external'`, `'auto'`).
-- The JSON export carries `line`, `column`, `errorLocation`, `rootDir`, the quality gate result, `a11y`, `timeline`, and coverage totals.
+- The JSON export carries `line`, `column`, `errorLocation`, `rootDir`, the quality gate result, `a11y`, `timeline`, `owners`, and coverage totals.
 
 ### Changed
 - Report data is written one test at a time instead of as one string. At 10,000 tests in the benchmark (`docs/investigations/report-scale.md`): 70 MB of data instead of 401 MB of HTML, and a 412 MB memory peak instead of 1,116 MB.

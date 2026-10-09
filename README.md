@@ -377,7 +377,7 @@ Smart Reporter tags each test with its owners. You can send each team a notifica
    - Negation (`!`) and character ranges (`[a-z]`) are not supported, the same as on GitHub.
 2. **Git authors (fallback).** If there is no CODEOWNERS file, the owner is the email of the author who made the most commits to the test file. The reporter reads the 1,000 most recent non-merge commits that touch the test files. A tie goes to the most recent author. The reporter runs `git log` one time per run for all test files.
 
-Outside a git repository, CODEOWNERS patterns match relative to Playwright's `rootDir`, and the git fallback gives no owners. Neither case fails the run.
+Outside a git repository, the reporter looks for CODEOWNERS from Playwright's `rootDir` up to the first folder with a `package.json`, and patterns match relative to the folder where it was found. The git fallback gives no owners there. Neither case fails the run.
 
 #### Options
 

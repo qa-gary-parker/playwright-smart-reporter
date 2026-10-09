@@ -221,6 +221,13 @@ describe('json-exporter', () => {
       expect(written.tests[0].timeline).toEqual(timeline);
     });
 
+    it('carries each test\'s owners and where they came from', () => {
+      exportJsonData([createTestResult({ owners: ['@acme/payments'], ownerSource: 'codeowners' })], createTestHistory(), Date.now(), {});
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect([written.tests[0].owners, written.tests[0].ownerSource]).toEqual([['@acme/payments'], 'codeowners']);
+    });
+
     it('failure clusters are included when present', () => {
       const clusterTest = createTestResult({ testId: 'fail-1', status: 'failed' });
       const clusters: FailureCluster[] = [
