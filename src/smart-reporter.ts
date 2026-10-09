@@ -126,6 +126,7 @@ class SmartReporter implements Reporter {
   private liveFirstFailureSent: boolean = false;
   private ownership = new Map<string, OwnerInfo>();
   private testIds = new Map<string, string>(); // Playwright's test.id -> the id results and history are keyed on
+  private allTests: TestCase[] = [];
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -175,7 +176,8 @@ class SmartReporter implements Reporter {
     // When relativeToCwd is true, use process.cwd() instead of config.rootDir
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
     this.fullConfig = config;
-    this.assignTestIds(suite.allTests());
+    this.allTests = suite.allTests();
+    this.assignTestIds(this.allTests);
 
     // Auto-detect CI environment
     this.ciInfo = detectCIInfo();
@@ -532,6 +534,16 @@ class SmartReporter implements Reporter {
    * @param result - Full test run result
    */
   async onEnd(result: FullResult): Promise<{ status?: FullResult['status'] } | undefined> {
+    // Tests that never started (a failed setup project, --max-failures, Ctrl-C) get no onTestEnd, and the
+    // global timeout skips it for the test it cuts off. Playwright reports them as skipped, so add them.
+    for (const test of this.allTests) {
+      if (this.resultsMap.has(this.getTestId(test))) continue;
+      await this.onTestEnd(test, test.results[test.results.length - 1] ?? {
+        retry: 0, parallelIndex: -1, workerIndex: -1, duration: 0, startTime: new Date(this.startTime), status: 'skipped',
+        errors: [], attachments: [], annotations: [], steps: [], stdout: [], stderr: [],
+      });
+    }
+
     // Convert resultsMap to array - this ensures we only have the final attempt for each test
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());

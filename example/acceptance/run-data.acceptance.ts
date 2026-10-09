@@ -155,4 +155,27 @@ describe('interrupted and not-run tests', () => {
     expect(next.tests[0].flakinessScore).toBeUndefined();
     expect(next.comparison?.changes.fixedTests).toEqual([]);
   }, TIMEOUT);
+
+  it('reports the tests --max-failures never started as skipped', () => {
+    const out = path.join(tmp, 'max-failures');
+    runSuite(out, {}, ['--grep-invert', 'three seconds|fails after a second', '--retries=0', '--max-failures=1']);
+
+    const data = reportData(out);
+    expect(playwright(out)).toEqual({ total: 8, passed: 2, failed: 1, skipped: 5, flaky: 0 });
+    expect(counts(data.summary)).toEqual(playwright(out));
+    expect(counts(history(out).summaries!.at(-1)!)).toEqual(playwright(out));
+    expect(data.tests.filter((t) => t.status === 'skipped').map((t) => t.testId).sort()).toEqual(
+      ['expected failure that fails', 'expected failure that passes', 'fails when asked', 'passes on retry', 'skipped when asked'].map(id),
+    );
+  }, TIMEOUT);
+
+  it('reports a test the global timeout cut off', () => {
+    const out = path.join(tmp, 'global-timeout');
+    runSuite(out, {}, ['--grep', 'three seconds', '--global-timeout=1500']);
+
+    const data = reportData(out);
+    expect(playwright(out)).toEqual({ total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0 });
+    expect(counts(data.summary)).toEqual(playwright(out));
+    expect(data.tests.map((t) => [t.testId, t.outcome])).toEqual([[id('runs for three seconds'), 'skipped']]);
+  }, TIMEOUT);
 });
