@@ -22,6 +22,7 @@ interface Failure {
   error?: string;
 }
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const meta = (name: string) => document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content ?? '';
 const placeholder = (v: string) => !v || v.startsWith('__');
 
@@ -122,7 +123,12 @@ export function Live() {
   async function run() {
     const q = parseQuery(filter);
     const files = q.tokens.filter((t) => t.key === 'file').map((t) => t.value);
-    const grep = [q.tokens.filter((t) => t.key === 'tag').map((t) => (t.value.startsWith('@') ? t.value : `@${t.value}`)).join('|'), q.text].filter(Boolean).join('.*');
+    // Playwright matches --grep against the title followed by the tags, so each condition is a lookahead:
+    // any of the tags, and every word, in any order.
+    const tags = q.tokens.filter((t) => t.key === 'tag').map((t) => escapeRegExp(t.value.startsWith('@') ? t.value : `@${t.value}`));
+    const words = q.text.split(/\s+/).filter(Boolean).map(escapeRegExp);
+    const conditions = [...(tags.length ? [`(?:${tags.join('|')})`] : []), ...words];
+    const grep = conditions.length ? `^${conditions.map((c) => `(?=.*${c})`).join('')}` : '';
     setPhase('starting');
     setFailures([]);
     setCounters(null);

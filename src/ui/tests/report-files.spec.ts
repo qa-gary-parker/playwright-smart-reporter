@@ -84,3 +84,25 @@ test('the Live view times a finished run from its events, not from when the page
   await expect(page.locator('.live-status')).toHaveText('Completed');
   await expect(page.locator('.page__head > .mono')).toHaveText('32.7s');
 });
+
+test('the Live view sends its run filter to the server as files and a grep', async ({ page }) => {
+  const data = fixture as unknown as ReportData;
+  const { outputPath } = await write('live-run', { assetMode: 'inline' }, { ...data, config: { ...data.config, live: { jsonlFile: 'live.jsonl' } } });
+  const bodies: unknown[] = [];
+  await page.route('http://report.test/**', async (route) => {
+    const req = route.request();
+    const pathname = new URL(req.url()).pathname;
+    if (pathname === '/run' && req.method() === 'POST') {
+      bodies.push(req.postDataJSON());
+      return route.fulfill({ json: { status: 'started' } });
+    }
+    if (pathname === '/live.jsonl') return route.fulfill({ body: '' });
+    // serve replaces the placeholder when it runs with --run-command.
+    return route.fulfill({ body: fs.readFileSync(outputPath, 'utf8').replace(/__RUN_ENABLED__/g, 'true'), contentType: 'text/html' });
+  });
+  await page.goto('http://report.test/smart-report.html#/live');
+  await page.getByLabel('Filter which tests to run').fill('file:checkout.spec.ts tag:smoke tag:@critical saved card');
+  await page.getByRole('button', { name: 'Run tests' }).click();
+  // Every condition must hold, in any order: Playwright matches the title with the tags after it.
+  await expect.poll(() => bodies).toEqual([{ files: ['checkout.spec.ts'], grep: '^(?=.*(?:@smoke|@critical))(?=.*saved)(?=.*card)' }]);
+});

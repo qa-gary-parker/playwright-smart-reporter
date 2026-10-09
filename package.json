@@ -42,7 +42,6 @@
     "test:ui:docker": "npm run ui:specimen && docker run --rm --ipc=host -v \"$PWD\":/work -w /work mcr.microsoft.com/playwright:v1.57.0-noble npx playwright test --config=playwright.ui.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:live-filter": "LIVE_REPORT=1 vitest run src/live/live-filter-integration.test.ts",
     "test:timeline": "TIMELINE_E2E=1 vitest run example/timeline",
     "test:acceptance": "ACCEPTANCE_E2E=1 vitest run example/acceptance",
     "test:coverage-example": "npm run build && COVERAGE_E2E=1 vitest run src/coverage/coverage-example.test.ts",
