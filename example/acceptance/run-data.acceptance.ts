@@ -179,3 +179,17 @@ describe('interrupted and not-run tests', () => {
     expect(data.tests.map((t) => [t.testId, t.outcome])).toEqual([[id('runs for three seconds'), 'skipped']]);
   }, TIMEOUT);
 });
+
+describe('history', () => {
+  it('does not save a run with no tests, so it never becomes the baseline', () => {
+    const out = path.join(tmp, 'empty-run');
+    runSuite(out, {}, ['--grep', 'fails when asked']);
+    const [first] = history(out).summaries!;
+    runSuite(out, {}, ['--grep', 'no test has this title']);
+
+    expect(playwright(out)).toEqual({ total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0 });
+    expect(history(out).summaries).toEqual([first]);
+    runSuite(out, {}, ['--grep', 'fails when asked']);
+    expect(reportData(out).comparison?.baselineRun.runId).toBe(first.runId);
+  }, TIMEOUT);
+});

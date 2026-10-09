@@ -127,6 +127,8 @@ export class HistoryCollector {
    * Update history with test results
    */
   updateHistory(results: TestResultData[], forecasts?: Record<string, number>): void {
+    // A run with no tests (global setup failed, nothing matched) says nothing, and would become the next baseline.
+    if (results.length === 0) return;
     const timestamp = new Date().toISOString();
     const runId = this.currentRun.runId;
 
