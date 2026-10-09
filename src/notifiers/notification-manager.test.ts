@@ -65,6 +65,7 @@ describe('NotificationManager', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('conditions', () => {
@@ -293,6 +294,34 @@ describe('NotificationManager', () => {
       expect(message).toContain('0 flaky');
       expect(message).toContain('50%');
       expect(message).toContain('Failing Test');
+    });
+  });
+
+  describe('webhook payloadTemplate', () => {
+    it('JSON-escapes values in the webhook body and leaves Slack text unescaped', async () => {
+      const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response('ok'));
+      vi.stubGlobal('fetch', fetchMock);
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const { CustomWebhookNotifier } = await import('./custom-webhook-notifier');
+      const { SlackNotifier } = await import('./slack-notifier');
+      const actualWebhook = await vi.importActual<typeof import('./custom-webhook-notifier')>('./custom-webhook-notifier');
+      const actualSlack = await vi.importActual<typeof import('./slack-notifier')>('./slack-notifier');
+      vi.mocked(CustomWebhookNotifier).mockImplementationOnce((url: string) => new actualWebhook.CustomWebhookNotifier(url));
+      vi.mocked(SlackNotifier).mockImplementationOnce((url?: string) => new actualSlack.SlackNotifier(url) as any);
+      const title = 'says "hi" from C:\\tmp $\' end';
+
+      await new NotificationManager([
+        { channel: 'webhook', config: { url: 'https://hooks.example.test/webhook', payloadTemplate: '{"text":"{{failed}} failed: {{failedTests}}"}' } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.example.test/slack' }, template: '{{failedTests}}' },
+      ]).notify([createTestResult({ title, status: 'failed', outcome: 'unexpected' })], Date.now());
+
+      const sent = fetchMock.mock.calls.map(([url, init]) => [url, init.body]);
+      expect(sent).toEqual([
+        ['https://hooks.example.test/webhook', '{"text":"1 failed: says \\"hi\\" from C:\\\\tmp $\' end"}'],
+        ['https://hooks.example.test/slack', '{"text":"says \\"hi\\" from C:\\\\tmp $\' end"}'],
+      ]);
+      expect(JSON.parse(sent[0][1] as string)).toEqual({ text: `1 failed: ${title}` });
+      expect(JSON.parse(sent[1][1] as string)).toEqual({ text: title });
     });
   });
 

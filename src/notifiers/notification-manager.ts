@@ -88,7 +88,8 @@ function evaluateConditions(conditions: NotificationCondition, ctx: Notification
   return true;
 }
 
-function renderTemplate(template: string, ctx: NotificationContext): string {
+// Replacer functions, because a replacement string would expand $& and $' found in a test title.
+function renderTemplate(template: string, ctx: NotificationContext, escape: (value: string) => string = value => value): string {
   return template
     .replace(/\{\{total\}\}/g, String(ctx.total))
     .replace(/\{\{passed\}\}/g, String(ctx.passed))
@@ -97,8 +98,8 @@ function renderTemplate(template: string, ctx: NotificationContext): string {
     .replace(/\{\{flaky\}\}/g, String(ctx.flaky))
     .replace(/\{\{passRate\}\}/g, String(ctx.passRate))
     .replace(/\{\{duration\}\}/g, String(Math.round(ctx.duration / 1000)))
-    .replace(/\{\{grade\}\}/g, ctx.grade)
-    .replace(/\{\{failedTests\}\}/g, ctx.failedTests);
+    .replace(/\{\{grade\}\}/g, () => escape(ctx.grade))
+    .replace(/\{\{failedTests\}\}/g, () => escape(ctx.failedTests));
 }
 
 export class NotificationManager {
@@ -157,7 +158,7 @@ export class NotificationManager {
           case 'webhook': {
             const notifier = new CustomWebhookNotifier(config.config.url);
             const payload = config.config.payloadTemplate
-              ? renderTemplate(config.config.payloadTemplate, ctx)
+              ? renderTemplate(config.config.payloadTemplate, ctx, value => JSON.stringify(value).slice(1, -1))
               : JSON.stringify(ctx);
             let parsedHeaders: Record<string, string> | undefined;
             if (config.config.headers) {
