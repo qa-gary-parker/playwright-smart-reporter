@@ -533,6 +533,10 @@ class SmartReporter implements Reporter {
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());
 
+    // Durations below are Date.now() - startTime. merge-reports calls onBegin at merge time,
+    // so start the clock from the run's own duration instead.
+    if (result.duration > 0) this.startTime = Date.now() - result.duration;
+
     // Signal live reporting that the run is complete
     // Note: JSONL file is intentionally NOT cleaned up here — the SSE handler
     // may still need to push the 'complete' event to connected dashboards.

@@ -14,3 +14,7 @@ test('passes on retry', () => {
 });
 
 test.skip('is skipped', () => {});
+
+test('takes a second', async () => {
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+});

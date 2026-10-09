@@ -13,10 +13,10 @@ const CONFIG = path.join(__dirname, 'playwright.config.ts');
 
 let tmp: string;
 
-function runSuite(out: string, options: object, args: string[] = []) {
-  const run = spawnSync(process.execPath, [CLI, 'test', `--config=${CONFIG}`, ...args], {
+function runSuite(out: string, options: object, args: string[] = [], command: 'test' | 'merge-reports' = 'test', env: Record<string, string> = {}) {
+  const run = spawnSync(process.execPath, [CLI, command, `--config=${CONFIG}`, ...args], {
     cwd: ROOT,
-    env: { ...process.env, ACCEPTANCE_OUT: out, ACCEPTANCE_OPTIONS: JSON.stringify(options) },
+    env: { ...process.env, ACCEPTANCE_OUT: out, ACCEPTANCE_OPTIONS: JSON.stringify(options), ...env },
     encoding: 'utf8',
   });
   if (run.error) throw run.error;
@@ -50,5 +50,19 @@ describe('live results', () => {
     expect(data.config.live?.jsonlFile).toBe('../live-results/nested/run.jsonl');
     const events = fs.readFileSync(path.resolve(out, data.config.live!.jsonlFile), 'utf8').trim().split('\n').map((l) => JSON.parse(l).event);
     expect(events).toEqual(['start', 'test', 'complete']);
+  });
+});
+
+describe('merge-reports', () => {
+  it('reports the duration of the tests, not of the merge', () => {
+    const blobs = path.join(tmp, 'blobs');
+    const out = path.join(tmp, 'merged');
+    runSuite(path.join(tmp, 'shard'), {}, ['--reporter=blob', '--grep', 'takes a second'], 'test', { PLAYWRIGHT_BLOB_OUTPUT_DIR: blobs });
+    const merge = runSuite(out, { exportJson: true }, [blobs], 'merge-reports');
+
+    expect(merge.status).toBe(0);
+    const { summary } = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+    expect(summary.total).toBe(1);
+    expect(summary.duration).toBeGreaterThanOrEqual(1000);
   });
 });
