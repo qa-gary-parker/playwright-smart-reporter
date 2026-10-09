@@ -236,11 +236,9 @@ ${FAILURE_DATA_HELP}
     console.log(JSON.stringify(bundle, null, 2));
     return;
   }
-  const { summarizeFailure } = await import('../agent/failure-bundle');
+  const { formatFailureText } = await import('../agent/failure-bundle');
   console.log(`${bundle.failures.length} failure(s) of ${bundle.run.total} test(s)`);
-  for (const f of bundle.failures.map(summarizeFailure)) {
-    console.log(`\n${f.id}\n  ${f.location}\n  ${f.error}`);
-  }
+  for (const f of bundle.failures) console.log(`\n${formatFailureText(f)}`);
 }
 
 async function runMcp(): Promise<void> {

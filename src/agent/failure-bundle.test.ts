@@ -8,6 +8,7 @@ import type { TestResultData } from '../types';
 import {
   assertFailureBundle,
   buildFailureBundle,
+  formatFailureText,
   loadFailureBundle,
   parseError,
   writeFailureBundle,
@@ -274,5 +275,53 @@ describe('loadFailureBundle and writeFailureBundle', () => {
     const other = path.join(dir, 'other.json');
     fs.writeFileSync(other, '{"hello":"world"}');
     expect(() => loadFailureBundle(other, OPTS)).toThrow(`${other} is not a failure bundle, report data, or JSON export`);
+  });
+});
+
+describe('formatFailureText', () => {
+  it('prints the error, code frame, failing step, call log, anomaly, failed requests, console, attempts and history', () => {
+    expect(formatFailureText(LOGIN_FAILURE)).toBe(
+      [
+        '[chromium] tests/auth/login.spec.ts::shows the dashboard after login',
+        '  tests/auth/login.spec.ts:10 · chromium · failed',
+        '  Error: expect(locator).toBeVisible() failed',
+        '',
+        "  Locator: getByRole('heading', { name: 'Dashboard' })",
+        '  Expected: visible',
+        '  Timeout: 5000ms',
+        '  Error: element(s) not found',
+        '  at tests/auth/login.spec.ts:14:61',
+        "    12 |   await page.getByLabel('Password').fill(process.env.PASSWORD!);",
+        "    13 |   await page.getByRole('button', { name: 'Sign in' }).click();",
+        "  > 14 |   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();",
+        '       |                                                             ^',
+        '    15 | });',
+        '  Failing step: Expect "toBeVisible" at 1100ms for 5050ms',
+        '  Call log:',
+        '    - Expect "toBeVisible" with timeout 5000ms',
+        "    - waiting for getByRole('heading', { name: 'Dashboard' })",
+        '  Possible first anomaly: POST /api/session returned 500 at 700ms',
+        '  Failed requests (1 of 2):',
+        '    POST https://app.example.test/api/session 500 Internal Server Error',
+        '  Console:',
+        '    error at 1105ms: Failed to load resource: the server responded with a status of 500 ()',
+        '  Attempts: failed in 6100ms, failed in 6200ms',
+        '  History (last 3 runs): passed, failed, skipped · signals: new-failure',
+      ].join('\n'),
+    );
+  });
+
+  it('leaves out the sections a failure has no data for', () => {
+    expect(formatFailureText(EXPORT_FAILURE)).toBe(
+      [
+        'tests/export.spec.ts::exports a CSV',
+        '  tests/export.spec.ts:6 · timedOut',
+        '  Error: locator.click: Test timeout of 30000ms exceeded.',
+        '  at tests/pages/export-page.ts:22:15',
+        '  Call log:',
+        "    - waiting for locator('#export')",
+        '  History: no earlier runs',
+      ].join('\n'),
+    );
   });
 });

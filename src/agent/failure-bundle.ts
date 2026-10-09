@@ -371,3 +371,24 @@ export function summarizeFailure(f: AgentFailure) {
     ...(f.anomaly && { anomaly: f.anomaly.summary }),
   };
 }
+
+const indent = (text: string, by: string) => text.split('\n').map((l) => (l ? by + l : l));
+
+export function formatFailureText(f: AgentFailure): string {
+  const out = [f.id, `  ${[`${f.file}${f.line !== undefined ? `:${f.line}` : ''}`, f.project, f.status].filter(Boolean).join(' · ')}`];
+  out.push(...indent(f.error.message, '  '));
+  if (f.error.location) out.push(`  at ${f.error.location.relative}:${f.error.location.line}:${f.error.location.column}`);
+  if (f.codeFrame) out.push(...indent(f.codeFrame, '  '));
+  if (f.failingStep) out.push(`  Failing step: ${f.failingStep.title} at ${f.failingStep.start}ms for ${f.failingStep.end - f.failingStep.start}ms`);
+  if (f.callLog.length > 0) out.push('  Call log:', ...f.callLog.map((l) => `    ${l}`));
+  if (f.anomaly) out.push(`  Possible first anomaly: ${f.anomaly.summary} at ${f.anomaly.at}ms`);
+  if (f.network && f.network.failed.length > 0) {
+    out.push(`  Failed requests (${f.network.failed.length} of ${f.network.totalRequests}):`);
+    out.push(...f.network.failed.map((n) => `    ${n.method} ${n.url} ${n.status} ${n.statusText}`.trimEnd()));
+  }
+  if (f.console && f.console.length > 0) out.push('  Console:', ...f.console.map((c) => `    ${c.level} at ${c.at}ms: ${c.text}`));
+  if (f.attempts.length > 1) out.push(`  Attempts: ${f.attempts.map((a) => `${a.status} in ${a.duration}ms`).join(', ')}`);
+  const signals = f.history.signals.length > 0 ? ` · signals: ${f.history.signals.join(', ')}` : '';
+  out.push(f.history.recent.length > 0 ? `  History (last ${f.history.recent.length} runs): ${f.history.recent.join(', ')}${signals}` : `  History: no earlier runs${signals}`);
+  return out.join('\n');
+}
