@@ -7,6 +7,7 @@ import { COVERAGE_ATTACHMENT_NAME } from '../coverage/payload';
 export interface AttachmentCollectorOptions {
   cspSafe?: boolean;           // If true, save screenshots as files instead of base64
   outputDir?: string;          // Directory to save screenshot files (required if cspSafe)
+  reportName?: string;         // Screenshot file prefix, so reports sharing outputDir keep their own files
 }
 
 /**
@@ -43,7 +44,8 @@ export class AttachmentCollector {
   private saveScreenshotToFile(buffer: Buffer, contentType: string): string {
     const outputDir = this.ensureOutputDir();
     const ext = contentType.includes('png') ? 'png' : 'jpg';
-    const filename = `screenshot-${++this.screenshotCounter}.${ext}`;
+    const prefix = this.options.reportName ? `${this.options.reportName}-` : '';
+    const filename = `${prefix}screenshot-${++this.screenshotCounter}.${ext}`;
     const filePath = path.join(outputDir, filename);
     fs.writeFileSync(filePath, buffer);
     // Return just the filename (same directory as HTML)

@@ -239,6 +239,18 @@ describe('AttachmentCollector', () => {
       expect(attachments.screenshots[0]).toMatch(/^screenshot-\d+\.png$/);
     });
 
+    it('prefixes screenshot files with the report name so reports sharing a folder do not overwrite each other', () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.writeFileSync.mockImplementation(() => {});
+      const result = () => makeTestResult([{ name: 'screenshot', contentType: 'image/png', body: Buffer.from('png') }]);
+
+      const a = new AttachmentCollector({ cspSafe: true, outputDir: '/output', reportName: 'a' }).collectAttachments(result());
+      const b = new AttachmentCollector({ cspSafe: true, outputDir: '/output', reportName: 'b' }).collectAttachments(result());
+
+      expect(mockFs.writeFileSync.mock.calls.map(([file]) => file)).toEqual(['/output/a-screenshot-1.png', '/output/b-screenshot-1.png']);
+      expect([a.screenshots, b.screenshots]).toEqual([['a-screenshot-1.png'], ['b-screenshot-1.png']]);
+    });
+
     it('creates output directory if it does not exist', () => {
       mockFs.existsSync.mockReturnValue(false);
       mockFs.mkdirSync.mockImplementation(() => undefined as any);

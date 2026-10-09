@@ -195,6 +195,7 @@ class SmartReporter implements Reporter {
     this.attachmentCollector = new AttachmentCollector({
       cspSafe: this.options.cspSafe,
       outputDir: outputDir,
+      reportName: path.basename(outputPath, '.html'),
     });
     this.coverageCollector = new CoverageCollector(this.outputDir);
 
