@@ -128,6 +128,23 @@ describe('resolveOwnership with CODEOWNERS', () => {
     expect(owned(resolveOwnership([file], rootDir), tmp)).toEqual({ 'e2e/checkout/pay.spec.ts': 'codeowners:@org/payments' });
   });
 
+  it('finds CODEOWNERS above rootDir without git, matching patterns relative to the folder it was found for', () => {
+    write(tmp, 'app/package.json', '{}');
+    write(tmp, 'app/.github/CODEOWNERS', '/e2e/checkout/ @org/payments\n');
+    const rootDir = path.join(tmp, 'app/e2e');
+    const files = [write(tmp, 'app/e2e/checkout/pay.spec.ts'), write(tmp, 'app/e2e/home.spec.ts')];
+
+    expect(owned(resolveOwnership(files, rootDir), tmp)).toEqual({ 'app/e2e/checkout/pay.spec.ts': 'codeowners:@org/payments' });
+  });
+
+  it('stops looking above rootDir at the first folder with package.json', () => {
+    write(tmp, 'CODEOWNERS', '* @org/outside\n');
+    write(tmp, 'app/package.json', '{}');
+    const file = write(tmp, 'app/e2e/a.spec.ts');
+
+    expect(resolveOwnership([file], path.join(tmp, 'app/e2e')).size).toBe(0);
+  });
+
   it('uses the first file found in .github/, root, docs/ order', () => {
     write(tmp, 'docs/CODEOWNERS', '* @from-docs\n');
     write(tmp, 'CODEOWNERS', '* @from-root\n');

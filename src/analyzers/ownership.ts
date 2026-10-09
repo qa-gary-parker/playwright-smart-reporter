@@ -122,6 +122,18 @@ function findGitRoot(start: string): string | undefined {
   }
 }
 
+// rootDir and its parents up to the project root: the first folder with package.json or .git.
+function projectDirs(start: string): string[] {
+  const dirs: string[] = [];
+  let dir = realpath(start);
+  for (;;) {
+    dirs.push(dir);
+    const parent = path.dirname(dir);
+    if (parent === dir || ['package.json', '.git'].some((f) => fs.existsSync(path.join(dir, f)))) return dirs;
+    dir = parent;
+  }
+}
+
 function findCodeowners(bases: string[], explicit?: string): { file: string; base: string } | undefined {
   if (explicit) {
     if (!fs.existsSync(explicit)) throw new Error(`CODEOWNERS not found at ${explicit}`);
@@ -188,7 +200,8 @@ function recentAuthors(gitRoot: string, relFiles: string[]): Map<string, string>
 
 /**
  * Resolve owners for test files (absolute paths). Call once per run: the result is the cache.
- * CODEOWNERS is searched from the git root, then rootDir; without one, 'auto' falls back to git authors.
+ * CODEOWNERS is searched from the git root, then rootDir and its parents up to the project root;
+ * without one, 'auto' falls back to git authors.
  */
 export function resolveOwnership(
   files: string[],
@@ -200,7 +213,7 @@ export function resolveOwnership(
 
   const source = config.source ?? 'auto';
   const gitRoot = findGitRoot(rootDir);
-  const bases = [...new Set([gitRoot, realpath(rootDir)].filter((b): b is string => !!b))];
+  const bases = [...new Set([gitRoot, ...projectDirs(rootDir)].filter((b): b is string => !!b))];
   const explicit = config.codeownersPath && path.resolve(rootDir, config.codeownersPath);
   const codeowners = source === 'git' ? undefined : findCodeowners(bases, explicit);
   if (!(config.enabled ?? (codeowners !== undefined || source === 'git'))) return result;
