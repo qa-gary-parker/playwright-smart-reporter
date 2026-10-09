@@ -57,10 +57,10 @@ export function formatAnnotation(loc: FailureLocation, title: string, message: s
   return `::error ${props.join(',')}::${escapeData(message)}`;
 }
 
-export function buildAnnotations(data: JsonExportData, workspace: string): { lines: string[]; omitted: number } {
+export function buildAnnotations(data: JsonExportData, workspace: string, redact: (text: string) => string = (text) => text): { lines: string[]; omitted: number } {
   const failures = data.tests.filter(isFailure);
   const lines = failures.slice(0, MAX_ANNOTATIONS).map((t) => {
-    const message = (t.error && parseError(t.error).message) || `Test ${t.status}`;
+    const message = redact((t.error && parseError(t.error).message) || `Test ${t.status}`);
     return formatAnnotation(failureLocation(t, data.metadata.rootDir, workspace), testLabel(t), message);
   });
   return { lines, omitted: Math.max(0, failures.length - MAX_ANNOTATIONS) };

@@ -121,4 +121,12 @@ describe('renderSummary', () => {
 | \`totals \\| tax\` | \`e2e/tests/cart.spec.ts:27\` |
 `);
   });
+
+  it('headlines a run where nothing passed or failed by what happened, not as passed', () => {
+    const headline = (tests: JsonExportData['tests'], summary: JsonExportData['summary']) =>
+      renderSummary({ ...data, tests, summary, comparison: undefined, qualityGates: undefined }, { workspace: WORKSPACE }).split('\n')[2];
+    const skipped = data.tests.filter((t) => t.status === 'skipped');
+    expect(headline(skipped, { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: 0 })).toBe('**Skipped:** all 1 tests were skipped.');
+    expect(headline([], { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, duration: 0, passRate: 0 })).toBe('**No tests ran.**');
+  });
 });

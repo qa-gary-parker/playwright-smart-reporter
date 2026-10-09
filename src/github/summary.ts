@@ -36,7 +36,11 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
   out.push('## Playwright Smart Reporter', '');
   out.push(summary.failed > 0
     ? `**Failed:** ${summary.failed} of ${summary.total} tests failed.`
-    : `**Passed:** ${summary.passed} of ${summary.total} tests passed.`);
+    : summary.total === 0
+      ? '**No tests ran.**'
+      : summary.passed === 0
+        ? `**Skipped:** all ${summary.total} tests were skipped.`
+        : `**Passed:** ${summary.passed} of ${summary.total} tests passed.`);
   out.push('');
   out.push(...table(
     ['Pass rate', 'Passed', 'Failed', 'Flaky', 'Skipped', 'Duration'],

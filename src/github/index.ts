@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { createRedactor } from '../agent/redact';
 import type { JsonExportData } from '../generators/json-exporter';
 import { buildAnnotations, isFailure, MAX_ANNOTATIONS } from './annotations';
 import { renderSummary } from './summary';
@@ -49,6 +50,10 @@ export function runGithubCommand(opts: GithubCommandOptions, deps: GithubCommand
     log(`::error::Cannot read Smart Reporter data at ${opts.dataPath}: ${err instanceof Error ? err.message : err}. Run the tests with exportJson: true.`);
     return 1;
   }
+  if (!data || !Array.isArray(data.tests) || !data.summary) {
+    log(`::error::${opts.dataPath} is not a Smart Reporter JSON export (it has no tests and summary). Pass the file written by exportJson: true.`);
+    return 1;
+  }
 
   // The report opens on Insights; a failed run's link goes straight to the failures instead.
   const reportUrl = opts.reportUrl && !opts.reportUrl.includes('#') && data.tests.some(isFailure) ? `${opts.reportUrl}#/q/failures` : opts.reportUrl;
@@ -60,7 +65,8 @@ export function runGithubCommand(opts: GithubCommandOptions, deps: GithubCommand
     log(markdown);
   }
 
-  const annotations = buildAnnotations(data, env.GITHUB_WORKSPACE || deps.cwd);
+  // GitHub masks only registered secrets, so annotations get the same redaction as the failure bundle.
+  const annotations = buildAnnotations(data, env.GITHUB_WORKSPACE || deps.cwd, createRedactor(env).string);
   annotations.lines.forEach(log);
   if (annotations.omitted > 0) {
     log(`${annotations.omitted} more failure(s) not annotated: GitHub shows at most ${MAX_ANNOTATIONS} error annotations per step.`);

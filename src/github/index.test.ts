@@ -122,6 +122,22 @@ describe('runGithubCommand', () => {
     expect(linkFor('https://example.test/report.html#/insights', data.tests)).toBe('[Open the full report](https://example.test/report.html#/insights)');
   });
 
+  it('redacts secrets from the annotation messages', () => {
+    const secret = 'super-secret-env-value-123';
+    fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ ...data, tests: [{ ...data.tests[0], error: `Error: login failed with token ${secret}` }] }));
+    const out: string[] = [];
+    runGithubCommand({ dataPath: path.join(dir, 'data.json') }, { env: { API_TOKEN: secret }, cwd: WORKSPACE, gh: () => { throw new Error('gh must not run'); }, log: (l) => out.push(l) });
+    expect(out[1]).toBe('::error file=e2e/cart.spec.ts,line=8,col=11,title=checkout::Error: login failed with token [REDACTED]');
+  });
+
+  it('fails with an error annotation when the data file is not a JSON export', () => {
+    fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ format: 'playwright-smart-reporter/failures', failures: [] }));
+    const out: string[] = [];
+    const code = runGithubCommand({ dataPath: path.join(dir, 'data.json') }, { env: {}, cwd: WORKSPACE, gh: () => { throw new Error('gh must not run'); }, log: (l) => out.push(l) });
+    expect(code).toBe(1);
+    expect(out).toEqual([`::error::${path.join(dir, 'data.json')} is not a Smart Reporter JSON export (it has no tests and summary). Pass the file written by exportJson: true.`]);
+  });
+
   it('prints the summary to stdout outside GitHub Actions and links the run when no report URL is given', () => {
     const code = runGithubCommand(
       { dataPath: path.join(dir, 'data.json') },
