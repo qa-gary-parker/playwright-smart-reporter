@@ -69,7 +69,7 @@ describe('serve /run', () => {
   const post = (base: string, body: unknown, headers: Record<string, string> = {}) =>
     fetch(`${base}/run`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base.replace('127.0.0.1', 'localhost'), ...headers }, body: JSON.stringify(body) });
   const finished = async (base: string) => {
-    await expect.poll(async () => (await (await fetch(`${base}/run`)).json()).lastExitCode, { timeout: 10_000 }).not.toBeNull();
+    await expect.poll(async () => ((await (await fetch(`${base}/run`)).json()) as { lastExitCode: number | null }).lastExitCode, { timeout: 10_000 }).not.toBeNull();
   };
 
   it('passes filter values to the run command as plain arguments, so quotes and redirects cannot run anything', async () => {
