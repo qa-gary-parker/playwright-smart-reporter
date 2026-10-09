@@ -73,6 +73,13 @@ describe('buildComparison', () => {
     expect(changes.improvements.map((t) => t.testId)).toEqual(['faster']);
   });
 
+  it('uses the configured performance threshold instead of a fixed 20%', () => {
+    const current = [createMinimalTestResult({ testId: 'a', duration: 1300 })];
+    const baseline = new Map<string, TestResultData>([['a', createMinimalTestResult({ testId: 'a', duration: 1000 })]]);
+    expect(buildComparison(current, createRunSummary(), createRunSummary(), baseline, 0.5).changes.regressions).toEqual([]);
+    expect(buildComparison(current, createRunSummary(), createRunSummary(), baseline, 0.1).changes.regressions.map((t) => t.testId)).toEqual(['a']);
+  });
+
   it('identifies new tests', () => {
     const currentTests = [createMinimalTestResult({ testId: 'new-test' })];
     const currentSummary = createRunSummary();

@@ -6,7 +6,8 @@ export function buildComparison(
   currentTests: TestResultData[],
   currentSummary: RunSummary,
   baselineSummary: RunSummary,
-  baselineTests: Map<string, TestResultData>
+  baselineTests: Map<string, TestResultData>,
+  threshold = 0.2,
 ): RunComparison {
   const changes: ComparisonChanges = {
     newFailures: [],
@@ -43,12 +44,12 @@ export function buildComparison(
 
       const msChange = currentDuration - baselineDuration;
 
-      if (pctChange > 0.2 && msChange >= MIN_DURATION_CHANGE_MS) { // 20% slower
+      if (pctChange > threshold && msChange >= MIN_DURATION_CHANGE_MS) {
         changes.regressions.push({
           ...test,
           averageDuration: baselineDuration
         });
-      } else if (pctChange < -0.2 && -msChange >= MIN_DURATION_CHANGE_MS) { // 20% faster
+      } else if (pctChange < -threshold && -msChange >= MIN_DURATION_CHANGE_MS) {
         changes.improvements.push({
           ...test,
           averageDuration: baselineDuration

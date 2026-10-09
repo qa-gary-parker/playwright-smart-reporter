@@ -650,7 +650,8 @@ class SmartReporter implements Reporter {
           this.results,
           currentSummary,
           baselineRun,
-          baselineTests
+          baselineTests,
+          this.options.thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2,
         );
       }
     }
