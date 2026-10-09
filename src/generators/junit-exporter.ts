@@ -2,8 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { TestResultData, SmartReporterOptions } from '../types';
 
+// Anything outside the XML 1.0 Char range makes the whole file unparseable, even as a character reference.
+const INVALID_XML_CHARS = /[^\t\n\r -퟿-�\u{10000}-\u{10FFFF}]/gu;
+
 function escapeXml(str: string): string {
   return str
+    .replace(INVALID_XML_CHARS, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
