@@ -98,6 +98,24 @@ describe('network log options', () => {
   });
 });
 
+describe('analysis switches', () => {
+  it('skips retry analysis, failure clustering and stability scores when they are turned off', () => {
+    const analysed = (out: string, options: object) => {
+      runSuite(out, options, ['--grep', 'fails$|passes on retry']);
+      const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+      return {
+        clusters: data.clusters.length,
+        clustered: data.tests.filter((t) => t.clusterId).length,
+        scored: data.tests.filter((t) => t.stabilityScore).length,
+        retryInfo: data.tests.filter((t) => t.retryInfo).length,
+      };
+    };
+    expect(analysed(path.join(tmp, 'analysis-on'), {})).toEqual({ clusters: 1, clustered: 1, scored: 2, retryInfo: 2 });
+    expect(analysed(path.join(tmp, 'analysis-off'), { enableRetryAnalysis: false, enableFailureClustering: false, enableStabilityScore: false }))
+      .toEqual({ clusters: 0, clustered: 0, scored: 0, retryInfo: 0 });
+  });
+});
+
 describe('merge-reports', () => {
   it('reports the duration of the tests, not of the merge', () => {
     const blobs = path.join(tmp, 'blobs');

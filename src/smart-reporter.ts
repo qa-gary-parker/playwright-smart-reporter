@@ -481,8 +481,8 @@ class SmartReporter implements Reporter {
     // Run all analyzers (flakiness, performance, retries, stability)
     this.flakinessAnalyzer.analyze(testData, history);
     this.performanceAnalyzer.analyze(testData, history);
-    this.retryAnalyzer.analyze(testData, history);
-    this.stabilityScorer.scoreTest(testData);
+    if (this.options.enableRetryAnalysis !== false) this.retryAnalyzer.analyze(testData, history);
+    if (this.options.enableStabilityScore !== false) this.stabilityScorer.scoreTest(testData);
 
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
@@ -559,7 +559,7 @@ class SmartReporter implements Reporter {
     this.liveWriter.complete(Date.now() - this.startTime);
 
     // Get failure clusters
-    const failureClusters = this.failureClusterer.clusterFailures(this.results);
+    const failureClusters = this.options.enableFailureClustering === false ? [] : this.failureClusterer.clusterFailures(this.results);
 
     // Run AI analysis on failures and clusters if enabled
     const options = this.historyCollector.getOptions();
