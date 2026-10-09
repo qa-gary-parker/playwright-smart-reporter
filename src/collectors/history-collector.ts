@@ -267,6 +267,7 @@ export class HistoryCollector {
 
     // Save to disk
     const historyPath = path.resolve(this.outputDir, this.options.historyFile);
+    fs.mkdirSync(path.dirname(historyPath), { recursive: true });
     fs.writeFileSync(historyPath, JSON.stringify(this.history, null, 2));
   }
 

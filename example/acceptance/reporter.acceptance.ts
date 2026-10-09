@@ -53,6 +53,18 @@ describe('live results', () => {
   });
 });
 
+describe('history', () => {
+  it('saves history into a folder that does not exist yet, and a breached gate still fails the run', () => {
+    const out = path.join(tmp, 'history');
+    const historyFile = path.join(tmp, 'history-store', 'nested', 'history.json');
+    const run = runSuite(out, { historyFile, qualityGates: { minPassRate: 101 } }, ['--grep', 'passes$']);
+
+    expect(run.output).not.toContain('Error in reporter');
+    expect(run.status).toBe(1);
+    expect(Object.keys(JSON.parse(fs.readFileSync(historyFile, 'utf8')).tests)).toEqual(['suite.fixtures.ts::passes']);
+  });
+});
+
 describe('merge-reports', () => {
   it('reports the duration of the tests, not of the merge', () => {
     const blobs = path.join(tmp, 'blobs');

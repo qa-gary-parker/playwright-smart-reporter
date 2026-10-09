@@ -889,8 +889,12 @@ class SmartReporter implements Reporter {
       console.warn('⚠️  Flake forecast failed:', err);
     }
 
-    // Update history
-    this.historyCollector.updateHistory(this.results, forecastRisks);
+    // A failed history write must not skip notifications or quality gates below.
+    try {
+      this.historyCollector.updateHistory(this.results, forecastRisks);
+    } catch (err) {
+      console.error('⚠️  Could not save test history:', err instanceof Error ? err.message : err);
+    }
 
     // Send webhook notifications if enabled - use outcome-based counting
     const failed = this.results.filter(r =>
