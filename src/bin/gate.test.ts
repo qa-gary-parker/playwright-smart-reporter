@@ -119,3 +119,63 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
   });
 });
 
+describe('gate CLI (src/bin/gate.ts) flags', () => {
+  function runGate(args: string[]) {
+    const res = spawnSync(process.execPath, [bundle('gate'), ...args], { cwd: dir, encoding: 'utf-8' });
+    return { status: res.status, stdout: res.stdout, stderr: res.stderr.trim() };
+  }
+
+  it('evaluates pass rate, failures, flaky rate and grade given as flags', () => {
+    const { status, stdout } = runGate(['--input', 'scanned-data.json', '--min-pass-rate', '100', '--max-failures', '0', '--max-flaky-rate', '0']);
+    expect(status).toBe(0);
+    expect(stdout).toContain('✓ Min pass rate        100% ≥ 100%');
+    expect(stdout).toContain('✓ Max failures         0 ≤ 0');
+    expect(stdout).toContain('✓ Max flaky rate       0% ≤ 0%');
+  });
+
+  it('rejects a flag with a missing or invalid value with a message instead of a crash or a silent pass', () => {
+    expect(runGate(['--input'])).toMatchObject({ status: 1, stderr: 'Error: --input needs a value.' });
+    expect(runGate(['--input', 'scanned-data.json', '--min-pass-rate', 'abc'])).toMatchObject({ status: 1, stderr: 'Error: --min-pass-rate needs a number (got "abc").' });
+    expect(runGate(['--input', 'scanned-data.json', '--min-stability-grade', 'Z'])).toMatchObject({ status: 1, stderr: 'Error: --min-stability-grade must be A, B, C or D (got "Z").' });
+  });
+
+  it('shows usage examples that run this script, not the playwright-smart-reporter gate command', () => {
+    const { stdout } = runGate(['--help']);
+    expect(stdout).toContain('node node_modules/playwright-smart-reporter/dist/bin/gate.js --max-failures 5 --min-pass-rate 90');
+    expect(stdout).not.toContain('playwright-smart-reporter gate --max-failures');
+  });
+});
+
+describe('playwright-smart-reporter failures (src/bin/cli.ts)', () => {
+  function runIn(cwd: string, args: string[]) {
+    const res = spawnSync(process.execPath, [bundle('cli'), ...args], { cwd, encoding: 'utf-8' });
+    return { status: res.status, stdout: res.stdout, stderr: res.stderr.trim() };
+  }
+  const failing: TestResultData = {
+    testId: '[chromium] cart.spec.ts::checkout', title: 'checkout', file: 'cart.spec.ts', line: 3, status: 'failed', outcome: 'unexpected',
+    duration: 1200, retry: 0, steps: [], history: [], error: 'Error: expect(received).toBe(expected)\n\nExpected: 2\nReceived: 1',
+  };
+
+  it('finds smart-report-data.json in the working directory and prints each failure', () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-failures-'));
+    exportJsonData([failing], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, cwd, 'smart-report');
+    const { status, stdout } = runIn(cwd, ['failures']);
+    expect(status).toBe(0);
+    expect(stdout.split('\n').slice(0, 5)).toEqual([
+      '1 failure(s) of 1 test(s)',
+      '',
+      '[chromium] cart.spec.ts::checkout',
+      '  cart.spec.ts:3 · failed',
+      '  Error: expect(received).toBe(expected)',
+    ]);
+    expect(JSON.parse(runIn(cwd, ['failures', '--json']).stdout).failures.map((f: { id: string }) => f.id)).toEqual(['[chromium] cart.spec.ts::checkout']);
+  });
+
+  it('exits 1 with a hint when there is no data file', () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-failures-empty-'));
+    const { status, stderr } = runIn(empty, ['failures']);
+    expect(status).toBe(1);
+    expect(stderr).toBe('Error: Data file not found: smart-report-failures.json or smart-report-data.json\nRun your tests with exportFailures: true (or exportJson: true) to generate it.');
+  });
+});
+

@@ -38,9 +38,11 @@ Options:
   -h, --help                  Show this help message
 
 Examples:
-  playwright-smart-reporter gate --config gates.json
-  playwright-smart-reporter gate --max-failures 5 --min-pass-rate 90
-  playwright-smart-reporter gate --input ./report/smart-report-data.json --max-flaky-rate 5
+  node node_modules/playwright-smart-reporter/dist/bin/gate.js --config gates.json
+  node node_modules/playwright-smart-reporter/dist/bin/gate.js --max-failures 5 --min-pass-rate 90
+  node node_modules/playwright-smart-reporter/dist/bin/gate.js --input ./report/smart-report-data.json --max-flaky-rate 5
+
+(npx playwright-smart-reporter gate takes the rules from a --config file only.)
 `);
 }
 
@@ -61,36 +63,50 @@ function parseArgs(argv: string[]): GateOptions {
     inputPath: path.resolve(process.cwd(), 'smart-report-data.json'),
   };
 
+  const fail = (message: string): never => {
+    console.error(`Error: ${message}`);
+    process.exit(1);
+  };
+  const value = (flag: string, i: number): string => args[i] ?? fail(`${flag} needs a value.`);
+  const number = (flag: string, i: number): number => {
+    const raw = value(flag, i);
+    const n = Number(raw);
+    return raw.trim() !== '' && Number.isFinite(n) ? n : fail(`${flag} needs a number (got "${raw}").`);
+  };
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
     switch (arg) {
       case '--input':
-        options.inputPath = path.resolve(process.cwd(), args[++i]);
+        options.inputPath = path.resolve(process.cwd(), value(arg, ++i));
         break;
       case '--config':
-        options.configPath = path.resolve(process.cwd(), args[++i]);
+        options.configPath = path.resolve(process.cwd(), value(arg, ++i));
         break;
       case '--max-failures':
-        options.maxFailures = parseInt(args[++i], 10);
+        options.maxFailures = number(arg, ++i);
         break;
       case '--min-pass-rate':
-        options.minPassRate = parseFloat(args[++i]);
+        options.minPassRate = number(arg, ++i);
         break;
       case '--max-flaky-rate':
-        options.maxFlakyRate = parseFloat(args[++i]);
+        options.maxFlakyRate = number(arg, ++i);
         break;
-      case '--min-stability-grade':
-        options.minStabilityGrade = args[++i] as 'A' | 'B' | 'C' | 'D';
+      case '--min-stability-grade': {
+        const grade = value(arg, ++i);
+        if (!['A', 'B', 'C', 'D'].includes(grade)) fail(`${arg} must be A, B, C or D (got "${grade}").`);
+        options.minStabilityGrade = grade as 'A' | 'B' | 'C' | 'D';
         break;
+      }
       case '--no-new-failures':
         options.noNewFailures = true;
         break;
       case '--max-a11y-violations':
-        options.maxA11yViolations = parseInt(args[++i], 10);
+        options.maxA11yViolations = number(arg, ++i);
         break;
       case '--min-coverage':
-        options.minCoverage = parseFloat(args[++i]);
+        options.minCoverage = number(arg, ++i);
         break;
     }
   }
