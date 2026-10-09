@@ -27,6 +27,10 @@ if (screen === 'green') {
 // ?off=gallery,trends turns those features off, as the reporter options would.
 for (const feature of params.get('off')?.split(',') ?? []) (data.config.features as unknown as Record<string, boolean>)[feature] = false;
 
+// ?exports=junit,pdf turns those export files on; ?base= sets the report file name.
+for (const kind of params.get('exports')?.split(',') ?? []) (data.config.exports as unknown as Record<string, boolean>)[kind] = true;
+if (params.get('base')) data.meta.outputBasename = params.get('base')!;
+
 // ?scale=N clones the fixture up to N tests to exercise virtualization.
 const scale = Number(params.get('scale') ?? 0);
 if (scale > data.tests.length) {

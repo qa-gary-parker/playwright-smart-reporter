@@ -248,3 +248,16 @@ test('views and tabs for features that are off cannot be opened by URL or shortc
   await page.keyboard.press('?');
   await expect(page.getByRole('dialog').getByText(/^Failures, All tests, Insights, History/)).toHaveText('Failures, All tests, Insights, History');
 });
+
+test('export menu links reach the files next to the report, whatever the report is called', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light&exports=junit,pdf,pdfFull&base=' + encodeURIComponent('smart #1 report')));
+  await page.getByRole('button', { name: 'Export' }).click();
+  const menu = page.getByRole('menu', { name: 'Export' });
+  // exportPdfFull writes one PDF, so the executive variants are not offered.
+  await expect(menu.getByRole('menuitem').filter({ hasText: /PDF/ })).toHaveText(['PDF report']);
+  await page.evaluate(() => {
+    window.open = (u?: string | URL) => ((window as unknown as { opened: string }).opened = new URL(String(u), location.href).href, null);
+  });
+  await menu.getByRole('menuitem', { name: 'JUnit XML' }).click();
+  expect(await page.evaluate(() => (window as unknown as { opened: string }).opened)).toMatch(/\/smart%20%231%20report-junit\.xml$/);
+});

@@ -139,6 +139,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
         json: !!options.exportJson,
         junit: !!options.exportJunit,
         pdf: !!options.exportPdf,
+        pdfFull: !!options.exportPdfFull,
         ctrf: !!options.exportCtrf,
         failures: !!options.exportFailures,
       },

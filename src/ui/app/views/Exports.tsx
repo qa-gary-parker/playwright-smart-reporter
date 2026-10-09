@@ -88,7 +88,7 @@ export function SummaryDialog() {
 
 export function ExportMenu() {
   const d = data.value;
-  const base = d.meta.outputBasename;
+  const base = encodeURIComponent(d.meta.outputBasename);
   const items = [
     { id: 'summary', label: 'Summary card', icon: 'clipboard', kbd: 'e' },
     { id: 'json', label: 'Results as JSON', icon: 'braces' },
@@ -96,8 +96,13 @@ export function ExportMenu() {
     ...(d.config.exports.pdf
       ? [
           { id: 'pdf:', label: 'PDF report', icon: 'file-text', group: 'Files' },
-          { id: 'pdf:-dark', label: 'PDF report, dark', icon: 'file-text', group: 'Files' },
-          { id: 'pdf:-minimal', label: 'PDF report, minimal', icon: 'file-text', group: 'Files' },
+          // exportPdfFull writes one PDF of the whole report instead of the three executive variants.
+          ...(d.config.exports.pdfFull
+            ? []
+            : [
+                { id: 'pdf:-dark', label: 'PDF report, dark', icon: 'file-text', group: 'Files' },
+                { id: 'pdf:-minimal', label: 'PDF report, minimal', icon: 'file-text', group: 'Files' },
+              ]),
         ]
       : []),
     ...(d.config.exports.json ? [{ id: 'file:-data.json', label: 'Full data (JSON)', icon: 'braces', group: 'Files' }] : []),
