@@ -1,6 +1,15 @@
 import type { TestResultData, StabilityScore, SuiteStats, ThresholdConfig } from '../types';
 import { isFlakyScore } from '../utils';
 
+const GRADES = ['F', 'D', 'C', 'B', 'A'] as const;
+
+/** The run's grade: its tests' grades averaged as F=1 to A=5, rounded. */
+export function runStabilityGrade(results: TestResultData[]): StabilityScore['grade'] | undefined {
+  const scores = results.flatMap(r => r.stabilityScore ? [GRADES.indexOf(r.stabilityScore.grade) + 1] : []);
+  if (scores.length === 0) return undefined;
+  return GRADES[Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length) - 1];
+}
+
 /**
  * Calculates comprehensive stability scores for tests and test suites
  */

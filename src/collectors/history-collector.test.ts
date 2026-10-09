@@ -298,6 +298,17 @@ describe('HistoryCollector', () => {
       expect(summary.slow).toBe(1);
     });
 
+    it('records the run stability grade (the rounded average of test grades) in the summary', () => {
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+      const graded = (grade: 'A' | 'B' | 'C' | 'D' | 'F') =>
+        createTestResult({ stabilityScore: { overall: 0, flakiness: 0, performance: 0, reliability: 0, grade, needsAttention: false } });
+
+      collector.updateHistory([graded('A'), graded('A'), graded('C'), graded('D'), createTestResult()]);
+
+      expect(collector.getHistory().summaries![0].stabilityGrade).toBe('B');
+    });
+
     it('writes history to disk', () => {
       const collector = new HistoryCollector({}, outputDir);
       collector.loadHistory();

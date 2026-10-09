@@ -4,6 +4,7 @@ import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMeta
 import { renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
 import { stepDurationsOf } from '../analyzers/causal-timeline';
+import { runStabilityGrade } from '../analyzers/stability-scorer';
 
 /**
  * Manages test history persistence and retrieval
@@ -179,6 +180,7 @@ export class HistoryCollector {
       slow,
       duration,
       passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
+      stabilityGrade: runStabilityGrade(results),
     };
 
     this.history.summaries!.push(summary);

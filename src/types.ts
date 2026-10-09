@@ -225,6 +225,7 @@ export interface RunSummary {
   duration: number;
   passRate: number;
   ciInfo?: CIInfo;  // NEW: CI metadata
+  stabilityGrade?: StabilityScore['grade'];
 }
 
 export interface RunMetadata {

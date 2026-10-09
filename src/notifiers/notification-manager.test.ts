@@ -205,7 +205,7 @@ describe('NotificationManager', () => {
       ];
 
       const comparison: RunComparison = {
-        baselineRun: createRunSummary({ passRate: 90 }),
+        baselineRun: createRunSummary({ passRate: 90, stabilityGrade: 'A' }),
         currentRun: createRunSummary({ passRate: 60 }),
         changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
       };
@@ -232,7 +232,7 @@ describe('NotificationManager', () => {
       ];
 
       const comparison: RunComparison = {
-        baselineRun: createRunSummary({ passRate: 60 }),
+        baselineRun: createRunSummary({ passRate: 60, stabilityGrade: 'D' }),
         currentRun: createRunSummary({ passRate: 95 }),
         changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
       };
@@ -240,6 +240,37 @@ describe('NotificationManager', () => {
       await manager.notify(results, Date.now(), comparison);
 
       expect(SlackNotifier).not.toHaveBeenCalled();
+    });
+
+    it('fires only when the run grade is below the baseline run grade', async () => {
+      const { SlackNotifier } = await import('./slack-notifier');
+      const sent: string[] = [];
+      vi.mocked(SlackNotifier).mockImplementation(() => ({
+        sendMessage: vi.fn(async (message: string) => { sent.push(message); }),
+      } as any));
+      const manager = new NotificationManager([{
+        channel: 'slack',
+        config: { webhookUrl: 'https://hooks.slack.com/test' },
+        conditions: { stabilityGradeDrop: true },
+        template: 'grade {{grade}}',
+      }]);
+      const graded = (...grades: Array<'A' | 'B' | 'C' | 'D' | 'F'>) => grades.map((grade, i) => createTestResult({
+        testId: `t${i}`,
+        stabilityScore: { overall: 0, flakiness: 0, performance: 0, reliability: 0, grade, needsAttention: false },
+      }));
+      const against = (stabilityGrade?: 'A' | 'B' | 'C' | 'D' | 'F'): RunComparison => ({
+        baselineRun: createRunSummary({ passRate: 100, stabilityGrade }),
+        currentRun: createRunSummary({ passRate: 100 }),
+        changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
+      });
+
+      await manager.notify(graded('A', 'A', 'C', 'A', 'A'), Date.now(), against('A'));
+      await manager.notify(graded('B', 'B'), Date.now(), against('B'));
+      await manager.notify(graded('A', 'B', 'C'), Date.now(), against('C'));
+      await manager.notify(graded('C', 'C'), Date.now(), against());
+      await manager.notify(graded('C', 'C'), Date.now(), against('A'));
+
+      expect(sent).toEqual(['grade C']);
     });
 
     it('does not notify when stabilityGradeDrop is true but no comparison data', async () => {

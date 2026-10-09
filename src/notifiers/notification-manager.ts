@@ -4,6 +4,7 @@ import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
 import { EmailNotifier } from './email-notifier';
 import { CustomWebhookNotifier } from './custom-webhook-notifier';
+import { runStabilityGrade } from '../analyzers/stability-scorer';
 
 interface NotificationContext {
   total: number;
@@ -25,14 +26,7 @@ function buildContext(results: TestResultData[], startTime: number): Notificatio
   const duration = Date.now() - startTime;
   const passRate = results.length > 0 ? Math.round((passed / results.length) * 100) : 0;
 
-  const gradedTests = results.filter(r => r.stabilityScore?.grade);
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
-  let grade = 'N/A';
-  if (gradedTests.length > 0) {
-    const sum = gradedTests.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-    grade = reverseGradeMap[Math.round(sum / gradedTests.length)] || 'C';
-  }
+  const grade = runStabilityGrade(results) ?? 'N/A';
 
   const failedTests = results
     .filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))
@@ -41,28 +35,6 @@ function buildContext(results: TestResultData[], startTime: number): Notificatio
     .join(', ');
 
   return { total: results.length, passed, failed, skipped, flaky, passRate, duration, grade, failedTests };
-}
-
-function computeAverageGrade(results: TestResultData[]): number {
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const gradedTests = results.filter(r => r.stabilityScore?.grade);
-  if (gradedTests.length === 0) return 0;
-  const sum = gradedTests.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-  return sum / gradedTests.length;
-}
-
-/**
- * Derive a numeric stability grade from a pass rate percentage.
- * Used as a baseline grade proxy when RunComparison only carries RunSummary
- * (which has passRate but no stabilityGrade field).
- * Mapping: >=90% -> A(5), >=80% -> B(4), >=70% -> C(3), >=60% -> D(2), <60% -> F(1)
- */
-function gradeFromPassRate(passRate: number): number {
-  if (passRate >= 90) return 5; // A
-  if (passRate >= 80) return 4; // B
-  if (passRate >= 70) return 3; // C
-  if (passRate >= 60) return 2; // D
-  return 1; // F
 }
 
 function evaluateConditions(conditions: NotificationCondition, ctx: NotificationContext, results: TestResultData[], comparison?: RunComparison): boolean {
@@ -78,12 +50,10 @@ function evaluateConditions(conditions: NotificationCondition, ctx: Notification
     if (!hasTagFailure) return false;
   }
   if (conditions.stabilityGradeDrop) {
-    if (!comparison) return false;
-    const currentGrade = computeAverageGrade(results);
-    if (currentGrade === 0) return false;
-    // Baseline grade derived from pass rate since RunSummary lacks a stabilityGrade field
-    const baselineGrade = gradeFromPassRate(comparison.baselineRun.passRate);
-    if (currentGrade >= baselineGrade) return false;
+    const baselineGrade = comparison?.baselineRun.stabilityGrade;
+    if (!baselineGrade || ctx.grade === 'N/A') return false;
+    // A lower grade is a later letter: A < B < C < D < F.
+    if (ctx.grade <= baselineGrade) return false;
   }
   return true;
 }
