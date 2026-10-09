@@ -316,5 +316,26 @@ describe('StabilityScorer', () => {
       expect(test.stabilityScore?.overall).toBe(93);
       expect(test.stabilityScore?.needsAttention).toBe(true);
     });
+
+    it('uses configured component weights and grade bounds', () => {
+      const scorer = new StabilityScorer(70, {
+        stabilityWeightFlakiness: 1,
+        stabilityWeightPerformance: 0,
+        stabilityWeightReliability: 0,
+        gradeA: 95,
+        gradeB: 85,
+        gradeC: 75,
+        gradeD: 50,
+      });
+
+      // Reliability is 40 for a failed test, but weighted 0: overall equals the flakiness component
+      const scored = [0, 0.1, 0.2, 0.3, 0.45, 0.6].map(flakinessScore => {
+        const test = createTestResult({ status: 'failed', flakinessScore });
+        scorer.scoreTest(test);
+        return [test.stabilityScore?.overall, test.stabilityScore?.grade];
+      });
+
+      expect(scored).toEqual([[100, 'A'], [90, 'B'], [80, 'C'], [70, 'D'], [55, 'D'], [40, 'F']]);
+    });
   });
 });
