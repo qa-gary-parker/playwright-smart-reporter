@@ -6,6 +6,7 @@ import { exportJsonData } from '../generators/json-exporter';
 import type { ReportData } from '../report-data/schema';
 import type { TestResultData } from '../types';
 import {
+  isFailure as isFailing,
   assertFailureBundle,
   buildFailureBundle,
   formatFailureText,
@@ -139,6 +140,22 @@ describe('buildFailureBundle', () => {
       },
       failures: [LOGIN_FAILURE, EXPORT_FAILURE],
     });
+  });
+
+  it('keeps test ids, files and source paths exact, so a failure can be fetched by its id', () => {
+    const data = loadFixture();
+    const base = data.tests.find((t) => isFailing(t))!;
+    data.tests = ['login', 'logout'].map((title) => ({
+      ...base,
+      testId: `[chromium] tests/password-reset.spec.ts::${title}`,
+      title,
+      file: 'tests/password-reset.spec.ts',
+    }));
+    const bundle = buildFailureBundle(data, { rootDir: '/repo', env: { API_TOKEN: 'super-secret-env-value-123' } });
+    expect(bundle.failures.map((f) => [f.id, f.file, f.source.relative])).toEqual([
+      ['[chromium] tests/password-reset.spec.ts::login', 'tests/password-reset.spec.ts', 'tests/password-reset.spec.ts'],
+      ['[chromium] tests/password-reset.spec.ts::logout', 'tests/password-reset.spec.ts', 'tests/password-reset.spec.ts'],
+    ]);
   });
 
   it('redacts secrets seeded into every text field the bundle copies', () => {

@@ -6,12 +6,13 @@ const SENSITIVE_NAME =
 
 // Env var names whose values must never leave the machine.
 const SENSITIVE_ENV_NAME =
-  /token|secret|passw(?:or)?d|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|auth|session|cookie|webhook|dsn|signature/i;
+  /token|secret|passw(?:or)?d|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|auth|session|cookie|webhook|dsn|signature|(?:^|_)(?:pass|pwd|key|pat)$/i;
 
 const MIN_ENV_VALUE_LENGTH = 8;
 
+// A key ending in a source-file extension is a path such as secrets.spec.ts:14:61, not a credential.
 const KV_KEY =
-  '[\\w.-]*(?:passw(?:or)?d|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|session[-_]?id|signature)[\\w.-]*';
+  '[\\w.-]*(?:passw(?:or)?d|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|session[-_]?id|signature)[\\w.-]*(?<!\\.(?:[cm]?[jt]sx?|json|ya?ml|feature|html?|txt|log))';
 
 const NOT_REDACTED = '(?!\\[REDACTED\\])';
 
@@ -26,7 +27,9 @@ const RULES: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, REDACTED],
   [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, REDACTED],
   [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, REDACTED],
-  [/([?&](?:key|sig|code|jwt)=)[^&#\s]+/gi, `$1${REDACTED}`],
+  [/\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}/g, REDACTED],
+  [/\bglpat-[A-Za-z0-9_-]{20,}/g, REDACTED],
+  [/([?&](?:key|sig|code|jwt|token|access_token|auth|sid)=)[^&#\s]+/gi, `$1${REDACTED}`],
   [
     new RegExp(`(${KV_KEY}["']?\\s*[:=]\\s*)${NOT_REDACTED}(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|[^\\s&;,"'<>)}\\]]+)`, 'gi'),
     (match: string, prefix: string) => {

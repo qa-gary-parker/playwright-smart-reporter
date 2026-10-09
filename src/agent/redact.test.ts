@@ -116,4 +116,26 @@ describe('createRedactor', () => {
   it('ignores env values that are too short to be secrets', () => {
     expect(createRedactor({ AUTH_ENABLED: 'true' }).string('flag true')).toBe('flag true');
   });
+
+  it('leaves file paths, line numbers and test ids alone when a file name contains a secret word', () => {
+    const r = createRedactor({});
+    const kept = [
+      'at /repo/tests/secrets.spec.ts:14:61',
+      '[chromium] tests/password-reset.spec.ts::logout',
+      'tests/api-token.test.ts:8',
+      'Error at session-id.helper.js:3:10',
+    ];
+    for (const text of kept) expect(r.string(text)).toBe(text);
+    expect(r.string(`db.password=${S.dbPassword} and session_id: ${S.accessToken}`)).toBe('db.password=[REDACTED] and session_id: [REDACTED]');
+  });
+
+  it('masks env values named *_PASS, *_PWD, *_KEY and *_PAT, Stripe and GitLab tokens, and auth query values', () => {
+    const env = { DB_PASS: 'pass-value-1234', SMTP_PWD: 'pwd-value-1234', STRIPE_KEY: 'key-value-1234', GITLAB_PAT: 'pat-value-1234' };
+    const r = createRedactor(env);
+    const stripe = t('sk_', 'live_', 'C'.repeat(24));
+    const gitlab = t('glpat', '-', 'D'.repeat(20));
+    expect(r.string(`${env.DB_PASS} ${env.SMTP_PWD} ${env.STRIPE_KEY} ${env.GITLAB_PAT}`)).toBe('[REDACTED] [REDACTED] [REDACTED] [REDACTED]');
+    expect(r.string(`stripe ${stripe} gitlab ${gitlab}`)).toBe('stripe [REDACTED] gitlab [REDACTED]');
+    expect(r.string('GET /api?auth=abc123&sid=s1&token=t1&page=2')).toBe('GET /api?auth=[REDACTED]&sid=[REDACTED]&token=[REDACTED]&page=2');
+  });
 });

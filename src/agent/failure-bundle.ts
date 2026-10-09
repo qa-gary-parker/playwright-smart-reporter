@@ -278,8 +278,9 @@ export function buildFailureBundle(source: FailureBundleSource, opts: FailureBun
   const redact = createRedactor(opts.env);
   const failures = source.tests.filter(isFailure).map((t) => toFailure(t, opts.rootDir));
   const { meta } = source;
-  // One redaction pass over the finished bundle, so no field can be missed.
-  return redact.deep({
+  // One redaction pass over the finished bundle, so no field can be missed. Ids and paths stay exact:
+  // they are how a failure is looked up, and they come from the code, not from the run.
+  const bundle = redact.deep({
     format: FAILURE_BUNDLE_FORMAT,
     schemaVersion: FAILURE_BUNDLE_SCHEMA_VERSION,
     run: {
@@ -293,6 +294,8 @@ export function buildFailureBundle(source: FailureBundleSource, opts: FailureBun
     },
     failures,
   });
+  bundle.failures = bundle.failures.map((f, i) => ({ ...f, id: failures[i].id, file: failures[i].file, source: failures[i].source }));
+  return bundle;
 }
 
 export function assertFailureBundle(value: unknown): FailureBundle {
