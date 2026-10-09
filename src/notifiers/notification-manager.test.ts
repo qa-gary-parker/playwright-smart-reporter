@@ -325,6 +325,35 @@ describe('NotificationManager', () => {
     });
   });
 
+  describe('pagerduty', () => {
+    it('triggers an incident only for a run with failures', async () => {
+      const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response('ok'));
+      vi.stubGlobal('fetch', fetchMock);
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const { PagerDutyNotifier } = await import('./pagerduty-notifier');
+      const actual = await vi.importActual<typeof import('./pagerduty-notifier')>('./pagerduty-notifier');
+      vi.mocked(PagerDutyNotifier).mockImplementation((key: string) => new actual.PagerDutyNotifier(key));
+      const manager = new NotificationManager([{ channel: 'pagerduty', config: { routingKey: 'rk' } }]);
+
+      await manager.notify([createTestResult(), createTestResult({ testId: '2' })], Date.now());
+      await manager.notify([createTestResult(), createTestResult({ testId: '2', status: 'failed', outcome: 'unexpected' })], Date.now());
+
+      expect(fetchMock.mock.calls.map(([url, init]) => [url, JSON.parse(init.body as string)])).toEqual([
+        ['https://events.pagerduty.com/v2/enqueue', {
+          routing_key: 'rk',
+          event_action: 'trigger',
+          payload: {
+            summary: 'Test Failures: Test Run: 1/2 passed (50%) — 1 failures',
+            severity: 'error',
+            source: 'playwright-smart-reporter',
+            component: 'test-suite',
+            custom_details: { failures: 1, total: 2, passRate: 50 },
+          },
+        }],
+      ]);
+    });
+  });
+
   describe('channel dispatch', () => {
     it('dispatches to slack', async () => {
       const { SlackNotifier } = await import('./slack-notifier');

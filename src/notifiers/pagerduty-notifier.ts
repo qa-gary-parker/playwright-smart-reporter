@@ -6,7 +6,7 @@ export class PagerDutyNotifier {
   }
 
   async trigger(summary: string, failures: number, total: number): Promise<void> {
-    if (!this.routingKey) return;
+    if (!this.routingKey || failures === 0) return;
 
     const severity = failures > total * 0.5 ? 'critical' : failures > total * 0.2 ? 'error' : 'warning';
 
