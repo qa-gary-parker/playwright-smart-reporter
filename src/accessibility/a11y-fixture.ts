@@ -86,9 +86,15 @@ export const test = base.extend<{ smartReporterA11y: AccessibilityConfig | undef
   page: async ({ page, smartReporterA11y: config }, use, testInfo) => {
     await use(page);
 
-    if (!config?.enabled) return;
+    if (!config?.enabled || page.isClosed()) return;
 
-    const result = await runAxeAnalysis(page, config);
+    let result: A11yResult;
+    try {
+      result = await runAxeAnalysis(page, config);
+    } catch (err) {
+      console.warn(`[smart-reporter] Accessibility scan skipped for "${testInfo.title}": ${err instanceof Error ? err.message : err}`);
+      return;
+    }
 
     await testInfo.attach(A11Y_ATTACHMENT_NAME, {
       body: JSON.stringify(result),
