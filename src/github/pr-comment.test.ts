@@ -55,20 +55,25 @@ describe('upsertStickyComment', () => {
     return { gh, calls };
   }
 
-  const LIST = ['api', '--paginate', 'repos/acme/shop/issues/42/comments', '--jq', '.[] | {id, body}'];
+  const LIST = ['api', '--paginate', 'repos/acme/shop/issues/42/comments', '--jq', '.[] | {id, body, user: .user.login}'];
+  const USER = ['api', 'user', '--jq', '.login'];
+  // GITHUB_TOKEN cannot read /user, so the comment author is the Actions bot.
+  const noUser: GhResult = { status: 1, stdout: '', stderr: 'gh: Resource not accessible by integration (HTTP 403)\n' };
 
   it('updates the comment that carries the marker instead of posting a second one', () => {
     const { gh, calls } = recordingGh([
       ok([
-        JSON.stringify({ id: 11, body: 'LGTM' }),
-        JSON.stringify({ id: 12, body: `${COMMENT_MARKER}\n## Playwright Smart Reporter\nold` }),
+        JSON.stringify({ id: 11, body: 'LGTM', user: 'octocat' }),
+        JSON.stringify({ id: 12, body: `${COMMENT_MARKER}\n## Playwright Smart Reporter\nold`, user: 'github-actions[bot]' }),
       ].join('\n')),
+      noUser,
       ok(),
     ]);
 
     expect(upsertStickyComment(target, '## Playwright Smart Reporter\nnew\n', gh)).toEqual({ outcome: 'updated' });
     expect(calls).toEqual([
       { args: LIST, body: undefined },
+      { args: USER, body: undefined },
       {
         args: ['api', '--method', 'PATCH', 'repos/acme/shop/issues/comments/12', '--input', '-'],
         body: { body: '<!-- playwright-smart-reporter -->\n## Playwright Smart Reporter\nnew\n' },
@@ -76,8 +81,33 @@ describe('upsertStickyComment', () => {
     ]);
   });
 
+  it('never edits a comment someone else wrote, even one that starts with the marker', () => {
+    const { gh, calls } = recordingGh([
+      ok([
+        JSON.stringify({ id: 11, body: `> ${COMMENT_MARKER}\n> quoted report`, user: 'github-actions[bot]' }),
+        JSON.stringify({ id: 12, body: `${COMMENT_MARKER}\nfake report`, user: 'octocat' }),
+      ].join('\n')),
+      noUser,
+      ok(),
+    ]);
+
+    expect(upsertStickyComment(target, 'report', gh)).toEqual({ outcome: 'created' });
+    expect(calls.map((c) => c.args.slice(0, 3))).toEqual([LIST.slice(0, 3), USER.slice(0, 3), ['api', '--method', 'POST']]);
+  });
+
+  it('matches its own comment by the token user when the token can read it, such as a personal access token', () => {
+    const { gh, calls } = recordingGh([
+      ok(JSON.stringify({ id: 12, body: `${COMMENT_MARKER}\nold`, user: 'ci-user' })),
+      ok('ci-user\n'),
+      ok(),
+    ]);
+
+    expect(upsertStickyComment(target, 'report', gh)).toEqual({ outcome: 'updated' });
+    expect(calls[2].args.slice(0, 4)).toEqual(['api', '--method', 'PATCH', 'repos/acme/shop/issues/comments/12']);
+  });
+
   it('creates the comment when no existing comment has the marker', () => {
-    const { gh, calls } = recordingGh([ok(`${JSON.stringify({ id: 11, body: 'LGTM' })}\n`), ok()]);
+    const { gh, calls } = recordingGh([ok(`${JSON.stringify({ id: 11, body: 'LGTM', user: 'octocat' })}\n`), ok()]);
 
     expect(upsertStickyComment(target, 'report', gh)).toEqual({ outcome: 'created' });
     expect(calls).toEqual([

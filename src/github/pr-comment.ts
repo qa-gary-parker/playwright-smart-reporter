@@ -58,14 +58,21 @@ function failure(r: GhResult): UpsertResult {
 
 /** Updates the comment carrying COMMENT_MARKER, or creates it, so each pull request has one report comment. */
 export function upsertStickyComment(target: { repo: string; number: number }, body: string, gh: GhRunner): UpsertResult {
-  const list = gh(['api', '--paginate', `repos/${target.repo}/issues/${target.number}/comments`, '--jq', '.[] | {id, body}']);
+  const list = gh(['api', '--paginate', `repos/${target.repo}/issues/${target.number}/comments`, '--jq', '.[] | {id, body, user: .user.login}']);
   if (list.status !== 0) return failure(list);
 
-  const existing = list.stdout
+  const marked = list.stdout
     .split('\n')
     .filter((line) => line.trim())
-    .map((line) => JSON.parse(line) as { id: number; body?: string })
-    .find((c) => c.body?.includes(COMMENT_MARKER));
+    .map((line) => JSON.parse(line) as { id: number; body?: string; user?: string })
+    .filter((c) => c.body?.startsWith(COMMENT_MARKER));
+  // Only our own comment: the token's user, or the Actions bot for a GITHUB_TOKEN, which cannot read /user.
+  let existing: { id: number } | undefined;
+  if (marked.length > 0) {
+    const me = gh(['api', 'user', '--jq', '.login']);
+    const login = me.status === 0 && me.stdout.trim() ? me.stdout.trim() : 'github-actions[bot]';
+    existing = marked.find((c) => c.user === login);
+  }
 
   const payload = JSON.stringify({ body: `${COMMENT_MARKER}\n${body}` });
   const write = existing

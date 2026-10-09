@@ -36,6 +36,7 @@ runs:
         SMART_REPORTER_DATA: ${{ inputs.data }}
         SMART_REPORTER_URL: ${{ inputs.report-url }}
         SMART_REPORTER_LOCAL_CLI: ${{ github.action_path }}/dist/bin/cli.js
+        SMART_REPORTER_ACTION_REF: ${{ github.action_ref }}
       run: |
         args=(github --data "$SMART_REPORTER_DATA")
         if [ -n "$SMART_REPORTER_URL" ]; then args+=(--report-url "$SMART_REPORTER_URL"); fi
@@ -43,5 +44,8 @@ runs:
         if [ -f "$SMART_REPORTER_LOCAL_CLI" ]; then
           node "$SMART_REPORTER_LOCAL_CLI" "${args[@]}"
         else
-          npx --yes playwright-smart-reporter "${args[@]}"
+          # Run the package version that matches the action tag (v3.0.0 -> 3.0.0, v3 -> 3), never whatever is latest.
+          version=3
+          if [[ "$SMART_REPORTER_ACTION_REF" =~ ^v([0-9]+(\.[0-9]+){0,2})$ ]]; then version="${BASH_REMATCH[1]}"; fi
+          npx --yes "playwright-smart-reporter@$version" "${args[@]}"
         fi
