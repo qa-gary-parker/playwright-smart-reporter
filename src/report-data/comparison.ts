@@ -1,5 +1,6 @@
 import type { ComparisonChanges, RunComparison, RunSummary, TestResultData } from '../types';
 import { MIN_DURATION_CHANGE_MS } from '../analyzers/performance-analyzer';
+import { isFailedTest, isPassedTest } from '../utils/flakiness';
 
 export function buildComparison(
   currentTests: TestResultData[],
@@ -24,13 +25,13 @@ export function buildComparison(
       continue;
     }
 
-    // Check for new failures (including timedOut)
-    if ((test.status === 'failed' || test.status === 'timedOut') && baselineTest.status === 'passed') {
+    // Outcome, not status: a test.fail() test that failed as expected passed, and one that passed failed
+    if (isFailedTest(test) && baselineTest.status === 'passed') {
       changes.newFailures.push(test);
     }
 
     // Check for fixed tests (including previously timedOut)
-    if (test.status === 'passed' && (baselineTest.status === 'failed' || baselineTest.status === 'timedOut')) {
+    if (isPassedTest(test) && (baselineTest.status === 'failed' || baselineTest.status === 'timedOut')) {
       changes.fixedTests.push(test);
     }
 

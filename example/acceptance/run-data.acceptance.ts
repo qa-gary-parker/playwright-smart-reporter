@@ -105,4 +105,23 @@ describe('test.fail()', () => {
     runSuite(out, options, ['--grep', 'expected failure that passes']);
     expect(counts(reportData(out).comparison!.currentRun)).toEqual(playwright(out));
   }, TIMEOUT);
+
+  it('does not report a test.fail() test that fails as expected as a new failure, so noNewFailures passes', () => {
+    const out = path.join(tmp, 'expected-failure');
+    const options = { qualityGates: { noNewFailures: true } };
+    runSuite(out, options, ['--grep', 'expected failure that fails']);
+    const second = runSuite(out, options, ['--grep', 'expected failure that fails']);
+
+    expect(reportData(out).comparison?.changes.newFailures).toEqual([]);
+    expect(playwright(out)).toEqual({ total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0 });
+    expect(second.status).toBe(0);
+  }, TIMEOUT);
+
+  it('does not report a test.fail() test that passes again as fixed', () => {
+    const out = path.join(tmp, 'unexpected-pass-twice');
+    runSuite(out, {}, ['--grep', 'expected failure that passes']);
+    runSuite(out, {}, ['--grep', 'expected failure that passes']);
+
+    expect(reportData(out).comparison?.changes).toMatchObject({ newFailures: [], fixedTests: [] });
+  }, TIMEOUT);
 });
