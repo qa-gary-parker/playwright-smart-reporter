@@ -47,6 +47,19 @@ describe('accessibility fixture', () => {
     expect(reportData(out).tests.map((t) => [t.title, t.status, t.a11y])).toEqual([['closes its page', 'passed', undefined]]);
   });
 
+  it('skips a page that never navigated, but scans content set on it', () => {
+    const out = path.join(tmp, 'blank');
+    const run = runSuite(out, ['--grep', 'never navigates|sets content']);
+
+    expect(run.status).toBe(0);
+    const data = reportData(out);
+    expect(data.tests.map((t) => [t.title, t.a11y?.violations.map((v) => v.id)])).toEqual([
+      ['never navigates', undefined],
+      ['sets content without navigating', ['image-alt']],
+    ]);
+    expect(data.a11y).toMatchObject({ testsScanned: 1, totalViolations: 1, byImpact: { critical: 1, serious: 0, moderate: 0, minor: 0 } });
+  });
+
   it('does not fail a passing test when the scan itself throws', () => {
     const out = path.join(tmp, 'throws');
     const run = runSuite(out, ['--grep', 'cannot be scanned']);

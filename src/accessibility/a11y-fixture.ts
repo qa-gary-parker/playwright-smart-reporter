@@ -10,6 +10,8 @@ const WCAG_TAG_MAP: Record<string, string[]> = {
 
 const SEVERITY_ORDER: A11yImpact[] = ['minor', 'moderate', 'serious', 'critical'];
 
+const BLANK_PAGE = '<html><head></head><body></body></html>';
+
 function meetsOrExceedsSeverity(impact: A11yImpact, threshold: A11yImpact): boolean {
   return SEVERITY_ORDER.indexOf(impact) >= SEVERITY_ORDER.indexOf(threshold);
 }
@@ -90,6 +92,8 @@ export const test = base.extend<{ smartReporterA11y: AccessibilityConfig | undef
 
     let result: A11yResult;
     try {
+      // A page the test never navigated or filled only reports its missing title and lang.
+      if (page.url() === 'about:blank' && (await page.content()) === BLANK_PAGE) return;
       result = await runAxeAnalysis(page, config);
     } catch (err) {
       console.warn(`[smart-reporter] Accessibility scan skipped for "${testInfo.title}": ${err instanceof Error ? err.message : err}`);
