@@ -140,6 +140,11 @@ describe('FailureClusterer', () => {
       expect(haveText?.count).toBe(1);
     });
 
+    it('names test timeouts as a timeout cluster, not "Test"', () => {
+      const clusters = clusterer.clusterFailures([createTestResult({ status: 'timedOut', error: 'Test timeout of 4000ms exceeded.' })]);
+      expect(clusters[0].errorType).toBe('Test Timeout');
+    });
+
     it('never produces a bare "Error" cluster name', () => {
       const results = [
         createTestResult({ status: 'failed', error: 'Error: something exploded in the fixture' }),

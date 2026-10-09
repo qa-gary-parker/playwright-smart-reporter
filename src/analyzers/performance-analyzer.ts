@@ -37,6 +37,11 @@ export class PerformanceAnalyzer {
 
     // Calculate average duration from history (rounded to whole ms)
     const avgDuration = Math.round(relevantHistory.reduce((sum, e) => sum + e.duration, 0) / relevantHistory.length);
+    // A 0ms average has no percentage change to report.
+    if (avgDuration === 0) {
+      test.performanceTrend = '→ Baseline';
+      return;
+    }
     test.averageDuration = avgDuration;
 
     // A failed run's duration is mostly time spent waiting on the failure, not a speed change.

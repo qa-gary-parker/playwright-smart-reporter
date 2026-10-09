@@ -121,6 +121,13 @@ describe('PerformanceAnalyzer', () => {
         expect(faster.performanceMetrics?.isImprovement).toBe(false);
       });
 
+      it('does not report a percentage change from a 0ms average', () => {
+        const test = createTestResult({ duration: 300 });
+        analyzer.analyze(test, [createHistoryEntry(0), createHistoryEntry(0)]);
+        expect(test.performanceTrend).toBe('→ Baseline');
+        expect(test.performanceMetrics).toBeUndefined();
+      });
+
       it('counts a test that is both 20% and 250ms slower', () => {
         const test = createTestResult({ duration: 1250 });
         analyzer.analyze(test, [createHistoryEntry(1000)]);

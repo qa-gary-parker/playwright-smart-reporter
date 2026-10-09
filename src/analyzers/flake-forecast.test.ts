@@ -67,7 +67,7 @@ describe('forecastTest', () => {
     expect(forecastTest(series('.r.rrr..r.'))).toEqual({
       state: 'scored',
       risk: 0.8,
-      reasons: [{ signal: 'retry-trend', detail: 'Needed retries in 5 of the last 10 runs, most recently 1 run ago', weight: 0.8 }],
+      reasons: [{ signal: 'retry-trend', detail: 'Retried in 5 of the last 10 runs, most recently 1 run ago', weight: 0.8 }],
     });
   });
 

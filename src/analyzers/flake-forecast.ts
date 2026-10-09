@@ -149,7 +149,7 @@ function retryTrend(runs: TestHistoryEntry[]): Strength | undefined {
   return {
     signal: 'retry-trend',
     strength: clamp01(retryWeight / totalWeight / RETRY_RATE_FULL),
-    detail: `Needed retries in ${retried} of the last ${n} runs, most recently ${ago(lastAge)}`,
+    detail: `Retried in ${retried} of the last ${n} runs, most recently ${ago(lastAge)}`,
   };
 }
 
