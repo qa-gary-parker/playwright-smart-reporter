@@ -749,6 +749,7 @@ class SmartReporter implements Reporter {
 
     const reportInput: ReportInput = {
       results: this.results,
+      runId: this.historyCollector.getCurrentRun().runId,
       history: this.historyCollector.getHistory(),
       startTime: this.startTime,
       options: this.options,

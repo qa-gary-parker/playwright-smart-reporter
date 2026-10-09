@@ -192,4 +192,17 @@ describe('history', () => {
     runSuite(out, {}, ['--grep', 'fails when asked']);
     expect(reportData(out).comparison?.baselineRun.runId).toBe(first.runId);
   }, TIMEOUT);
+
+  it('gives the report the run id history saves the run under', () => {
+    for (const [name, options] of [['run-id', { runId: 'ci-7' }], ['run-id-default', {}]] as const) {
+      const out = path.join(tmp, name);
+      runSuite(out, options, ['--grep', 'fails when asked']);
+
+      const data = reportData(out);
+      const saved = history(out).summaries!.map((s) => s.runId);
+      expect(data.meta.runId).toBe(saved[0]);
+      expect(data.trends.map((t) => t.runId)).toEqual(saved);
+    }
+    expect(reportData(path.join(tmp, 'run-id')).meta.runId).toBe('run-ci-7');
+  }, TIMEOUT);
 });

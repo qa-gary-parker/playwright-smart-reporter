@@ -28,6 +28,8 @@ import {
 
 export interface ReportInput {
   results: TestResultData[];
+  // The id history saves this run under; the reporter passes the history collector's.
+  runId?: string;
   history: TestHistory;
   startTime: number;
   options: SmartReporterOptions;
@@ -74,10 +76,14 @@ export function summarize(results: TestResultData[], duration: number): ReportSu
 // History is updated after the report is written, so add this run's summary here.
 function withCurrentRun(input: ReportInput, summary: ReportSummary): RunSummary[] {
   const past = input.history.summaries ?? [];
-  const runId = input.options.runId ?? `run-${input.startTime}`;
+  const runId = runIdOf(input);
   if (past.some((r) => r.runId === runId)) return past;
   const { total, passed, failed, skipped, flaky, slow, duration, passRate } = summary;
   return [...past, { runId, timestamp: new Date(input.startTime).toISOString(), total, passed, failed, skipped, flaky, slow, duration, passRate }];
+}
+
+function runIdOf(input: ReportInput): string {
+  return input.runId ?? `run-${input.options.runId ?? input.startTime}`;
 }
 
 export function buildReportData(input: ReportInput, now: number = Date.now()): ReportData {
@@ -116,7 +122,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     meta: {
       generatedAt: new Date(now).toISOString(),
       reporterVersion: getReporterVersion(),
-      runId: options.runId ?? `run-${input.startTime}`,
+      runId: runIdOf(input),
       startTime: input.startTime,
       duration: now - input.startTime,
       ci: input.ciInfo,
