@@ -630,19 +630,19 @@ class SmartReporter implements Reporter {
         const baselineTests = new Map<string, TestResultData>();
         const history = this.historyCollector.getHistory();
 
-        // Reconstruct baseline test results from history
+        // Reconstruct baseline test results: each test's last entry, or with baselineRunId its entry for that run
+        // (history saved before entries carried a run id cannot tell, so it keeps the last entry).
+        const pinned = !!options.baselineRunId && Object.values(history.tests).some(entries => entries.some(e => e.runId === baselineRun.runId));
         for (const [testId, entries] of Object.entries(history.tests)) {
-          if (entries.length > 0) {
-            const lastEntry = entries[entries.length - 1];
-            const matchingTest = this.results.find(r => r.testId === testId);
+          const entry = pinned ? entries.filter(e => e.runId === baselineRun.runId).pop() : entries[entries.length - 1];
+          const matchingTest = this.results.find(r => r.testId === testId);
 
-            if (matchingTest) {
-              baselineTests.set(testId, {
-                ...matchingTest,
-                status: lastEntry.skipped ? 'skipped' : lastEntry.passed ? 'passed' : 'failed',
-                duration: lastEntry.duration,
-              });
-            }
+          if (entry && matchingTest) {
+            baselineTests.set(testId, {
+              ...matchingTest,
+              status: entry.skipped ? 'skipped' : entry.passed ? 'passed' : 'failed',
+              duration: entry.duration,
+            });
           }
         }
 

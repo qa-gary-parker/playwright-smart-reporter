@@ -141,7 +141,7 @@ export class HistoryCollector {
         passed: isPassedTest(result),
         duration: result.duration,
         timestamp,
-        ...(this.options.enableHistoryDrilldown ? { runId } : {}),
+        runId,
         skipped: isSkippedTest(result),
         retry: result.retry, // NEW: Track retry count
         ...this.stepDurationsEntry(result),
@@ -310,9 +310,11 @@ export class HistoryCollector {
       return null;
     }
 
-    // If specific baseline specified, find it
+    // The runId the baseline ran with, which history saves as run-<runId>, or the saved id itself
     if (this.options.baselineRunId) {
-      return this.history.summaries.find(s => s.runId === this.options.baselineRunId) || null;
+      const wanted = this.options.baselineRunId.trim();
+      const saved = `run-${sanitizeFilename(wanted, 100)}`;
+      return this.history.summaries.find(s => s.runId === saved) ?? this.history.summaries.find(s => s.runId === wanted) ?? null;
     }
 
     // Otherwise, use previous run

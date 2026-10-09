@@ -207,6 +207,22 @@ describe('history', () => {
   }, TIMEOUT);
 });
 
+describe('baselineRunId', () => {
+  it('compares the run and each test against the chosen run, given by the runId it ran with', () => {
+    const out = path.join(tmp, 'baseline');
+    const failing = { ACCEPTANCE_FAIL: '1' };
+    runSuite(out, { runId: 'base' }, ['--grep', 'fails when asked']);
+    runSuite(out, { runId: 'mid' }, ['--grep', 'fails when asked', '--retries=0'], failing);
+
+    for (const baselineRunId of ['base', 'run-base']) {
+      runSuite(out, { runId: `now-${baselineRunId}`, baselineRunId }, ['--grep', 'fails when asked', '--retries=0'], failing);
+      const { comparison } = reportData(out);
+      expect(comparison?.baselineRun.runId).toBe('run-base');
+      expect(comparison?.changes.newFailures).toEqual([id('fails when asked')]);
+    }
+  }, TIMEOUT);
+});
+
 describe('flaky', () => {
   it('counts a run as flaky only for tests that passed on retry in it, the same in the report, the trend and history', () => {
     const out = path.join(tmp, 'flaky-by-history');
