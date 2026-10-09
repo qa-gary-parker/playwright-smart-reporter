@@ -1304,7 +1304,7 @@ System.setProperty("hudson.model.DirectoryBrowserSupport.CSP",
   "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self';")
 ```
 
-> **Note**: The trace viewer is carried over from 2.x and still uses inline event handlers and inline styles. Under an enforced strict CSP its controls do not work. Use **Download** on the trace attachment, then open it with `npx playwright show-trace <file>`.
+> **Note**: The trace viewer is carried over from 2.x and still uses inline event handlers and inline `style` attributes. Its markup is part of the page, so the browser logs `style-src-attr` violations on load even if you never open a trace; nothing else breaks. Under an enforced strict CSP the viewer's controls do not work. Use **Download** on the trace attachment, then open it with `npx playwright show-trace <file>`.
 
 ## Cucumber Integration
 
