@@ -102,7 +102,13 @@ export function Insights() {
       </div>
       <div class="panels">
         <Panel title="AI summary">
-          {d.ai.suiteHealthSummary ? <Markdown text={d.ai.suiteHealthSummary} /> : <p class="panel__empty">Not configured. Set an AI provider key, or a local model, to get a plain-language summary of this run.</p>}
+          {d.ai.suiteHealthSummary ? (
+            <Markdown text={d.ai.suiteHealthSummary} />
+          ) : d.ai.summaryOff ? (
+            <p class="panel__empty">AI is off for this run (enableAIRecommendations or enableAISuiteHealth is false).</p>
+          ) : (
+            <p class="panel__empty">Not configured. Set an AI provider key, or a local model, to get a plain-language summary of this run.</p>
+          )}
         </Panel>
         <Panel title="Quality gate" meta={d.gates ? (d.gates.passed ? 'passed' : 'failed') : undefined}>
           {d.gates ? (

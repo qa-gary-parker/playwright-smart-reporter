@@ -157,7 +157,12 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     historySnapshots: input.historyRunSnapshots,
     gates: input.qualityGateResult,
     quarantine: input.quarantineEntries && { threshold: input.quarantineThreshold, entries: input.quarantineEntries },
-    ai: { suiteHealthSummary: input.aiSuiteHealthSummary, ...aiReportInfo(input) },
+    ai: {
+      suiteHealthSummary: input.aiSuiteHealthSummary,
+      ...aiReportInfo(input),
+      ...(options.enableAIRecommendations === false && { analysisOff: true }),
+      ...((options.enableAIRecommendations === false || options.enableAISuiteHealth === false) && { summaryOff: true }),
+    },
     ...(forecast && { forecastSummary: forecast.summary }),
     ownership: summarizeOwnership(tests),
     a11y: summarizeA11y(results),

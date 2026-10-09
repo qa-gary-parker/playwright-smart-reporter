@@ -116,7 +116,8 @@ export const SYNTHETIC: ReportTest = {
       requestSize: 0,
       responseSize: 0,
     })),
-    totalRequests: NETWORK.length,
+    // The trace had more requests than networkLogMaxEntries kept.
+    totalRequests: NETWORK.length + 7,
     totalDuration: NETWORK.reduce((s, n) => s + n.duration, 0),
     summary: { byStatus: { 200: 4, 502: 1 }, byMethod: { GET: 3, POST: 2 }, slowest: null, errors: [] },
   },

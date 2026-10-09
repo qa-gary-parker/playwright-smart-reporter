@@ -327,6 +327,8 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
         <S title="AI analysis" meta={t.aiSuggestion && ai.model ? ai.model : undefined}>
           {t.aiSuggestion ? (
             <Markdown text={t.aiSuggestion} />
+          ) : ai.analysisOff ? (
+            <p class="muted">AI analysis is off for this run (enableAIRecommendations is false). Copy AI prompt gives you the prompt to use elsewhere.</p>
           ) : (
             <p class="muted">
               No analysis for this run. Set an AI provider key (or a local model) to get one, or use Copy AI prompt.
@@ -345,7 +347,7 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
         </S>
       )}
       {net.length > 0 && (
-        <S title="Network" meta={`${plural(net.length, 'request')}${failedReq ? ` · ${failedReq} failed` : ''}`}>
+        <S title="Network" meta={`${plural(Math.max(t.networkLogs?.totalRequests ?? 0, net.length), 'request')}${(t.networkLogs?.totalRequests ?? 0) > net.length ? `, ${net.length} shown` : ''}${failedReq ? ` · ${failedReq} failed` : ''}`}>
           <div class="net" role="table" aria-label="Network requests">
             {net.map((e) => (
               <div class="net__row" role="row" data-failed={requestFailed(e.status) ? '' : undefined} title={e.url}>

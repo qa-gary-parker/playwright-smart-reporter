@@ -93,6 +93,9 @@ export interface ReportData {
     // Phase 0.5: Local model support (Ollama)
     provider?: string;
     model?: string;
+    // Switched off by the options, as opposed to not configured.
+    analysisOff?: boolean;
+    summaryOff?: boolean;
   };
   // Phase 7: Flake forecasting
   forecastSummary?: ForecastSummary;

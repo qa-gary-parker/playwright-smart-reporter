@@ -261,3 +261,18 @@ test('export menu links reach the files next to the report, whatever the report 
   await menu.getByRole('menuitem', { name: 'JUnit XML' }).click();
   expect(await page.evaluate(() => (window as unknown as { opened: string }).opened)).toMatch(/\/smart%20%231%20report-junit\.xml$/);
 });
+
+test('the network section counts every request in the trace, not just the ones kept', async ({ page }) => {
+  await page.goto(url('screen=failures&mode=light'));
+  const detail = page.getByRole('article', { name: 'Test detail' });
+  await expect(detail.locator('summary').filter({ hasText: /^Network/ })).toHaveText(/Network\s*12 requests, 5 shown · 1 failed/);
+});
+
+test('AI panels say AI is off when it was switched off, rather than not configured', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light&ai=off'));
+  await expect(page.locator('.panel').filter({ hasText: 'AI summary' }).locator('.panel__empty')).toHaveText('AI is off for this run (enableAIRecommendations or enableAISuiteHealth is false).');
+  await page.goto(url('mode=light&ai=off', `#/q/failures?test=${encodeURIComponent('[Desktop Chrome] demo.spec.ts::broken login - element not found')}`));
+  await expect(page.getByRole('article', { name: 'Test detail' }).locator('details').filter({ hasText: /^AI analysis/ }).locator('p.muted')).toHaveText(
+    'AI analysis is off for this run (enableAIRecommendations is false). Copy AI prompt gives you the prompt to use elsewhere.',
+  );
+});

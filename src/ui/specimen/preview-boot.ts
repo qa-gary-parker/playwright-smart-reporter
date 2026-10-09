@@ -31,6 +31,9 @@ for (const feature of params.get('off')?.split(',') ?? []) (data.config.features
 for (const kind of params.get('exports')?.split(',') ?? []) (data.config.exports as unknown as Record<string, boolean>)[kind] = true;
 if (params.get('base')) data.meta.outputBasename = params.get('base')!;
 
+// ?ai=off: AI was switched off by enableAIRecommendations: false.
+if (params.get('ai') === 'off') data.ai = { ...data.ai, analysisOff: true, summaryOff: true };
+
 // ?scale=N clones the fixture up to N tests to exercise virtualization.
 const scale = Number(params.get('scale') ?? 0);
 if (scale > data.tests.length) {
