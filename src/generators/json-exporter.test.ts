@@ -256,8 +256,8 @@ describe('json-exporter', () => {
         baselineRun: createRunSummary({ runId: 'baseline', passRate: 70 }),
         currentRun: createRunSummary({ runId: 'current', passRate: 90 }),
         changes: {
-          newFailures: [],
-          fixedTests: [],
+          newFailures: [createTestResult({ testId: 'broke', status: 'failed' })],
+          fixedTests: [createTestResult({ testId: 'fixed' })],
           newTests: [],
           regressions: [],
           improvements: [],
@@ -267,10 +267,9 @@ describe('json-exporter', () => {
       exportJsonData([createTestResult()], createTestHistory(), Date.now(), {}, comparison);
 
       const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
-      expect(written.comparison).toBeDefined();
       expect(written.comparison.baselineRun.runId).toBe('baseline');
       expect(written.comparison.currentRun.runId).toBe('current');
-      expect(written.comparison.changes).toBeDefined();
+      expect(written.comparison.changes).toEqual(comparison.changes);
     });
 
     it('history data is included', () => {
@@ -427,9 +426,8 @@ describe('json-exporter', () => {
       exportJsonData([createTestResult()], createTestHistory(), Date.now(), {});
 
       const writtenContent = mockFs.writeFileSync.mock.calls[0][1] as string;
-      // Pretty-printed JSON has newlines and indentation
-      expect(writtenContent).toContain('\n');
-      expect(writtenContent).toContain('  ');
+      expect(writtenContent).toMatch(/^\{\n  "/);
+      expect(writtenContent).toBe(JSON.stringify(JSON.parse(writtenContent), null, 2));
     });
   });
 });
