@@ -69,6 +69,12 @@ describe('buildReportData', () => {
     expect(() => JSON.stringify(data)).not.toThrow();
   });
 
+  it('embeds each screenshot once, not again in the legacy screenshot field', () => {
+    const shot = 'data:image/png;base64,iVBORw0KGgo=';
+    const data = buildReportData(input([{ ...FAILED, screenshot: shot, attachments: { screenshots: [shot], videos: [], traces: [], custom: [] } }]));
+    expect(JSON.stringify(data.tests[0]).split(shot).length - 1).toBe(1);
+  });
+
   it('records which provider and model produced the AI output', () => {
     const data = buildReportData(input([{ ...FAILED, aiSuggestion: 'Wait for the selector' }], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
     expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined, provider: 'ollama', model: 'qwen2.5:7b' });

@@ -104,7 +104,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
   const forecast = forecastRun(results, options.forecast);
 
   const tests: ReportTest[] = results.map((r) => {
-    const { failureCluster: _cluster, traceData: _trace, ...rest } = r;
+    // screenshot repeats attachments.screenshots[0], which would embed every first screenshot twice.
+    const { failureCluster: _cluster, traceData: _trace, screenshot: _screenshot, ...rest } = r;
     const signals: Signal[] = [];
     if (sets.newFailures.has(r.testId)) signals.push('new-failure');
     if (sets.regressions.has(r.testId) || r.performanceMetrics?.isRegression) signals.push('regression');

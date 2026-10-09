@@ -16,7 +16,7 @@ export const SCHEMA_VERSION = 3;
 
 export type Signal = 'new-failure' | 'regression' | 'flaky' | 'quarantined' | 'slow' | 'fixed' | 'new';
 
-export type ReportTest = Omit<TestResultData, 'failureCluster' | 'traceData'> & {
+export type ReportTest = Omit<TestResultData, 'failureCluster' | 'traceData' | 'screenshot'> & {
   clusterId?: string;
   signals: Signal[];
   // Phase 7: Flake forecasting
