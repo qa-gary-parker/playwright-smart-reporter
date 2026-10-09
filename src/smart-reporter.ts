@@ -69,7 +69,7 @@ import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlakyTest } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest, isPassedTest } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
 import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
@@ -561,8 +561,8 @@ class SmartReporter implements Reporter {
         }
         // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
         if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
-          const passed = this.results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-          const failed = this.results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
+          const passed = this.results.filter(isPassedTest).length;
+          const failed = this.results.filter(isFailedTest).length;
           const skipped = this.results.filter(r => r.status === 'skipped').length;
           const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
           const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
@@ -593,15 +593,8 @@ class SmartReporter implements Reporter {
         // Build current run summary with proper outcome-based counting
         // Issue #17: Use outcome to properly count flaky tests
         // Issue #16: Tests with expectedStatus='failed' that fail are counted as passed (expected behavior)
-        const passed = this.results.filter(r =>
-          r.status === 'passed' ||
-          r.outcome === 'expected' ||  // Expected failures count as "passed" (they behaved as expected)
-          r.outcome === 'flaky'        // Flaky tests passed on retry
-        ).length;
-        const failed = this.results.filter(r =>
-          r.outcome === 'unexpected' && // Only count truly unexpected failures
-          (r.status === 'failed' || r.status === 'timedOut')
-        ).length;
+        const passed = this.results.filter(isPassedTest).length;
+        const failed = this.results.filter(isFailedTest).length;
         const skipped = this.results.filter(r => r.status === 'skipped').length;
         // Flaky: tests that passed on retry (outcome === 'flaky')
         const flaky = this.results.filter(r => r.outcome === 'flaky').length;
@@ -900,10 +893,7 @@ class SmartReporter implements Reporter {
     }
 
     // Send webhook notifications if enabled - use outcome-based counting
-    const failed = this.results.filter(r =>
-      r.outcome === 'unexpected' &&
-      (r.status === 'failed' || r.status === 'timedOut')
-    ).length;
+    const failed = this.results.filter(isFailedTest).length;
 
     // Advanced notification manager takes precedence
     if (this.notificationManager) {

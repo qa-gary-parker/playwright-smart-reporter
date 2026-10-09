@@ -11,6 +11,7 @@ import type {
   QualityGateResult,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
+import { isFailedTest, isPassedTest } from '../utils/flakiness';
 
 export function getReporterVersion(): string {
   try {
@@ -118,8 +119,8 @@ export function exportJsonData(
   const filename = `${basename ?? 'smart-report'}-data.json`;
   const outputPath = path.resolve(baseDir, filename);
 
-  const passed = results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-  const failed = results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
+  const passed = results.filter(isPassedTest).length;
+  const failed = results.filter(isFailedTest).length;
   const skipped = results.filter(r => r.status === 'skipped').length;
   const flaky = results.filter(r => r.outcome === 'flaky').length;
   const duration = Date.now() - startTime;

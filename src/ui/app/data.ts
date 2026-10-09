@@ -3,12 +3,14 @@ import type { TestStatus } from '../components';
 
 export type { ReportData, ReportTest };
 
+// Playwright's verdict: a test.fail() test that passed is a failure.
 export function isFailing(t: ReportTest): boolean {
-  return t.outcome !== 'expected' && t.outcome !== 'flaky' && (t.status === 'failed' || t.status === 'timedOut');
+  return t.outcome ? t.outcome === 'unexpected' : t.status === 'failed' || t.status === 'timedOut';
 }
 
 export function displayStatus(t: ReportTest): TestStatus {
   if (t.outcome === 'flaky') return 'flaky';
+  if (t.outcome === 'unexpected' && t.status === 'passed') return 'failed';
   // test.fail() that failed as expected reads as a pass, as the 2.x counts did.
   if (t.outcome === 'expected' && (t.status === 'failed' || t.status === 'timedOut')) return 'passed';
   return t.status;

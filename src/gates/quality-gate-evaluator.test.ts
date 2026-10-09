@@ -598,10 +598,10 @@ describe('QualityGateEvaluator', () => {
         minPassRate: 50,
       };
       const result = evaluator.evaluate(config, results);
-      // Without outcome, maxFailures should count 0 (needs outcome === 'unexpected')
+      // Without outcome, the status decides, as it does for the summary and history
       const maxFailRule = result.rules.find(r => r.rule === 'maxFailures');
       expect(maxFailRule?.passed).toBe(true);
-      expect(maxFailRule?.actual).toBe('0');
+      expect(maxFailRule?.actual).toBe('1');
       // minPassRate: 'passed' status counts
       const passRateRule = result.rules.find(r => r.rule === 'minPassRate');
       expect(passRateRule?.passed).toBe(true);

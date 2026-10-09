@@ -7,6 +7,7 @@ import type {
   A11yImpact,
 } from '../types';
 import type { CoverageSummary } from '../report-data/schema';
+import { isFailedTest, isPassedTest } from '../utils/flakiness';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
@@ -59,9 +60,7 @@ export class QualityGateEvaluator {
   }
 
   private evaluateMaxFailures(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const failures = results.filter(
-      r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'),
-    ).length;
+    const failures = results.filter(isFailedTest).length;
 
     return {
       rule: 'maxFailures',
@@ -83,9 +82,7 @@ export class QualityGateEvaluator {
       };
     }
 
-    const passed = results.filter(
-      r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky',
-    ).length;
+    const passed = results.filter(isPassedTest).length;
     const rate = Math.round((passed / total) * 100);
 
     return {

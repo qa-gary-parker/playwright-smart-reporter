@@ -15,11 +15,13 @@ const timedOut = t({ testId: 'to', status: 'timedOut', outcome: 'unexpected', cl
 const flaky = t({ testId: 'k', status: 'passed', outcome: 'flaky', retry: 1, suites: ['Search', 'Filters'] });
 const expectedFail = t({ testId: 'x', status: 'failed', outcome: 'expected', expectedStatus: 'failed' });
 const passed = t({ testId: 'p', title: 'loads hero', project: 'webkit', stabilityScore: { overall: 95, flakiness: 100, performance: 90, reliability: 95, grade: 'A', needsAttention: false } });
+const unexpectedPass = t({ testId: 'u', status: 'passed', outcome: 'unexpected', expectedStatus: 'failed' });
 
 describe('status helpers', () => {
-  it('treats expected failures as passes and flaky outcomes as flaky', () => {
-    expect([failed, timedOut, flaky, expectedFail, passed].map(displayStatus)).toEqual(['failed', 'timedOut', 'flaky', 'passed', 'passed']);
-    expect([failed, timedOut, flaky, expectedFail, passed].map(isFailing)).toEqual([true, true, false, false, false]);
+  it('treats expected failures as passes, flaky outcomes as flaky, and a test.fail() test that passed as a failure', () => {
+    const tests = [failed, timedOut, flaky, expectedFail, passed, unexpectedPass];
+    expect(tests.map(displayStatus)).toEqual(['failed', 'timedOut', 'flaky', 'passed', 'passed', 'failed']);
+    expect(tests.map(isFailing)).toEqual([true, true, false, false, false, true]);
   });
 
   it('builds the title path with the project only when several projects ran', () => {
@@ -31,11 +33,11 @@ describe('status helpers', () => {
 
   it('counts each test in exactly one outcome bucket, even when history marks a failure as flaky', () => {
     const historicallyFlakyFailure = t({ testId: 'hf', status: 'failed', outcome: 'unexpected', flakinessScore: 0.4, signals: ['flaky'] });
-    const interrupted = t({ testId: 'i', status: 'interrupted', outcome: 'unexpected' });
+    const interrupted = t({ testId: 'i', status: 'interrupted', outcome: 'skipped' });
     const skipped = t({ testId: 's', status: 'skipped', outcome: 'skipped' });
-    const counts = outcomeCounts([failed, timedOut, flaky, expectedFail, passed, historicallyFlakyFailure, interrupted, skipped]);
-    expect(counts).toEqual({ failed: 3, flaky: 1, passed: 2, skipped: 2 });
-    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(8);
+    const counts = outcomeCounts([failed, timedOut, flaky, expectedFail, passed, historicallyFlakyFailure, interrupted, skipped, unexpectedPass]);
+    expect(counts).toEqual({ failed: 4, flaky: 1, passed: 2, skipped: 2 });
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(9);
   });
 
   it('formats durations', () => {

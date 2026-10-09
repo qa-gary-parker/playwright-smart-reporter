@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
-import { renderMarkdownLite } from '../utils';
+import { isFailedTest, isPassedTest, renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
 import { stepDurationsOf } from '../analyzers/causal-timeline';
 import { runStabilityGrade } from '../analyzers/stability-scorer';
@@ -136,7 +136,7 @@ export class HistoryCollector {
       }
 
       this.history.tests[result.testId].push({
-        passed: result.status === 'passed' || result.outcome === 'expected' || result.outcome === 'flaky',
+        passed: isPassedTest(result),
         duration: result.duration,
         timestamp,
         ...(this.options.enableHistoryDrilldown ? { runId } : {}),
@@ -154,15 +154,8 @@ export class HistoryCollector {
     }
 
     // Add run summary
-    const passed = results.filter(r =>
-      r.status === 'passed' ||
-      r.outcome === 'expected' ||
-      r.outcome === 'flaky'
-    ).length;
-    const failed = results.filter(r =>
-      (r.status === 'failed' || r.status === 'timedOut') &&
-      r.outcome !== 'expected' && r.outcome !== 'flaky'
-    ).length;
+    const passed = results.filter(isPassedTest).length;
+    const failed = results.filter(isFailedTest).length;
     const skipped = results.filter(r => r.status === 'skipped').length;
     const flaky = results.filter(r => r.outcome === 'flaky').length;
     const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;

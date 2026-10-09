@@ -87,3 +87,22 @@ describe('test ids', () => {
     expect(Object.keys(history(out).tests)).toHaveLength(4);
   }, TIMEOUT);
 });
+
+describe('test.fail()', () => {
+  it('counts a test.fail() test that passed as a failure everywhere', () => {
+    const out = path.join(tmp, 'unexpected-pass');
+    const options = { qualityGates: { maxFailures: 0, minPassRate: 100 } };
+    runSuite(out, options, ['--grep', 'expected failure that passes']);
+
+    const data = reportData(out);
+    const pw = playwright(out);
+    expect(pw).toEqual({ total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0 });
+    expect(counts(data.summary)).toEqual(pw);
+    expect(counts(history(out).summaries!.at(-1)!)).toEqual(pw);
+    expect(history(out).tests[id('expected failure that passes')].map((e) => e.passed)).toEqual([false]);
+    expect(data.gates?.rules.map((r) => [r.rule, r.actual])).toEqual([['maxFailures', '1'], ['minPassRate', '0%']]);
+
+    runSuite(out, options, ['--grep', 'expected failure that passes']);
+    expect(counts(reportData(out).comparison!.currentRun)).toEqual(playwright(out));
+  }, TIMEOUT);
+});

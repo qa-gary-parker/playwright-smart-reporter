@@ -15,7 +15,7 @@ import type {
   TestResultData,
 } from '../types';
 import { summarizeA11y } from '../analyzers/a11y-analyzer';
-import { isFlakyTest } from '../utils/flakiness';
+import { isFailedTest, isFlakyTest, isPassedTest } from '../utils/flakiness';
 import {
   SCHEMA_VERSION,
   type ComparisonKey,
@@ -51,8 +51,8 @@ const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests
 
 export function summarize(results: TestResultData[], duration: number): ReportSummary {
   // Outcome-based counting (issues #16, #17): flaky and expected failures count as passed.
-  const passed = results.filter((r) => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-  const failed = results.filter((r) => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
+  const passed = results.filter(isPassedTest).length;
+  const failed = results.filter(isFailedTest).length;
   const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
   for (const r of results) {
     if (r.stabilityScore) grades[r.stabilityScore.grade]++;
