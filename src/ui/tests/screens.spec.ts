@@ -44,11 +44,22 @@ test('failures screen lands on the new failure, grouped by cluster', async ({ pa
   await expect(page.getByRole('article', { name: 'Test detail' }).getByRole('heading', { level: 2 })).toContainText('pays with a saved card');
 });
 
-test('a green run with no deep link opens on the flaky queue and reports no failures', async ({ page }) => {
+test('a run with no deep link opens on Insights, and its Failed card leads to the failures', async ({ page }) => {
+  await page.goto(url('screen=landing&mode=light'));
+  await expect(page).toHaveURL(/#\/insights$/);
+  await expect(page.getByRole('link', { name: /Insights/ })).toHaveAttribute('aria-current', 'page');
+  const failed = page.getByRole('main').getByRole('link', { name: /^Failed/ });
+  await expect(failed).toHaveText(/Failed\s*14\s*1 new/);
+  await failed.click();
+  await expect(page).toHaveURL(/#\/q\/failures(\?|$)/);
+  await expect(page.getByRole('tree', { name: 'Failures' })).toBeVisible();
+});
+
+test('a green run with no deep link opens on Insights and reports no failures', async ({ page }) => {
   await page.goto(url('screen=green&mode=light'));
-  expect(new URL(page.url()).hash).toMatch(/^#\/q\/flaky(\?|$)/);
-  await expect(page.getByRole('link', { name: /Flaky/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/#\/insights$/);
   await expect(page.getByLabel('Run result')).toContainText('No failures');
+  await expect(page.getByRole('main').getByRole('link', { name: /^Failed/ })).toHaveText(/Failed\s*0\s*nothing failed/);
 });
 
 test('narrow viewport shows the list, then the detail as its own view', async ({ page }) => {

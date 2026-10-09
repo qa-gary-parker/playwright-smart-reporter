@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import type { JsonExportData } from '../generators/json-exporter';
-import { buildAnnotations, MAX_ANNOTATIONS } from './annotations';
+import { buildAnnotations, isFailure, MAX_ANNOTATIONS } from './annotations';
 import { renderSummary } from './summary';
 import { resolveCommentTarget, runGh, upsertStickyComment, type GhRunner, type PullRequestEvent, type UpsertResult } from './pr-comment';
 
@@ -50,7 +50,9 @@ export function runGithubCommand(opts: GithubCommandOptions, deps: GithubCommand
     return 1;
   }
 
-  const markdown = renderSummary(data, { reportUrl: opts.reportUrl || runUrl(env), workspace: env.GITHUB_WORKSPACE || deps.cwd });
+  // The report opens on Insights; a failed run's link goes straight to the failures instead.
+  const reportUrl = opts.reportUrl && !opts.reportUrl.includes('#') && data.tests.some(isFailure) ? `${opts.reportUrl}#/q/failures` : opts.reportUrl;
+  const markdown = renderSummary(data, { reportUrl: reportUrl || runUrl(env), workspace: env.GITHUB_WORKSPACE || deps.cwd });
 
   if (env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${markdown}\n`);

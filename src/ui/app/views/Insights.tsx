@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { displayStatus, formatDate, formatDuration, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
@@ -42,6 +42,8 @@ export function Insights() {
   const tests = runTests.value;
   const byId = testsById.value;
   const ids = (list: string[] | undefined) => (list ?? []).map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);
+  const failing = tests.filter(isFailing);
+  const newFailures = failing.filter((t) => t.signals.includes('new-failure')).length;
 
   return (
     <div class="page">
@@ -53,6 +55,13 @@ export function Insights() {
         </span>
       </header>
       <div class="stats">
+        <a class="stat stat--link" href={formatRoute({ view: 'queue', queue: 'failures', q: '' })}>
+          <span class="stat__label">Failed</span>
+          <span class="stat__value" data-tone={failing.length ? 'fail' : undefined}>
+            {failing.length}
+          </span>
+          <span class="stat__sub">{failing.length === 0 ? 'nothing failed' : newFailures ? `${newFailures} new` : 'none new'}</span>
+        </a>
         <div class="stat">
           <span class="stat__label">Pass rate</span>
           <span class="stat__value">{s.passRate}%</span>

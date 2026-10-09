@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [3.0.0] - 2026-10-08
 
 ### Breaking changes
-- **New report renderer.** The template-string HTML report is replaced by a Preact single-page app built from a versioned `ReportData` payload (`schemaVersion: 3`). The report still opens over `file://` with no server. Failures (the landing view) and Insights replace Overview; Trends and Comparison are tabs of History; filters move from the sidebar to a filter bar. Number keys `1`–`5` now open Failures, All tests, Insights, History, and Gallery.
+- **New report renderer.** The template-string HTML report is replaced by a Preact single-page app built from a versioned `ReportData` payload (`schemaVersion: 3`). The report still opens over `file://` with no server. Insights (the landing view) and Failures replace Overview; Trends and Comparison are tabs of History; filters move from the sidebar to a filter bar. Number keys `1`–`5` now open Failures, All tests, Insights, History, and Gallery.
 - **Theme presets.** `ocean`, `sunset`, `dracula`, `cyberpunk`, `forest`, and `rose` now set the accent colour only, on the active mode. `default`, `light`, `dark`, and `high-contrast` set the mode. No preset value errors.
 - **Report data file.** `assetMode` defaults to `'auto'`: above 32 MB of data the reporter writes `<name>-data.js` next to the HTML. `cspSafe: true` always writes `<name>-data.js`, as well as `<name>.css` and `<name>.js`. Keep these files next to the HTML.
 - **Quality gates fail the run.** A run with a breached reporter-side gate now exits 1. See Fixed.

@@ -548,8 +548,22 @@
   border-left: 1px solid var(--border);
 }
 
+.stat--link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.stat--link:hover .stat__label {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 .stat__label {
   color: var(--text-muted);
+}
+
+.stat__value[data-tone='fail'] {
+  color: var(--fail-fg);
 }
 
 .stat__value {

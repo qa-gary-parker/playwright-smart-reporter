@@ -1,6 +1,6 @@
 # playwright-smart-reporter
 
-A Playwright HTML reporter that opens on your failures. It groups failures by cause, shows a causal timeline for each failed test, tracks flakiness across runs, and can run AI failure analysis with your own key or a local model. Free and open source (MIT). Every feature is included.
+A Playwright HTML reporter with a run dashboard and a failures inbox. It groups failures by cause, shows a causal timeline for each failed test, tracks flakiness across runs, and can run AI failure analysis with your own key or a local model. Free and open source (MIT). Every feature is included.
 
 ![Failures inbox](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-failures-dark.png)
 *Failures inbox: failures grouped by cluster, with the selected test's error, expected/received diff, and source frame*
@@ -33,7 +33,7 @@ Run your tests and open the generated `smart-report.html`. It opens over `file:/
 
 ## At a Glance
 
-- Failures inbox, grouped by failure cluster, as the landing view
+- Insights dashboard as the landing view, and a failures inbox grouped by failure cluster
 - Causal failure timeline with a suggested first anomaly
 - Flakiness detection across runs, and a forecast of tests trending towards flaky
 - Stability grades (A–F) per test
@@ -58,12 +58,12 @@ The report is a single-page app. The rail on the left holds the queues and views
 
 | Rail entry | What it shows |
 |---|---|
-| Failures | Tests that failed this run, grouped by failure cluster. This is the landing view. When nothing failed, the report opens on Flaky, or on All tests when nothing is flaky. |
+| Failures | Tests that failed this run, grouped by failure cluster. CI links to a failed run open here. |
 | Flaky | Tests that passed on retry this run, or that history marks as flaky |
 | Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than their average or the previous run |
 | Quarantined | Tests in the quarantine file |
 | All tests | Every test, grouped by file |
-| Insights | Run metrics and summary panels |
+| Insights | The landing view: run metrics, a Failed card that opens Failures, and summary panels |
 | History | Trends, Reliability heatmap, and Compare tabs |
 | Gallery | Screenshots, videos, and traces |
 | Live | Progress of a running suite |
@@ -177,9 +177,9 @@ Press `?` in the report to see this list.
 ![Insights](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-insights-dark.png)
 *Insights: stats row with sparklines, outcome bar, and summary panels*
 
-Insights holds the run metrics:
+Insights is the landing view and holds the run metrics:
 
-- A stats row: pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
+- A stats row: failed (with the number of new failures; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
 - An outcome bar: passed, failed, flaky, skipped.
 - Panels: AI summary, Quality gate, Failure clusters, At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
 
@@ -1148,7 +1148,7 @@ The reporter automatically detects GitHub Actions, GitLab CI, CircleCI, Jenkins,
 
 Show the run where reviewers already look:
 
-- **Job summary:** pass rate, quality gate result, failures (new failures first), flaky tests, slowest tests and a link to the report.
+- **Job summary:** pass rate, quality gate result, failures (new failures first), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
 - **Annotations:** an error on the line of each failing assertion, not on the test declaration.
 - **Pull request comment:** the same summary as one comment. Each run updates that comment, so re-runs do not add more comments.
 
@@ -1327,7 +1327,7 @@ export default defineConfig({
 ## Upgrading from 2.x
 
 - The report is a single-page app. It still opens over `file://` with no server.
-- Failures (the landing view) and Insights replace Overview. Trends and Comparison are tabs of History. Filters moved from the sidebar to the filter bar.
+- Insights (the landing view) and Failures replace Overview. Trends and Comparison are tabs of History. Filters moved from the sidebar to the filter bar.
 - Number keys now open Failures, All tests, Insights, History, and Gallery (`1`–`5`).
 - `theme.preset` values `ocean`, `sunset`, `dracula`, `cyberpunk`, `forest`, and `rose` now set the accent colour only. `default`, `light`, `dark`, and `high-contrast` set the mode.
 - The report no longer requests Google Fonts. Geist Sans and Geist Mono are bundled.

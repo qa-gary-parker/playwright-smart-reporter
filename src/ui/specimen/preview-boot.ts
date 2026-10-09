@@ -70,7 +70,8 @@ const test = params.get('test');
 const HASH: Record<string, string> = {
   failures: '#/q/failures',
   flaky: '#/q/flaky',
-  // The app picks the green-run landing itself.
+  // No hash: the app picks the landing view itself.
+  landing: '',
   green: '',
   all: '#/q/all',
   insights: '#/insights',

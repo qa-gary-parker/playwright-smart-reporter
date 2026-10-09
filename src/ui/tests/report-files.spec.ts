@@ -22,10 +22,9 @@ test('an external-mode report opens over file:// with data from the companion sc
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(pathToFileURL(outputPath).href);
-  await expect(page.locator('.pane__count')).toHaveText('13');
-  await page.keyboard.press('g');
-  await page.keyboard.press('i');
   await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
+  await page.keyboard.press('1');
+  await expect(page.locator('.pane__count')).toHaveText('13');
   expect(errors).toEqual([]);
 });
 
@@ -52,10 +51,9 @@ test('a cspSafe report renders under a strict CSP and the app itself causes no v
     });
   });
   await page.goto('http://report.test/smart-report.html');
-  await expect(page.locator('.pane__count')).toHaveText('13');
-  await page.keyboard.press('g');
-  await page.keyboard.press('i');
   await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
+  await page.keyboard.press('1');
+  await expect(page.locator('.pane__count')).toHaveText('13');
   expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
 });
 
@@ -65,7 +63,7 @@ test('the inline report opens over file:// with no failed requests', async ({ pa
   const failed: string[] = [];
   page.on('requestfailed', (r) => failed.push(r.url()));
   await page.goto(pathToFileURL(outputPath).href);
-  await expect(page.getByRole('tree', { name: 'Failures' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
   expect(failed).toEqual([]);
 });
 

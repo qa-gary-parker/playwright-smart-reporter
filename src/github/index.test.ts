@@ -63,7 +63,7 @@ describe('runGithubCommand', () => {
 
     expect(code).toBe(0);
     expect(fs.readFileSync(summaryFile, 'utf-8'))
-      .toBe(`earlier step\n${renderSummary(data, { reportUrl: 'https://example.test/report', workspace: WORKSPACE })}\n`);
+      .toBe(`earlier step\n${renderSummary(data, { reportUrl: 'https://example.test/report#/q/failures', workspace: WORKSPACE })}\n`);
     expect(logs).toEqual([
       ANNOTATION,
       'Pull request comment skipped: pull request comes from a fork (someone/shop), so the token cannot write comments.',
@@ -106,6 +106,20 @@ describe('runGithubCommand', () => {
     expect(logs[0]).toBe(ANNOTATION);
     // JSON.parse wording differs between Node versions.
     expect(logs[1]).toMatch(/^::warning::Pull request comment failed: Unexpected token .*JSON/);
+  });
+
+  it('links the report of a failed run straight to its failures, but not a passing run or a URL with its own fragment', () => {
+    const linkFor = (reportUrl: string, tests: JsonExportData['tests']) => {
+      fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ ...data, tests }));
+      const out: string[] = [];
+      runGithubCommand({ dataPath: path.join(dir, 'data.json'), reportUrl }, { env: {}, cwd: WORKSPACE, gh: () => { throw new Error('gh must not run'); }, log: (l) => out.push(l) });
+      return out[0].split('\n').find((l) => l.startsWith('[Open the full report]'));
+    };
+    const passed = [{ ...data.tests[0], status: 'passed', outcome: 'expected', error: undefined, errorLocation: undefined }];
+
+    expect(linkFor('https://example.test/report.html', data.tests)).toBe('[Open the full report](https://example.test/report.html#/q/failures)');
+    expect(linkFor('https://example.test/report.html', passed)).toBe('[Open the full report](https://example.test/report.html)');
+    expect(linkFor('https://example.test/report.html#/insights', data.tests)).toBe('[Open the full report](https://example.test/report.html#/insights)');
   });
 
   it('prints the summary to stdout outside GitHub Actions and links the run when no report URL is given', () => {
