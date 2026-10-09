@@ -1,4 +1,5 @@
 import type { ComparisonChanges, RunComparison, RunSummary, TestResultData } from '../types';
+import { MIN_DURATION_CHANGE_MS } from '../analyzers/performance-analyzer';
 
 export function buildComparison(
   currentTests: TestResultData[],
@@ -39,12 +40,14 @@ export function buildComparison(
       const currentDuration = test.duration;
       const pctChange = (currentDuration - baselineDuration) / baselineDuration;
 
-      if (pctChange > 0.2) { // 20% slower
+      const msChange = currentDuration - baselineDuration;
+
+      if (pctChange > 0.2 && msChange >= MIN_DURATION_CHANGE_MS) { // 20% slower
         changes.regressions.push({
           ...test,
           averageDuration: baselineDuration
         });
-      } else if (pctChange < -0.2) { // 20% faster
+      } else if (pctChange < -0.2 && -msChange >= MIN_DURATION_CHANGE_MS) { // 20% faster
         changes.improvements.push({
           ...test,
           averageDuration: baselineDuration

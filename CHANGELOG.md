@@ -36,6 +36,7 @@ All notable changes to this project will be documented in this file.
 - Custom `theme` colours map onto the design tokens and apply in every mode.
 - Executive PDF variants are links in the export menu instead of a picker dialog. The PDFs are unchanged.
 - Annotations show as type and description in the test detail, without coloured badges. Stability grades move from list rows to the detail header.
+- A test now counts as slower or faster (the Regressions queue, the `regression` and `slow` signals, Compare) only when it passed and its duration changed by both `performanceThreshold` (default 20%) and 250 ms. In 2.x, 95 ms to 155 ms counted, and so did a failed test that waited for a timeout.
 - `maxEmbeddedSize` is deprecated and has no effect. Traces are copied to `traces/` next to the report and never embedded, so the reporter no longer reads each trace into memory.
 
 ### Fixed

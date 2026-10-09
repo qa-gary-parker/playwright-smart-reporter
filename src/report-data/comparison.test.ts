@@ -53,6 +53,26 @@ describe('buildComparison', () => {
     expect(comparison.changes.regressions[0].testId).toBe('3');
   });
 
+  it('needs a passed test to be both 20% and 250ms slower or faster than the baseline', () => {
+    const current = [
+      createMinimalTestResult({ testId: 'jitter', duration: 155 }),
+      createMinimalTestResult({ testId: 'slower', duration: 1300 }),
+      createMinimalTestResult({ testId: 'faster', duration: 700 }),
+      createMinimalTestResult({ testId: 'small-gain', duration: 300 }),
+    ];
+    const baseline = new Map<string, TestResultData>([
+      ['jitter', createMinimalTestResult({ testId: 'jitter', duration: 95 })],
+      ['slower', createMinimalTestResult({ testId: 'slower', duration: 1000 })],
+      ['faster', createMinimalTestResult({ testId: 'faster', duration: 1000 })],
+      ['small-gain', createMinimalTestResult({ testId: 'small-gain', duration: 500 })],
+    ]);
+
+    const { changes } = buildComparison(current, createRunSummary(), createRunSummary(), baseline);
+
+    expect(changes.regressions.map((t) => t.testId)).toEqual(['slower']);
+    expect(changes.improvements.map((t) => t.testId)).toEqual(['faster']);
+  });
+
   it('identifies new tests', () => {
     const currentTests = [createMinimalTestResult({ testId: 'new-test' })];
     const currentSummary = createRunSummary();

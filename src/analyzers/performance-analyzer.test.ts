@@ -109,6 +109,35 @@ describe('PerformanceAnalyzer', () => {
         expect(test.performanceTrend).toBe('↓ 50% faster');
       });
 
+      it('does not count a short test as slower or faster when the change is under 250ms', () => {
+        const slower = createTestResult({ duration: 155 }); // 63% slower, but only 60ms
+        analyzer.analyze(slower, [createHistoryEntry(95), createHistoryEntry(95)]);
+        expect(slower.performanceTrend).toBe('→ Stable');
+        expect(slower.performanceMetrics?.isRegression).toBe(false);
+
+        const faster = createTestResult({ duration: 300 }); // 40% faster, but only 200ms
+        analyzer.analyze(faster, [createHistoryEntry(500)]);
+        expect(faster.performanceTrend).toBe('→ Stable');
+        expect(faster.performanceMetrics?.isImprovement).toBe(false);
+      });
+
+      it('counts a test that is both 20% and 250ms slower', () => {
+        const test = createTestResult({ duration: 1250 });
+        analyzer.analyze(test, [createHistoryEntry(1000)]);
+        expect(test.performanceTrend).toBe('↑ 25% slower');
+        expect(test.performanceMetrics?.isRegression).toBe(true);
+      });
+
+      it('does not compare the duration of a test that did not pass', () => {
+        for (const status of ['failed', 'timedOut', 'interrupted'] as const) {
+          const test = createTestResult({ status, duration: 5000 });
+          analyzer.analyze(test, [createHistoryEntry(1000), createHistoryEntry(1000)]);
+          expect(test.performanceTrend).toBe('→ Not compared');
+          expect(test.performanceMetrics).toBeUndefined();
+          expect(test.averageDuration).toBe(1000);
+        }
+      });
+
       it('calculates performance metrics correctly', () => {
         const test = createTestResult({ duration: 1200 });
         const history = [

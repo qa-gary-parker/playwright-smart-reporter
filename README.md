@@ -60,7 +60,7 @@ The report is a single-page app. The rail on the left holds the queues and views
 |---|---|
 | Failures | Tests that failed this run, grouped by failure cluster. This is the landing view. When nothing failed, the report opens on Flaky, or on All tests when nothing is flaky. |
 | Flaky | Tests that passed on retry this run, or that history marks as flaky |
-| Regressions | Tests that got slower than their average |
+| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than their average or the previous run |
 | Quarantined | Tests in the quarantine file |
 | All tests | Every test, grouped by file |
 | Insights | Run metrics and summary panels |
