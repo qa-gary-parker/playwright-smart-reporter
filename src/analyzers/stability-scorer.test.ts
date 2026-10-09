@@ -175,8 +175,19 @@ describe('StabilityScorer', () => {
 
         scorer.scoreTest(test);
 
-        // This should result in a B grade
-        expect(['A', 'B']).toContain(test.stabilityScore?.grade);
+        // 90 * 0.4 + 90 * 0.3 + 85 * 0.3 = 88.5
+        expect([test.stabilityScore?.overall, test.stabilityScore?.grade]).toEqual([89, 'B']);
+      });
+
+      it('assigns each grade from its lower bound: A 90, B 80, C 70, D 60', () => {
+        // Passing, no history: overall = flakiness * 0.4 + 60
+        const scored = [0.25, 0.28, 0.5, 0.53, 0.75, 0.78, 1].map(flakinessScore => {
+          const test = createTestResult({ status: 'passed', flakinessScore });
+          scorer.scoreTest(test);
+          return [test.stabilityScore?.overall, test.stabilityScore?.grade];
+        });
+
+        expect(scored).toEqual([[90, 'A'], [89, 'B'], [80, 'B'], [79, 'C'], [70, 'C'], [69, 'D'], [60, 'D']]);
       });
 
       it('assigns grade F for very low scores', () => {
@@ -229,14 +240,16 @@ describe('StabilityScorer', () => {
       it('calculates average stability correctly', () => {
         const results = [
           createTestResult({ status: 'passed', flakinessScore: 0 }),
-          createTestResult({ status: 'passed', flakinessScore: 0 }),
+          createTestResult({ status: 'passed', flakinessScore: 0.5 }),
+          createTestResult({ status: 'passed' }),
         ];
 
-        results.forEach(r => scorer.scoreTest(r));
+        // 100 and 80; the unscored test is left out of the average
+        results.slice(0, 2).forEach(r => scorer.scoreTest(r));
 
         const stats = scorer.calculateSuiteStats(results);
 
-        expect(stats.averageStability).toBeGreaterThan(0);
+        expect(stats.averageStability).toBe(90);
       });
     });
 
