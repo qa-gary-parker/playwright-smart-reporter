@@ -65,6 +65,20 @@ describe('history', () => {
   });
 });
 
+describe('quarantine', () => {
+  it('writes the quarantine file into a folder that does not exist yet', () => {
+    const out = path.join(tmp, 'quarantine');
+    const outputFile = path.join(tmp, 'quarantine-store', 'nested', 'quarantine.json');
+    const options = { quarantine: { enabled: true, threshold: 0.01, outputFile } };
+    // A failed run and a passed run before this one make the test flaky by history (score 0.5).
+    runSuite(out, options, ['--grep', 'fails when asked'], 'test', { ACCEPTANCE_FAIL: '1' });
+    runSuite(out, options, ['--grep', 'fails when asked']);
+    runSuite(out, options, ['--grep', 'fails when asked']);
+
+    expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual(['suite.fixtures.ts::fails when asked']);
+  });
+});
+
 describe('merge-reports', () => {
   it('reports the duration of the tests, not of the merge', () => {
     const blobs = path.join(tmp, 'blobs');
