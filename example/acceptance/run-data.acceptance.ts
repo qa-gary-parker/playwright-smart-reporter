@@ -223,4 +223,17 @@ describe('flaky', () => {
     expect(counts(data.comparison!.currentRun)).toEqual(playwright(out));
     expect(counts(history(out).summaries!.at(-1)!)).toEqual(playwright(out));
   }, TIMEOUT);
+
+  it('scores a test that passed on retry last run as flaky, so quarantine picks it', () => {
+    const out = path.join(tmp, 'flaky-by-retry');
+    const outputFile = path.join(out, 'quarantine.json');
+    const options = { quarantine: { enabled: true, threshold: 0.3, outputFile } };
+    runSuite(out, options, ['--grep', 'passes on retry']);
+    expect(playwright(out)).toEqual({ total: 1, passed: 1, failed: 0, skipped: 0, flaky: 1 });
+    runSuite(out, options, ['--grep', 'passes on retry']);
+
+    const [test] = reportData(out).tests;
+    expect([test.flakinessScore, test.flakinessIndicator]).toEqual([0.99, '🔴 Flaky']);
+    expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual([id('passes on retry')]);
+  }, TIMEOUT);
 });

@@ -138,6 +138,17 @@ describe('FlakinessAnalyzer', () => {
       expect(test.flakinessIndicator).toBe('🔴 Failing');
     });
 
+    it('counts a run that passed on retry as flaky, and keeps a score of 1 for runs that all failed', () => {
+      const passedOnRetry = { ...createHistoryEntry(true), retry: 1 };
+      const mixed = createTestResult();
+      analyzer.analyze(mixed, [passedOnRetry, createHistoryEntry(true)]);
+      const everyRunRetried = createTestResult();
+      analyzer.analyze(everyRunRetried, [passedOnRetry, passedOnRetry]);
+
+      expect([mixed.flakinessScore, mixed.flakinessIndicator]).toEqual([0.5, '🔴 Flaky']);
+      expect([everyRunRetried.flakinessScore, everyRunRetried.flakinessIndicator]).toEqual([0.99, '🔴 Flaky']);
+    });
+
     it('never rounds a mixed pass/fail history up to a score of 1', () => {
       const test = createTestResult();
       // 199 failures + 1 pass would round to 1.00 — must stay below 1 so

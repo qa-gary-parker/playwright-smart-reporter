@@ -39,10 +39,12 @@ export class FlakinessAnalyzer {
     }
 
     const failures = relevantHistory.filter(e => !e.passed).length;
+    // A run that passed only on a retry failed first, so it is flaky too.
+    const passedOnRetry = relevantHistory.filter(e => e.passed && (e.retry ?? 0) > 0).length;
     // Round to 2 decimals, but reserve a score of exactly 1 for tests where
     // EVERY run failed — score-based consumers treat 1 as "consistently
     // failing", so a 199/200 failure rate must not round up to 1.
-    const rounded = Math.round((failures / relevantHistory.length) * 100) / 100;
+    const rounded = Math.round(((failures + passedOnRetry) / relevantHistory.length) * 100) / 100;
     const flakinessScore = failures === relevantHistory.length ? 1 : Math.min(rounded, 0.99);
 
     test.flakinessScore = flakinessScore;
