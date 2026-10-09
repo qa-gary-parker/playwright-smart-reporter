@@ -1,5 +1,5 @@
 import { Dialog, Kbd } from '../../components';
-import { keymapOpen } from '../store';
+import { data, keymapOpen } from '../store';
 
 export const KEYMAP: Array<[string, Array<[string[], string]>]> = [
   [
@@ -20,7 +20,7 @@ export const KEYMAP: Array<[string, Array<[string[], string]>]> = [
       [['g l'], 'Flaky'],
       [['g i'], 'Insights'],
       [['g h'], 'History'],
-      [['1', '5'], 'Failures, All tests, Insights, History, Gallery'],
+      [['1', '5'], ['Failures', 'All tests', 'Insights', 'History', ...(data.value?.config.features.gallery === false ? [] : ['Gallery'])].join(', ')],
     ],
   ],
   [

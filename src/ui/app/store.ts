@@ -11,7 +11,20 @@ declare global {
 }
 
 export const data = signal<ReportData>(window.__SMART_DATA__ as ReportData);
-export const route = signal<Route>(parseHash(location.hash));
+
+// A view or tab whose feature is off, or that has no data, falls back instead of rendering.
+export function reachable(r: Route): Route {
+  const d = data.value;
+  if (!d) return r;
+  const f = d.config.features;
+  if ((r.view === 'gallery' && !f.gallery) || (r.view === 'live' && !f.live) || (r.view === 'coverage' && !d.coverage) || (r.view === 'a11y' && !d.a11y)) {
+    return { view: 'insights' };
+  }
+  if (r.view === 'history' && ((r.tab === 'trends' && !f.trends) || (r.tab === 'compare' && !f.comparison))) return { ...r, tab: 'heatmap' };
+  return r;
+}
+
+export const route = signal<Route>(reachable(parseHash(location.hash)));
 export const paletteOpen = signal(false);
 export const keymapOpen = signal(false);
 export const railOpen = signal(true);
@@ -21,10 +34,14 @@ export const summaryOpen = signal(false);
 export const queueOrder = signal<string[]>([]);
 
 window.addEventListener('hashchange', () => {
-  route.value = parseHash(location.hash);
+  const next = reachable(parseHash(location.hash));
+  route.value = next;
+  if (formatRoute(next) !== location.hash) location.replace(formatRoute(next));
 });
+if (route.value && formatRoute(route.value) !== location.hash && location.hash) location.replace(formatRoute(route.value));
 
 export function navigate(next: Route, replace = false): void {
+  next = reachable(next);
   const hash = formatRoute(next);
   route.value = next;
   if (location.hash === hash) return;

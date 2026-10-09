@@ -1,7 +1,7 @@
 import { isFailing, isFlaky, titlePath } from './data';
 import { failureSummary } from './detail-model';
 import type { Route } from './router';
-import { data, keymapOpen, multiProject, navigate, paletteOpen, queueOrder, railOpen, route, runTests, summaryOpen, testsById } from './store';
+import { data, keymapOpen, multiProject, navigate, paletteOpen, queueOrder, railOpen, reachable, route, runTests, summaryOpen, testsById } from './store';
 import { copyText } from './views/Detail';
 
 const NUMBERED: Route[] = [
@@ -125,6 +125,9 @@ export function onKeyDown(e: KeyboardEvent): void {
       if (r.view === 'queue' && r.test && window.matchMedia('(max-width: 899px)').matches) navigate({ ...r, test: undefined });
       return;
     default:
-      if (/^[1-5]$/.test(e.key)) navigate(NUMBERED[Number(e.key) - 1]);
+      if (/^[1-5]$/.test(e.key)) {
+        const to = NUMBERED[Number(e.key) - 1];
+        if (reachable(to).view === to.view) navigate(to);
+      }
   }
 }

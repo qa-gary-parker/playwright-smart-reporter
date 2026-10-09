@@ -230,3 +230,21 @@ test('the retry comparison appears for a test that failed and then passed, and n
   await expect(page.getByRole('heading', { level: 2 })).toContainText('pays with a saved card');
   await expect(page.getByRole('table', { name: 'Steps by attempt' })).toHaveCount(0);
 });
+
+test('views and tabs for features that are off cannot be opened by URL or shortcut', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light&off=gallery,trends,comparison', '#/gallery'));
+  await expect(page).toHaveURL(/#\/insights$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
+
+  await page.keyboard.press('5');
+  await expect(page).toHaveURL(/#\/insights$/);
+  await page.keyboard.press('4');
+  await expect(page).toHaveURL(/#\/history\/heatmap$/);
+  await expect(page.getByRole('tab')).toHaveText(['Reliability']);
+
+  await page.goto(url('screen=insights&mode=light&off=gallery,trends,comparison', '#/history/compare'));
+  await expect(page).toHaveURL(/#\/history\/heatmap$/);
+
+  await page.keyboard.press('?');
+  await expect(page.getByRole('dialog').getByText(/^Failures, All tests, Insights, History/)).toHaveText('Failures, All tests, Insights, History');
+});

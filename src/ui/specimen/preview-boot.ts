@@ -24,6 +24,9 @@ if (screen === 'green') {
   data.clusters = [];
 }
 
+// ?off=gallery,trends turns those features off, as the reporter options would.
+for (const feature of params.get('off')?.split(',') ?? []) (data.config.features as unknown as Record<string, boolean>)[feature] = false;
+
 // ?scale=N clones the fixture up to N tests to exercise virtualization.
 const scale = Number(params.get('scale') ?? 0);
 if (scale > data.tests.length) {
