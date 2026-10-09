@@ -280,7 +280,7 @@ export function buildFailureBundle(source: FailureBundleSource, opts: FailureBun
   const { meta } = source;
   // One redaction pass over the finished bundle, so no field can be missed. Ids and paths stay exact:
   // they are how a failure is looked up, and they come from the code, not from the run.
-  const bundle = redact.deep({
+  const bundle = redact.deep<FailureBundle>({
     format: FAILURE_BUNDLE_FORMAT,
     schemaVersion: FAILURE_BUNDLE_SCHEMA_VERSION,
     run: {
