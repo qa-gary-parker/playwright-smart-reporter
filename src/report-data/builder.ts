@@ -64,7 +64,8 @@ export function summarize(results: TestResultData[], duration: number): ReportSu
     passed,
     failed,
     skipped: results.filter(isSkippedTest).length,
-    flaky: results.filter((r) => isFlakyTest(r)).length,
+    // Passed on retry this run, as history and the comparison count it; the per-test 'flaky' signal also reads history.
+    flaky: results.filter((r) => r.outcome === 'flaky').length,
     slow: results.filter((r) => r.performanceTrend?.startsWith('↑')).length,
     newTests: results.filter((r) => r.flakinessIndicator?.includes('New')).length,
     passRate: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,

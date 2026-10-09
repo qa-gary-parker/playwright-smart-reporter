@@ -206,3 +206,21 @@ describe('history', () => {
     expect(reportData(path.join(tmp, 'run-id')).meta.runId).toBe('run-ci-7');
   }, TIMEOUT);
 });
+
+describe('flaky', () => {
+  it('counts a run as flaky only for tests that passed on retry in it, the same in the report, the trend and history', () => {
+    const out = path.join(tmp, 'flaky-by-history');
+    // Failed, then passed: flaky by history, but this run it passes first time.
+    runSuite(out, {}, ['--grep', 'fails when asked', '--retries=0'], { ACCEPTANCE_FAIL: '1' });
+    runSuite(out, {}, ['--grep', 'fails when asked']);
+    runSuite(out, {}, ['--grep', 'fails when asked']);
+
+    const data = reportData(out);
+    expect(data.tests[0].signals).toContain('flaky');
+    expect(playwright(out)).toEqual({ total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0 });
+    expect(counts(data.summary)).toEqual(playwright(out));
+    expect(counts(data.trends.at(-1)!)).toEqual(playwright(out));
+    expect(counts(data.comparison!.currentRun)).toEqual(playwright(out));
+    expect(counts(history(out).summaries!.at(-1)!)).toEqual(playwright(out));
+  }, TIMEOUT);
+});
