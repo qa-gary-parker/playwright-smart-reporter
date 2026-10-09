@@ -38,7 +38,7 @@ const data: JsonExportData = {
     rules: [
       { rule: 'maxFailures', passed: false, actual: '2', threshold: '≤ 0' },
       { rule: 'minPassRate', passed: true, actual: '50%', threshold: '≥ 40%' },
-      { rule: 'noNewFailures', passed: true, actual: 'N/A', threshold: 'new failures', skipped: true },
+      { rule: 'noNewFailures', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true },
     ],
   },
 };
@@ -59,7 +59,7 @@ describe('renderSummary', () => {
 |---|---|---|---|
 | Max failures | 2 | ≤ 0 | Failed |
 | Min pass rate | 50% | ≥ 40% | Passed |
-| No new failures | N/A | new failures | Skipped |
+| No new failures | N/A | ≤ 0 | Skipped |
 
 ### Failures (2, 1 new)
 

@@ -421,6 +421,8 @@ describe('QualityGateEvaluator', () => {
       const rule = result.rules.find(r => r.rule === 'noNewFailures');
       expect(rule?.passed).toBe(false);
       expect(rule?.actual).toBe('1');
+      // Read as a value like the other rules: "1 ≤ 0" in the terminal, a 0 limit in the summary table.
+      expect(rule?.threshold).toBe('≤ 0');
     });
 
     it('is skipped when no comparison data is provided', () => {

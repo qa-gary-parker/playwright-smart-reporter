@@ -168,7 +168,7 @@ export class QualityGateEvaluator {
         rule: 'noNewFailures',
         passed: true,
         actual: 'N/A',
-        threshold: 'new failures',
+        threshold: '≤ 0',
         skipped: true,
       };
     }
@@ -179,7 +179,7 @@ export class QualityGateEvaluator {
       rule: 'noNewFailures',
       passed: newFailureCount === 0,
       actual: String(newFailureCount),
-      threshold: 'new failures',
+      threshold: '≤ 0',
     };
   }
 
