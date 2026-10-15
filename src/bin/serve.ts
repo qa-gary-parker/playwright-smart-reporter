@@ -87,7 +87,12 @@ function parseArgs(argv: string[]): ServeOptions {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--port') {
-      options.port = parseInt(args[++i] || '0', 10);
+      const value = args[++i] ?? '';
+      options.port = Number(value);
+      if (!/^\d+$/.test(value) || options.port > 65535) {
+        console.error(`Error: --port must be a whole number from 0 to 65535 (got "${value}").`);
+        process.exit(1);
+      }
     } else if (arg === '--no-open') {
       options.open = false;
     } else if (arg === '--live') {
@@ -162,39 +167,45 @@ function openBrowser(url: string): void {
   });
 }
 
-/**
- * Sanitize a string for safe shell interpolation — strip dangerous metacharacters.
- */
-function sanitizeShellArg(input: string): string {
-  return input.replace(/[;&`$(){}!\\\n\r]/g, '');
+// Quotes one argument so the shell passes it through literally. Windows cmd cannot quote every
+// character safely, so there the characters it would act on are refused instead.
+function shellQuote(arg: string): string | undefined {
+  if (/[\0\r\n]/.test(arg)) return undefined;
+  if (process.platform === 'win32') return /["%!^]/.test(arg) ? undefined : `"${arg}"`;
+  return `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
- * Build filtered Playwright command from base command + filter payload.
+ * Build filtered Playwright command from base command + filter payload. Undefined when a value cannot be passed safely.
  */
 function buildFilteredCommand(
   baseCommand: string,
-  filters: { files?: string[]; grep?: string }
-): string {
+  filters: { files?: unknown; grep?: unknown }
+): string | undefined {
   const parts = [baseCommand];
+  const files = filters.files === undefined ? [] : filters.files;
+  if (!Array.isArray(files) || !files.every((f) => typeof f === 'string')) return undefined;
+  if (filters.grep !== undefined && typeof filters.grep !== 'string') return undefined;
 
-  if (filters.files && Array.isArray(filters.files) && filters.files.length > 0) {
-    for (const file of filters.files) {
-      const safe = sanitizeShellArg(file);
-      if (!safe) continue;
-      // Prefix with ./ to prevent substring matching (e.g. "demo.spec.ts" matching "feature-demo.spec.ts")
-      const anchored = safe.startsWith('./') || safe.startsWith('/') ? safe : `./${safe}`;
-      parts.push(`"${anchored}"`);
-    }
+  for (const file of files) {
+    if (!file) continue;
+    // Prefix with ./ to prevent substring matching (e.g. "demo.spec.ts" matching "feature-demo.spec.ts")
+    const quoted = shellQuote(file.startsWith('./') || file.startsWith('/') ? file : `./${file}`);
+    if (!quoted) return undefined;
+    parts.push(quoted);
   }
 
-  if (filters.grep && typeof filters.grep === 'string') {
-    const safe = sanitizeShellArg(filters.grep);
-    if (safe) parts.push(`--grep "${safe}"`);
+  if (filters.grep) {
+    const quoted = shellQuote(filters.grep);
+    if (!quoted) return undefined;
+    parts.push('--grep', quoted);
   }
 
   return parts.join(' ');
 }
+
+// Only the report trace and media files are served from the working directory, never project files such as .env.
+const CWD_FALLBACK_EXTENSIONS = new Set(['.zip', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.webm', '.mp4']);
 
 function main(): void {
   const options = parseArgs(process.argv);
@@ -215,15 +226,33 @@ function main(): void {
     return remoteAddr.includes('127.0.0.1') || remoteAddr.includes('::1');
   }
 
+  // The report is only ever opened as http://localhost:<port> or http://127.0.0.1:<port>.
+  let localOrigins = new Set<string>();
+  const isLocalHost = (req: http.IncomingMessage) => localOrigins.has(`http://${req.headers.host ?? ''}`);
+  // Browsers send Origin with cross-site requests; a request without one comes from a local tool such as curl.
+  const isOwnOrigin = (req: http.IncomingMessage) => !req.headers.origin || localOrigins.has(req.headers.origin);
+
   function setRunCors(res: http.ServerResponse, req: http.IncomingMessage): void {
     const origin = req.headers.origin || '';
-    if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+    if (localOrigins.has(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     }
   }
 
+  function refuse(res: http.ServerResponse, status: number, error: string): void {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error }));
+  }
+
   const server = http.createServer((req, res) => {
+    // DNS rebinding: a page on another domain can resolve that domain to 127.0.0.1, so check the Host it asked for.
+    if (!isLocalHost(req)) {
+      refuse(res, 403, 'Forbidden host');
+      return;
+    }
+
     // CORS preflight for /run
     if (req.url === '/run' && req.method === 'OPTIONS') {
       setRunCors(res, req);
@@ -238,7 +267,6 @@ function main(): void {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
       });
       res.write(':ok\n\n');
       const client = { write: (data: string) => res.write(data), end: () => res.end() };
@@ -250,6 +278,10 @@ function main(): void {
     // Cancel test run endpoint
     if (req.url === '/run' && req.method === 'DELETE' && options.runCommand) {
       setRunCors(res, req);
+      if (!isOwnOrigin(req)) {
+        refuse(res, 403, 'Runs can only be controlled from the report');
+        return;
+      }
       if (!isLocalhostRequest(req)) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Only localhost requests allowed' }));
@@ -274,6 +306,15 @@ function main(): void {
     // Run tests endpoint (only when --run-command is configured)
     if (req.url === '/run' && req.method === 'POST' && options.runCommand) {
       setRunCors(res, req);
+      if (!isOwnOrigin(req)) {
+        refuse(res, 403, 'Runs can only be started from the report');
+        return;
+      }
+      // JSON makes a cross-site browser request send a CORS preflight first, which only the report's origin passes.
+      if (!/^application\/json\b/.test(req.headers['content-type'] ?? '')) {
+        refuse(res, 415, 'Send the run filters as application/json');
+        return;
+      }
       if (!isLocalhostRequest(req)) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Only localhost requests allowed' }));
@@ -290,14 +331,18 @@ function main(): void {
       let body = '';
       req.on('data', (chunk) => { body += chunk; });
       req.on('end', () => {
-        let filters: { files?: string[]; grep?: string } = {};
+        let filters: { files?: unknown; grep?: unknown } = {};
         try {
-          if (body) filters = JSON.parse(body);
+          if (body) filters = JSON.parse(body) ?? {};
         } catch {
           // ignore malformed body — run unfiltered
         }
 
-        const fullCommand = buildFilteredCommand(options.runCommand, filters);
+        const fullCommand = buildFilteredCommand(options.runCommand, typeof filters === 'object' ? filters : {});
+        if (!fullCommand) {
+          refuse(res, 400, 'A filter value cannot be passed to the run command safely');
+          return;
+        }
 
         // Truncate live JSONL so SSE clients don't replay old events
         const liveFilePath = path.resolve(options.runCwd, options.liveFile);
@@ -315,6 +360,12 @@ function main(): void {
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 
+        runChild.on('error', (err) => {
+          options.running = false;
+          options.lastExitCode = -1;
+          runChild = null;
+          console.error(`\n  Could not start the test run: ${err.message}`);
+        });
         runChild.stdout?.on('data', (data: Buffer) => process.stdout.write(data));
         runChild.stderr?.on('data', (data: Buffer) => process.stderr.write(data));
 
@@ -343,7 +394,14 @@ function main(): void {
       return;
     }
 
-    const urlPath = decodeURIComponent(req.url || '/');
+    let urlPath: string;
+    try {
+      urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+    } catch {
+      res.writeHead(400);
+      res.end('Bad request');
+      return;
+    }
     const safePath = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
 
     // Default to report file
@@ -353,7 +411,7 @@ function main(): void {
     // Security: ensure we don't serve files outside the report directory
     const resolvedFile = path.resolve(filePath);
     const resolvedDir = path.resolve(dir);
-    if (!resolvedFile.startsWith(resolvedDir)) {
+    if (resolvedFile !== resolvedDir && !resolvedFile.startsWith(resolvedDir + path.sep)) {
       res.writeHead(403);
       res.end('Forbidden');
       return;
@@ -365,12 +423,12 @@ function main(): void {
       const cwdPath = path.join(process.cwd(), requestedFile);
       const resolvedCwd = path.resolve(cwdPath);
       const resolvedCwdDir = path.resolve(process.cwd());
-      if (!resolvedCwd.startsWith(resolvedCwdDir)) {
+      if (!resolvedCwd.startsWith(resolvedCwdDir + path.sep)) {
         res.writeHead(403);
         res.end('Forbidden');
         return;
       }
-      if (fs.existsSync(cwdPath) && fs.statSync(cwdPath).isFile()) {
+      if (CWD_FALLBACK_EXTENSIONS.has(path.extname(cwdPath).toLowerCase()) && fs.existsSync(cwdPath) && fs.statSync(cwdPath).isFile()) {
         serveFile(cwdPath, res, req);
         return;
       }
@@ -395,12 +453,13 @@ function main(): void {
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
     const origin = req.headers.origin || '';
-    const corsHeader = /^https?:\/\/localhost(:\d+)?$/.test(origin) ? origin : '';
+    const corsHeader = localOrigins.has(origin) ? origin : '';
 
     // When live mode is enabled and this is the report HTML, inject SSE URL and run capability
     if (options.live && ext === '.html') {
       let body = fs.readFileSync(filePath, 'utf-8');
-      if (body.includes('data-live-mode')) {
+      // The 2.x live page and the v3 report both declare where SSE events come from.
+      if (body.includes('data-live-mode') || body.includes('name="smart-live-sse"')) {
         body = body.replace(/__SSE_URL__/g, '/sse');
       }
       if (options.runCommand) {
@@ -437,6 +496,7 @@ function main(): void {
     const addr = server.address();
     const port = typeof addr === 'object' && addr ? addr.port : options.port;
     const url = `http://localhost:${port}`;
+    localOrigins = new Set([url, `http://127.0.0.1:${port}`, `http://[::1]:${port}`]);
 
     console.log(`\n  Serving smart report from: ${dir}`);
     console.log(`  Report file: ${file}`);

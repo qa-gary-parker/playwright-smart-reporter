@@ -158,5 +158,7 @@ async function main(): Promise<void> {
   await runPlaywrightShowTrace(traceFsPath);
 }
 
-void main();
-
+main().catch((err: unknown) => {
+  console.error(`Error: Could not run playwright show-trace: ${err instanceof Error ? err.message : err}`);
+  process.exit(1);
+});

@@ -1,5 +1,8 @@
 import type { TestResultData, TestHistoryEntry, PerformanceMetrics } from '../types';
 
+// A change also has to be this many ms, so jitter in short tests is not a trend.
+export const MIN_DURATION_CHANGE_MS = 250;
+
 /**
  * Analyzes test performance trends and regressions
  */
@@ -34,7 +37,18 @@ export class PerformanceAnalyzer {
 
     // Calculate average duration from history (rounded to whole ms)
     const avgDuration = Math.round(relevantHistory.reduce((sum, e) => sum + e.duration, 0) / relevantHistory.length);
+    // A 0ms average has no percentage change to report.
+    if (avgDuration === 0) {
+      test.performanceTrend = '→ Baseline';
+      return;
+    }
     test.averageDuration = avgDuration;
+
+    // A failed run's duration is mostly time spent waiting on the failure, not a speed change.
+    if (test.status !== 'passed') {
+      test.performanceTrend = '→ Not compared';
+      return;
+    }
 
     // Calculate performance trend
     test.performanceTrend = this.getPerformanceTrend(test.duration, avgDuration);
@@ -49,10 +63,10 @@ export class PerformanceAnalyzer {
   private getPerformanceTrend(current: number, average: number): string {
     const diff = (current - average) / average;
 
-    if (diff > this.performanceThreshold) {
+    if (diff > this.performanceThreshold && current - average >= MIN_DURATION_CHANGE_MS) {
       return `↑ ${Math.round(diff * 100)}% slower`;
     }
-    if (diff < -this.performanceThreshold) {
+    if (diff < -this.performanceThreshold && average - current >= MIN_DURATION_CHANGE_MS) {
       return `↓ ${Math.round(Math.abs(diff) * 100)}% faster`;
     }
     return '→ Stable';
@@ -64,8 +78,8 @@ export class PerformanceAnalyzer {
   private calculateMetrics(current: number, average: number): PerformanceMetrics {
     const percentChange = Math.round(((current - average) / average) * 1000) / 10; // 1 decimal place
     const absoluteChange = Math.round(current - average); // whole ms
-    const isRegression = percentChange > this.performanceThreshold * 100;
-    const isImprovement = percentChange < -this.performanceThreshold * 100;
+    const isRegression = percentChange > this.performanceThreshold * 100 && absoluteChange >= MIN_DURATION_CHANGE_MS;
+    const isImprovement = percentChange < -this.performanceThreshold * 100 && absoluteChange <= -MIN_DURATION_CHANGE_MS;
 
     // Determine severity based on magnitude of change
     let severity: 'low' | 'medium' | 'high' = 'low';

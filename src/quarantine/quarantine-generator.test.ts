@@ -331,6 +331,19 @@ describe('QuarantineGenerator', () => {
 });
 
 describe('getQuarantinedPattern', () => {
+  function quarantineFileAt(filePath: string, titles: string[]): void {
+    const data: QuarantineFile = {
+      generatedAt: new Date().toISOString(),
+      threshold: 0.3,
+      entries: titles.map((title, i) => ({ testId: `t${i}`, title, file: 'a.spec.ts', flakinessScore: 0.5, quarantinedAt: new Date().toISOString() })),
+    };
+    mockFs.existsSync.mockImplementation(p => p === filePath);
+    mockFs.readFileSync.mockImplementation(((p: fs.PathOrFileDescriptor) => {
+      if (p !== filePath) throw new Error(`ENOENT: ${p}`);
+      return JSON.stringify(data);
+    }) as typeof fs.readFileSync);
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -348,11 +361,9 @@ describe('getQuarantinedPattern', () => {
   });
 
   it('uses default file path when none provided', () => {
-    mockFs.existsSync.mockReturnValue(false);
+    quarantineFileAt('.smart-quarantine.json', ['Login test']);
 
-    getQuarantinedPattern();
-
-    expect(mockFs.existsSync).toHaveBeenCalledWith('.smart-quarantine.json');
+    expect(getQuarantinedPattern()).toEqual(/Login test/);
   });
 
   it('returns undefined when file has no entries', () => {
@@ -428,27 +439,18 @@ describe('getQuarantinedPattern', () => {
   });
 
   it('uses custom file path when provided', () => {
-    mockFs.existsSync.mockReturnValue(false);
+    quarantineFileAt('/custom/quarantine.json', ['Login test']);
 
-    getQuarantinedPattern('/custom/quarantine.json');
-
-    expect(mockFs.existsSync).toHaveBeenCalledWith('/custom/quarantine.json');
+    expect(getQuarantinedPattern('/custom/quarantine.json')).toEqual(/Login test/);
   });
 
   it('handles titles with pipe characters correctly', () => {
-    const quarantineData: QuarantineFile = {
-      generatedAt: new Date().toISOString(),
-      threshold: 0.3,
-      entries: [
-        { testId: 't1', title: 'Test | with pipe', file: 'a.spec.ts', flakinessScore: 0.5, quarantinedAt: new Date().toISOString() },
-      ],
-    };
-    mockFs.existsSync.mockReturnValue(true);
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(quarantineData));
+    quarantineFileAt('.smart-quarantine.json', ['Test | with pipe']);
 
     const result = getQuarantinedPattern();
 
-    expect(result).toBeInstanceOf(RegExp);
+    expect(result).toEqual(/Test \| with pipe/);
     expect(result!.test('Test | with pipe')).toBe(true);
+    expect(result!.test('Test passes')).toBe(false);
   });
 });

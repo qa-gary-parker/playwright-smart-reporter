@@ -35,6 +35,8 @@ import {
   StepCollector,
   AttachmentCollector,
   NetworkCollector,
+  A11yCollector,
+  CoverageCollector,
 } from './collectors';
 
 // ============================================================================
@@ -48,25 +50,33 @@ import {
   FailureClusterer,
   StabilityScorer,
   AIAnalyzer,
+  forecastRun,
 } from './analyzers';
 
 // ============================================================================
 // Imports: Generators & Notifiers
 // ============================================================================
 
-import { generateHtml, type HtmlGeneratorData, type GeneratedReport } from './generators/html-generator';
-import { buildComparison } from './generators/comparison-generator';
+import { buildComparison } from './report-data/comparison';
+import { buildReportData, type ReportInput } from './report-data/builder';
+import { loadUiAssets, writeReport } from './report-data/writer';
 import { exportJsonData } from './generators/json-exporter';
+import { writeFailureBundle } from './agent/failure-bundle';
 import { exportJunitXml } from './generators/junit-exporter';
+import { exportCtrfReport } from './generators/ctrf-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlakyTest } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from './utils';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
+import { readTrace, type TraceContents } from './collectors/trace-reader';
+import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
+import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
+import type { ReportCoverage } from './report-data/schema';
 
 // ============================================================================
 // Smart Reporter
@@ -87,6 +97,8 @@ class SmartReporter implements Reporter {
   private stepCollector: StepCollector;
   private attachmentCollector: AttachmentCollector;
   private networkCollector: NetworkCollector;
+  private a11yCollector = new A11yCollector();
+  private coverageCollector?: CoverageCollector;
 
   // Analyzers
   private flakinessAnalyzer!: FlakinessAnalyzer;
@@ -112,6 +124,9 @@ class SmartReporter implements Reporter {
   private ciInfo?: CIInfo;
   private liveWriter: LiveWriter;
   private liveFirstFailureSent: boolean = false;
+  private ownership = new Map<string, OwnerInfo>();
+  private testIds = new Map<string, string>(); // Playwright's test.id -> the id results and history are keyed on
+  private allTests: TestCase[] = [];
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -124,16 +139,16 @@ class SmartReporter implements Reporter {
     });
     this.attachmentCollector = new AttachmentCollector();
 
-    // Note: NetworkCollector is initialized in onBegin when we have access to full config
     this.networkCollector = new NetworkCollector({
-      excludeStaticAssets: false,  // Show all network activity by default
-      maxEntries: 30,
+      urlFilter: options.networkLogFilter,
+      excludeStaticAssets: options.networkLogExcludeAssets ?? true,
+      maxEntries: options.networkLogMaxEntries ?? 50,
       includeBodies: true,
     });
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
-    this.aiAnalyzer = new AIAnalyzer();
+    this.aiAnalyzer = new AIAnalyzer(options.ai);
 
     // Initialize live writer (defaults to disabled no-op)
     if (options.live?.enabled) {
@@ -161,13 +176,23 @@ class SmartReporter implements Reporter {
     // When relativeToCwd is true, use process.cwd() instead of config.rootDir
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
     this.fullConfig = config;
+    this.allTests = suite.allTests();
+    const legacyIds = this.assignTestIds(this.allTests);
 
     // Auto-detect CI environment
     this.ciInfo = detectCIInfo();
 
+    // Resolve owners once per run, for every test file, so live notifications can route too
+    try {
+      this.ownership = resolveOwnership(suite.allTests().map(t => t.location.file), config.rootDir, this.options.ownership);
+    } catch (err) {
+      console.warn('⚠️  Ownership resolution failed:', err instanceof Error ? err.message : err);
+    }
+
     // Initialize HistoryCollector and load history
     this.historyCollector = new HistoryCollector(this.options, this.outputDir);
     this.historyCollector.loadHistory();
+    this.historyCollector.adoptLegacyIds(legacyIds);
 
     // Re-initialize attachment collector with output directory for CSP-safe mode
     const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');
@@ -175,7 +200,9 @@ class SmartReporter implements Reporter {
     this.attachmentCollector = new AttachmentCollector({
       cspSafe: this.options.cspSafe,
       outputDir: outputDir,
+      reportName: path.basename(outputPath, '.html'),
     });
+    this.coverageCollector = new CoverageCollector(this.outputDir);
 
     // Initialize all analyzers with thresholds from options
     const thresholds = this.options.thresholds;
@@ -230,6 +257,9 @@ class SmartReporter implements Reporter {
   async onTestEnd(test: TestCase, result: TestResult): Promise<void> {
     const testId = this.getTestId(test);
     const file = path.relative(this.outputDir, test.location.file);
+    // Phase 6: Code coverage. Started before any await: Playwright does not await onTestEnd,
+    // and onEnd waits for every collect() it has seen. Errors are caught inside the collector.
+    void this.coverageCollector?.collect(result);
 
     // Collect test components
     const steps = this.stepCollector.extractSteps(result);
@@ -331,6 +361,8 @@ class SmartReporter implements Reporter {
       testId,
       title: test.title,
       file,
+      line: test.location.line,
+      column: test.location.column,
       status: result.status,
       duration: result.duration,
       retry: result.retry,
@@ -350,26 +382,22 @@ class SmartReporter implements Reporter {
       expectedStatus,
     };
 
+    const ownerInfo = this.ownership.get(test.location.file);
+    if (ownerInfo) {
+      testData.owners = ownerInfo.owners;
+      testData.ownerSource = ownerInfo.source;
+    }
+
     // Add error if failed (strip ANSI codes for clean display)
     if (result.status === 'failed' || result.status === 'timedOut') {
       const error = result.errors[0];
       if (error) {
         const rawError = error.stack || error.message || 'Unknown error';
         testData.error = stripAnsiCodes(rawError);
-      }
-    }
-
-    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
-    if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
-      try {
-        testData.aiPrompt = buildPlaywrightStyleAiPrompt({
-          config: this.fullConfig,
-          test,
-          result,
-        });
-      } catch (err) {
-        // Prompt building should never fail the reporter
-        console.warn(`Failed to build AI prompt for "${test.title}":`, err);
+        if (error.snippet) testData.errorSnippet = stripAnsiCodes(error.snippet);
+        if (error.location) {
+          testData.errorLocation = { ...error.location, file: path.relative(this.outputDir, error.location.file) };
+        }
       }
     }
 
@@ -387,26 +415,22 @@ class SmartReporter implements Reporter {
     const traceAttachment = result.attachments.find(
       a => a.name === 'trace' && a.contentType === 'application/zip'
     );
+    const wantTimeline = (result.status === 'failed' || result.status === 'timedOut') && this.options.enableCausalTimeline !== false;
+    let trace: TraceContents | undefined;
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
-      // Embed trace as base64 for one-click viewing (skip in CSP-safe mode)
-      // Respect maxEmbeddedSize to prevent huge HTML files (default: 5MB)
-      const maxEmbeddedSize = this.options.maxEmbeddedSize ?? 5 * 1024 * 1024;
-      if (!this.options.cspSafe) {
+      // One trace read feeds both the network log and the causal timeline
+      if (this.options.enableNetworkLogs !== false || wantTimeline) {
         try {
-          const stats = fs.statSync(traceAttachment.path);
-          if (stats.size <= maxEmbeddedSize) {
-            const traceBuffer = fs.readFileSync(traceAttachment.path);
-            testData.traceData = `data:application/zip;base64,${traceBuffer.toString('base64')}`;
-          }
-        } catch {
-          // If we can't read the trace, just use the path
+          trace = readTrace(traceAttachment.path, { timeline: wantTimeline });
+        } catch (err) {
+          console.warn(`Failed to parse trace file: ${traceAttachment.path}`, err);
         }
       }
       // Extract network logs from trace (enabled by default when traces exist)
-      if (this.options.enableNetworkLogs !== false) {
+      if (trace && this.options.enableNetworkLogs !== false) {
         try {
-          const networkLogs = await this.networkCollector.collectFromTrace(traceAttachment.path);
+          const networkLogs = this.networkCollector.collectFromContents(trace);
           if (networkLogs.entries.length > 0) {
             testData.networkLogs = networkLogs;
           }
@@ -416,18 +440,61 @@ class SmartReporter implements Reporter {
       }
     }
 
+    // Phase 10: Accessibility
+    try {
+      const a11y = this.a11yCollector.collect(result);
+      if (a11y) testData.a11y = a11y;
+    } catch (err) {
+      console.warn(`Smart Reporter: could not read accessibility results for "${test.title}":`, err);
+    }
+
+    if (wantTimeline) {
+      try {
+        const attemptStart = result.startTime.getTime();
+        testData.timeline = buildCausalTimeline({
+          attemptStart,
+          attemptDuration: result.duration,
+          steps,
+          failureAt: findFailureMoment(result.steps, attemptStart),
+          trace,
+          history,
+        });
+      } catch (err) {
+        console.warn(`Failed to build causal timeline for "${test.title}":`, err);
+      }
+    }
+
+    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
+    if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
+      try {
+        testData.aiPrompt = buildPlaywrightStyleAiPrompt({
+          config: this.fullConfig,
+          test,
+          result,
+          firstAnomaly: testData.timeline?.firstAnomaly,
+        });
+      } catch (err) {
+        // Prompt building should never fail the reporter
+        console.warn(`Failed to build AI prompt for "${test.title}":`, err);
+      }
+    }
+
     // Run all analyzers (flakiness, performance, retries, stability)
     this.flakinessAnalyzer.analyze(testData, history);
     this.performanceAnalyzer.analyze(testData, history);
-    this.retryAnalyzer.analyze(testData, history);
-    this.stabilityScorer.scoreTest(testData);
+    if (this.options.enableRetryAnalysis !== false) this.retryAnalyzer.analyze(testData, history);
+    if (this.options.enableStabilityScore !== false) this.stabilityScorer.scoreTest(testData);
 
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
     const existingResult = this.resultsMap.get(testId);
+    const attempt = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
+    testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
     if (!existingResult || result.retry > existingResult.retry) {
       // This is a newer attempt - replace the previous one
       this.resultsMap.set(testId, testData);
+    } else {
+      existingResult.attempts = testData.attempts;
     }
 
     // Write live result for real-time dashboard
@@ -467,10 +534,24 @@ class SmartReporter implements Reporter {
    * Performs final analysis, generates HTML report, updates history, and sends notifications
    * @param result - Full test run result
    */
-  async onEnd(result: FullResult): Promise<void> {
+  async onEnd(result: FullResult): Promise<{ status?: FullResult['status'] } | undefined> {
+    // Tests that never started (a failed setup project, --max-failures, Ctrl-C) get no onTestEnd, and the
+    // global timeout skips it for the test it cuts off. Playwright reports them as skipped, so add them.
+    for (const test of this.allTests) {
+      if (this.resultsMap.has(this.getTestId(test))) continue;
+      await this.onTestEnd(test, test.results[test.results.length - 1] ?? {
+        retry: 0, parallelIndex: -1, workerIndex: -1, duration: 0, startTime: new Date(this.startTime), status: 'skipped',
+        errors: [], attachments: [], annotations: [], steps: [], stdout: [], stderr: [],
+      });
+    }
+
     // Convert resultsMap to array - this ensures we only have the final attempt for each test
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());
+
+    // Durations below are Date.now() - startTime. merge-reports calls onBegin at merge time,
+    // so start the clock from the run's own duration instead.
+    if (result.duration > 0) this.startTime = Date.now() - result.duration;
 
     // Signal live reporting that the run is complete
     // Note: JSONL file is intentionally NOT cleaned up here — the SSE handler
@@ -479,37 +560,42 @@ class SmartReporter implements Reporter {
     this.liveWriter.complete(Date.now() - this.startTime);
 
     // Get failure clusters
-    const failureClusters = this.failureClusterer.clusterFailures(this.results);
+    const failureClusters = this.options.enableFailureClustering === false ? [] : this.failureClusterer.clusterFailures(this.results);
 
     // Run AI analysis on failures and clusters if enabled
     const options = this.historyCollector.getOptions();
     let aiSuiteHealthSummary: string | undefined;
-    if (options.enableAIRecommendations !== false) {
-      await this.aiAnalyzer.analyzeFailed(this.results);
-      if (failureClusters.length > 0) {
-        await this.aiAnalyzer.analyzeClusters(failureClusters);
+    // An AI outage must never fail the run (Phase 0.5)
+    try {
+      if (options.enableAIRecommendations !== false) {
+        await this.aiAnalyzer.analyzeFailed(this.results);
+        if (failureClusters.length > 0) {
+          await this.aiAnalyzer.analyzeClusters(failureClusters);
+        }
+        // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
+        if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
+          const passed = this.results.filter(isPassedTest).length;
+          const failed = this.results.filter(isFailedTest).length;
+          const skipped = this.results.filter(isSkippedTest).length;
+          const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
+          const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
+          const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
+          const total = this.results.length;
+          const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+          const avgStability = this.results.reduce((sum, r) => sum + (r.stabilityScore?.overall ?? 100), 0) / Math.max(total, 1);
+          const suiteStats = {
+            total, passed, failed, skipped,
+            flaky: flakyCount, slow: slowCount, needsRetry,
+            passRate, averageStability: Math.round(avgStability),
+          };
+          const historySummaries = this.historyCollector.getHistory().summaries ?? [];
+          aiSuiteHealthSummary = await this.aiAnalyzer.analyzeSuiteHealth(
+            this.results, suiteStats, failureClusters, historySummaries,
+          );
+        }
       }
-      // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
-      if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
-        const passed = this.results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-        const failed = this.results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
-        const skipped = this.results.filter(r => r.status === 'skipped').length;
-        const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
-        const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
-        const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
-        const total = this.results.length;
-        const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-        const avgStability = this.results.reduce((sum, r) => sum + (r.stabilityScore?.overall ?? 100), 0) / Math.max(total, 1);
-        const suiteStats = {
-          total, passed, failed, skipped,
-          flaky: flakyCount, slow: slowCount, needsRetry,
-          passRate, averageStability: Math.round(avgStability),
-        };
-        const historySummaries = this.historyCollector.getHistory().summaries ?? [];
-        aiSuiteHealthSummary = await this.aiAnalyzer.analyzeSuiteHealth(
-          this.results, suiteStats, failureClusters, historySummaries,
-        );
-      }
+    } catch (err) {
+      console.warn('⚠️  AI analysis failed and was skipped:', err);
     }
 
     // Get comparison data if enabled
@@ -520,16 +606,9 @@ class SmartReporter implements Reporter {
         // Build current run summary with proper outcome-based counting
         // Issue #17: Use outcome to properly count flaky tests
         // Issue #16: Tests with expectedStatus='failed' that fail are counted as passed (expected behavior)
-        const passed = this.results.filter(r =>
-          r.status === 'passed' ||
-          r.outcome === 'expected' ||  // Expected failures count as "passed" (they behaved as expected)
-          r.outcome === 'flaky'        // Flaky tests passed on retry
-        ).length;
-        const failed = this.results.filter(r =>
-          r.outcome === 'unexpected' && // Only count truly unexpected failures
-          (r.status === 'failed' || r.status === 'timedOut')
-        ).length;
-        const skipped = this.results.filter(r => r.status === 'skipped').length;
+        const passed = this.results.filter(isPassedTest).length;
+        const failed = this.results.filter(isFailedTest).length;
+        const skipped = this.results.filter(isSkippedTest).length;
         // Flaky: tests that passed on retry (outcome === 'flaky')
         const flaky = this.results.filter(r => r.outcome === 'flaky').length;
         const slow = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
@@ -552,19 +631,19 @@ class SmartReporter implements Reporter {
         const baselineTests = new Map<string, TestResultData>();
         const history = this.historyCollector.getHistory();
 
-        // Reconstruct baseline test results from history
+        // Reconstruct baseline test results: each test's last entry, or with baselineRunId its entry for that run
+        // (history saved before entries carried a run id cannot tell, so it keeps the last entry).
+        const pinned = !!options.baselineRunId && Object.values(history.tests).some(entries => entries.some(e => e.runId === baselineRun.runId));
         for (const [testId, entries] of Object.entries(history.tests)) {
-          if (entries.length > 0) {
-            const lastEntry = entries[entries.length - 1];
-            const matchingTest = this.results.find(r => r.testId === testId);
+          const entry = pinned ? entries.filter(e => e.runId === baselineRun.runId).pop() : entries[entries.length - 1];
+          const matchingTest = this.results.find(r => r.testId === testId);
 
-            if (matchingTest) {
-              baselineTests.set(testId, {
-                ...matchingTest,
-                status: lastEntry.passed ? 'passed' : 'failed',
-                duration: lastEntry.duration,
-              });
-            }
+          if (entry && matchingTest) {
+            baselineTests.set(testId, {
+              ...matchingTest,
+              status: entry.skipped ? 'skipped' : entry.passed ? 'passed' : 'failed',
+              duration: entry.duration,
+            });
           }
         }
 
@@ -572,7 +651,8 @@ class SmartReporter implements Reporter {
           this.results,
           currentSummary,
           baselineRun,
-          baselineTests
+          baselineTests,
+          this.options.thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2,
         );
       }
     }
@@ -584,9 +664,7 @@ class SmartReporter implements Reporter {
     const traceResults = this.results.filter(r => r.attachments?.traces && r.attachments.traces.length > 0);
 
     if (traceResults.length > 0) {
-      if (!fs.existsSync(tracesDir)) {
-        fs.mkdirSync(tracesDir, { recursive: true });
-      }
+      fs.mkdirSync(tracesDir, { recursive: true });
 
       for (const result of traceResults) {
         if (result.attachments && result.attachments.traces) {
@@ -597,9 +675,13 @@ class SmartReporter implements Reporter {
               const safeTestId = sanitizeFilename(result.testId);
               const traceFileName = `${safeTestId}-trace-${i}.zip`;
               const destPath = path.join(tracesDir, traceFileName);
-              fs.copyFileSync(tracePath, destPath);
-              // Update the path to relative for HTML
-              result.attachments.traces[i] = `./traces/${traceFileName}`;
+              try {
+                fs.copyFileSync(tracePath, destPath);
+                // Update the path to relative for HTML
+                result.attachments.traces[i] = `./traces/${traceFileName}`;
+              } catch (err) {
+                console.warn(`⚠️  Could not copy trace ${tracePath}:`, err);
+              }
             }
           }
         }
@@ -633,12 +715,20 @@ class SmartReporter implements Reporter {
 
     const exportDir = path.dirname(outputPath);
 
+    // Phase 6: Code coverage - merged before gates so minCoverage can read it
+    let coverage: ReportCoverage | undefined;
+    try {
+      coverage = await this.coverageCollector?.finish();
+    } catch (err) {
+      console.warn('⚠️  Coverage merge failed:', err);
+    }
+
     // Quality gates - evaluate BEFORE HTML generation so results embed in report
     let qualityGateResult: QualityGateResult | undefined;
     if (this.options.qualityGates) {
       try {
         const evaluator = new QualityGateEvaluator();
-        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison);
+        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary);
       } catch (err) {
         console.warn('⚠️  Quality gate evaluation failed:', err);
       }
@@ -659,41 +749,53 @@ class SmartReporter implements Reporter {
       }
     }
 
-	    const htmlData: HtmlGeneratorData = {
-	      results: this.results,
-	      history: this.historyCollector.getHistory(),
-	      startTime: this.startTime,
-	      options: this.options,
-	      comparison,
-	      historyRunSnapshots,
-	      failureClusters,
-	      ciInfo: this.ciInfo,
-	      outputBasename: path.basename(outputPath, '.html'),
-	      qualityGateResult,
-	      quarantinedTestIds,
-	      quarantineEntries: quarantineResult?.entries,
-	      quarantineThreshold: this.options.quarantine?.threshold,
-	      aiSuiteHealthSummary,
-	    };
+    const reportInput: ReportInput = {
+      results: this.results,
+      runId: this.historyCollector.getCurrentRun().runId,
+      history: this.historyCollector.getHistory(),
+      startTime: this.startTime,
+      options: this.options,
+      comparison,
+      historyRunSnapshots,
+      failureClusters,
+      ciInfo: this.ciInfo,
+      outputBasename: path.basename(outputPath, '.html'),
+      liveFile: this.options.live?.enabled ? path.relative(path.dirname(outputPath), path.resolve(this.liveWriter.getOutputPath())).split(path.sep).join('/') : undefined,
+      qualityGateResult,
+      quarantinedTestIds,
+      quarantineEntries: quarantineResult?.entries,
+      quarantineThreshold: this.options.quarantine?.threshold,
+      aiSuiteHealthSummary,
+      coverage,
+    };
 
-    // Generate and save HTML report (with optional companion CSS/JS for CSP-safe mode)
-    const report = generateHtml(htmlData);
-    fs.writeFileSync(outputPath, report.html);
-    if (report.css || report.js) {
-      const outputDir = path.dirname(outputPath);
-      const basename = path.basename(outputPath, '.html');
-      if (report.css) {
-        fs.writeFileSync(path.join(outputDir, `${basename}.css`), report.css);
-      }
-      if (report.js) {
-        fs.writeFileSync(path.join(outputDir, `${basename}.js`), report.js);
-      }
+    const reportData = buildReportData(reportInput);
+    // A failed write must not skip history, exports, notifications, or gates below.
+    let reportWritten = false;
+    try {
+      const written = await writeReport(reportData, {
+        outputPath,
+        assets: loadUiAssets(),
+        cspSafe: this.options.cspSafe,
+        assetMode: this.options.assetMode,
+      });
+      const dataMb = (written.dataBytes / (1024 * 1024)).toFixed(1);
+      console.log(`\n   Report data: ${dataMb} MB, ${written.mode === 'inline' ? 'inline in the HTML' : `in ${path.basename(written.files.find((f) => f.endsWith('-data.js')) ?? '')}`}`);
+      reportWritten = true;
+    } catch (err) {
+      console.error('❌ Smart Reporter could not write the HTML report:', err);
     }
 
     // Issue #15: Better console output with command to open report
-    console.log(`\n📊 Smart Report: ${outputPath}`);
-    console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
-    console.log(`   Or open directly: open "${outputPath}"`);
+    if (reportWritten) {
+      console.log(`\n📊 Smart Report: ${outputPath}`);
+      console.log(`   Serve with trace viewer: npx playwright-smart-reporter-serve "${outputPath}"`);
+      console.log(`   Or open directly: open "${outputPath}"`);
+    }
+    if (coverage) {
+      const { lines } = coverage.summary;
+      console.log(`   Coverage: ${lines.pct}% of lines (${lines.covered}/${lines.total}) across ${coverage.files.length} file(s)`);
+    }
 
 
     if (this.options.exportJson) {
@@ -706,7 +808,10 @@ class SmartReporter implements Reporter {
           comparison,
           failureClusters,
           exportDir,
-          htmlData.outputBasename,
+          reportInput.outputBasename,
+          qualityGateResult,
+          this.outputDir,
+          coverage,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
@@ -714,12 +819,33 @@ class SmartReporter implements Reporter {
       }
     }
 
+    if (this.options.exportFailures) {
+      try {
+        const failuresPath = writeFailureBundle(reportData, { outputDir: exportDir, rootDir: this.outputDir });
+        console.log(`   Failure bundle: ${failuresPath}`);
+      } catch (err) {
+        console.warn('⚠️  Failure bundle export failed:', err);
+      }
+    }
+
     if (this.options.exportJunit) {
       try {
-        const junitPath = exportJunitXml(this.results, this.options, exportDir, htmlData.outputBasename);
+        const junitPath = exportJunitXml(this.results, this.options, exportDir, reportInput.outputBasename);
         console.log(`   JUnit XML: ${junitPath}`);
       } catch (err) {
         console.warn('⚠️  JUnit export failed:', err);
+      }
+    }
+
+    if (this.options.exportCtrf) {
+      try {
+        const ctrfPath = exportCtrfReport(this.results, this.startTime, this.options, exportDir, reportInput.outputBasename, {
+          playwrightVersion: this.fullConfig?.version,
+          ciInfo: this.ciInfo,
+        });
+        console.log(`   CTRF JSON: ${ctrfPath}`);
+      } catch (err) {
+        console.warn('⚠️  CTRF export failed:', err);
       }
     }
 
@@ -750,13 +876,13 @@ class SmartReporter implements Reporter {
           for (const pdfTheme of pdfThemes) {
             let pdfPath: string;
             try {
-              pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+              pdfPath = generateExecutivePdf(pdfData, exportDir, reportInput.outputBasename, pdfTheme);
             } catch (err) {
               // a font can pass the register-time check but still fail during subsetting
               if (!pdfData.pdfFont) throw err;
               console.warn(`⚠️  PDF generation failed with the custom font (${pdfData.pdfFont.regular}); retrying without it:`, err instanceof Error ? err.message : err);
               pdfData.pdfFont = undefined;
-              pdfPath = generateExecutivePdf(pdfData, exportDir, htmlData.outputBasename, pdfTheme);
+              pdfPath = generateExecutivePdf(pdfData, exportDir, reportInput.outputBasename, pdfTheme);
             }
             if (pdfTheme === 'corporate') {
               console.log(`   PDF executive summary: ${pdfPath}`);
@@ -770,14 +896,23 @@ class SmartReporter implements Reporter {
       console.warn('⚠️  exportPdfFull requires exportPdf: true — no PDF was generated');
     }
 
-    // Update history
-    this.historyCollector.updateHistory(this.results);
+    // Forecast before updateHistory: each result.history is the live history array it appends to
+    let forecastRisks: Record<string, number> | undefined;
+    try {
+      forecastRisks = forecastRun(this.results, this.options.forecast)?.risks;
+    } catch (err) {
+      console.warn('⚠️  Flake forecast failed:', err);
+    }
+
+    // A failed history write must not skip notifications or quality gates below.
+    try {
+      this.historyCollector.updateHistory(this.results, forecastRisks);
+    } catch (err) {
+      console.error('⚠️  Could not save test history:', err instanceof Error ? err.message : err);
+    }
 
     // Send webhook notifications if enabled - use outcome-based counting
-    const failed = this.results.filter(r =>
-      r.outcome === 'unexpected' &&
-      (r.status === 'failed' || r.status === 'timedOut')
-    ).length;
+    const failed = this.results.filter(isFailedTest).length;
 
     // Advanced notification manager takes precedence
     if (this.notificationManager) {
@@ -790,11 +925,14 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Quality gates - log results and set exitCode
+    // Quality gates - log results and fail the run. Playwright exits with a code derived from the
+    // run status and ignores process.exitCode, so a breached gate must change the status.
+    let status: FullResult['status'] | undefined;
     if (qualityGateResult) {
       console.log(formatGateReport(qualityGateResult));
       if (!qualityGateResult.passed) {
         process.exitCode = 1;
+        status = 'failed';
       }
     }
 
@@ -805,6 +943,8 @@ class SmartReporter implements Reporter {
     } else if (this.options.quarantine?.enabled) {
       console.log('   Quarantine: no tests exceed flakiness threshold');
     }
+
+    return status ? { status } : undefined;
   }
 
   // ============================================================================
@@ -815,17 +955,44 @@ class SmartReporter implements Reporter {
    * Create a unique test ID from test file, title, and project name
    * Issue #26: Include project name for parameterized projects
    * @param test - Playwright TestCase
-   * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login Test")
+   * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login › signs in")
    */
   private getTestId(test: TestCase): string {
+    return this.testIds.get(test.id) ?? this.idFor(test, [...describePath(test), test.title]);
+  }
+
+  private idFor(test: TestCase, titles: string[]): string {
     const file = path.relative(this.outputDir, test.location.file)
       .replace(/\\/g, '/')       // Normalize to forward slashes
       .replace(/^\.\//, '');     // Strip leading ./
     const project = test.parent?.project?.()?.name;
     const prefix = project?.trim() ? `[${project}] ` : '';
-    return `${prefix}${file}::${test.title}`;
+    return `${prefix}${file}::${titles.join(' › ')}`;
   }
 
+  // The id includes the describe path, so it does not depend on which other tests are in the run
+  // (a shard, --grep, --project). --repeat-each copies get a suffix, so each copy is its own result and
+  // attempts stay retries. Returns each id -> the file::title id 2.x saved history under.
+  private assignTestIds(tests: TestCase[]): Map<string, string> {
+    const legacyIds = new Map<string, string>();
+    for (const test of tests) {
+      const suffix = test.repeatEachIndex > 0 ? ` (repeat ${test.repeatEachIndex})` : '';
+      const id = this.idFor(test, [...describePath(test), test.title]) + suffix;
+      this.testIds.set(test.id, id);
+      legacyIds.set(id, this.idFor(test, [test.title]) + suffix);
+    }
+    return legacyIds;
+  }
+
+}
+
+// The describe blocks around a test: its suites below root > project > file.
+function describePath(test: TestCase): string[] {
+  const titles: string[] = [];
+  for (let s: Suite | undefined = test.parent; s?.parent?.parent?.parent; s = s.parent) {
+    if (s.title) titles.unshift(s.title);
+  }
+  return titles;
 }
 
 // ============================================================================
@@ -907,5 +1074,7 @@ export function mergeHistories(
   fs.writeFileSync(outputFile, JSON.stringify(mergedHistory, null, 2));
   console.log(`✅ Merged ${historyFiles.length} history files into ${outputFile}`);
 }
+
+export { withAccessibility } from './accessibility/a11y-config';
 
 export default SmartReporter;

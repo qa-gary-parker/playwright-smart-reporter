@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { HistoryCollector } from './history-collector';
 import type { TestHistory, TestResultData, SmartReporterOptions } from '../types';
@@ -138,6 +139,35 @@ describe('HistoryCollector', () => {
     });
   });
 
+  describe('adoptLegacyIds', () => {
+    const old = { passed: false, duration: 5, timestamp: '2024-01-01T10:00:00Z' };
+    const kept = { passed: true, duration: 7, timestamp: '2024-01-02T10:00:00Z' };
+
+    function load(tests: TestHistory['tests']): HistoryCollector {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ runs: [], tests, summaries: [] }));
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+      return collector;
+    }
+
+    it('copies an old id shared by two tests to both, removes it, and keeps history already under a new id', () => {
+      const collector = load({ 'a.spec.ts::t': [old], 'a.spec.ts::B › t': [kept], 'b.spec.ts::u': [old] });
+
+      collector.adoptLegacyIds(new Map([['a.spec.ts::A › t', 'a.spec.ts::t'], ['a.spec.ts::B › t', 'a.spec.ts::t']]));
+
+      expect(collector.getHistory().tests).toEqual({ 'a.spec.ts::A › t': [old], 'a.spec.ts::B › t': [kept], 'b.spec.ts::u': [old] });
+    });
+
+    it('leaves an old id that is still a current id with its test', () => {
+      const collector = load({ 'a.spec.ts::t': [old] });
+
+      collector.adoptLegacyIds(new Map([['a.spec.ts::t', 'a.spec.ts::t'], ['a.spec.ts::A › t', 'a.spec.ts::t']]));
+
+      expect(collector.getHistory().tests).toEqual({ 'a.spec.ts::t': [old] });
+    });
+  });
+
   describe('getTestHistory', () => {
     it('returns empty array for unknown test', () => {
       mockFs.existsSync.mockReturnValue(false);
@@ -211,6 +241,37 @@ describe('HistoryCollector', () => {
       expect(history.tests['test-1'][0].retry).toBe(2);
     });
 
+    it('records test.step durations as the slow-step baseline', () => {
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([
+        createTestResult({
+          testId: 'test-1',
+          steps: [
+            { title: 'load orders', duration: 42, category: 'test.step', startTime: 160 },
+            { title: 'Click', duration: 39, category: 'pw:api', startTime: 161 },
+          ],
+        }),
+        createTestResult({ testId: 'test-2', steps: [{ title: 'Click', duration: 39, category: 'pw:api' }] }),
+      ]);
+
+      const history = collector.getHistory();
+      expect(history.tests['test-1'][0].stepDurations).toEqual({ 'load orders': 42 });
+      expect('stepDurations' in history.tests['test-2'][0]).toBe(false);
+    });
+
+    it('does not record step durations when the causal timeline is disabled', () => {
+      const collector = new HistoryCollector({ enableCausalTimeline: false }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([
+        createTestResult({ testId: 'test-1', steps: [{ title: 'load orders', duration: 42, category: 'test.step' }] }),
+      ]);
+
+      expect('stepDurations' in collector.getHistory().tests['test-1'][0]).toBe(false);
+    });
+
     it('marks skipped tests in history', () => {
       const collector = new HistoryCollector({}, outputDir);
       collector.loadHistory();
@@ -267,6 +328,17 @@ describe('HistoryCollector', () => {
       expect(summary.slow).toBe(1);
     });
 
+    it('records the run stability grade (the rounded average of test grades) in the summary', () => {
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+      const graded = (grade: 'A' | 'B' | 'C' | 'D' | 'F') =>
+        createTestResult({ stabilityScore: { overall: 0, flakiness: 0, performance: 0, reliability: 0, grade, needsAttention: false } });
+
+      collector.updateHistory([graded('A'), graded('A'), graded('C'), graded('D'), createTestResult()]);
+
+      expect(collector.getHistory().summaries![0].stabilityGrade).toBe('B');
+    });
+
     it('writes history to disk', () => {
       const collector = new HistoryCollector({}, outputDir);
       collector.loadHistory();
@@ -274,6 +346,72 @@ describe('HistoryCollector', () => {
       collector.updateHistory([createTestResult()]);
 
       expect(mockFs.writeFileSync).toHaveBeenCalled();
+    });
+
+    it('records forecast risks under the current run id', () => {
+      const collector = new HistoryCollector({ runId: '42' }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([createTestResult({ testId: 'a' })], { a: 0.7 });
+
+      const written: TestHistory = JSON.parse(String(mockFs.writeFileSync.mock.calls.at(-1)![1]));
+      expect(written.forecasts).toEqual({ 'run-42': { a: 0.7 } });
+    });
+
+    it('leaves the history file without forecasts when none are passed', () => {
+      const collector = new HistoryCollector({ runId: '42' }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([createTestResult({ testId: 'a' })]);
+
+      const written = JSON.parse(String(mockFs.writeFileSync.mock.calls.at(-1)![1]));
+      expect(Object.keys(written).sort()).toEqual(['runs', 'summaries', 'tests']);
+    });
+
+    it('prunes recorded forecasts to maxHistoryRuns, oldest first', () => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({
+        runs: [], tests: {}, summaries: [],
+        forecasts: { 'run-a': { x: 0.1 }, 'run-b': { x: 0.2 }, 'run-c': { x: 0.3 } },
+      }));
+      const collector = new HistoryCollector({ runId: '42', maxHistoryRuns: 3 }, outputDir);
+      collector.loadHistory();
+
+      collector.updateHistory([createTestResult({ testId: 'x' })], { x: 0.9 });
+
+      expect(collector.getHistory().forecasts).toEqual({ 'run-b': { x: 0.2 }, 'run-c': { x: 0.3 }, 'run-42': { x: 0.9 } });
+      expect(Object.keys(collector.getHistory().forecasts!)).toEqual(['run-b', 'run-c', 'run-42']);
+    });
+  });
+
+  describe('saving', () => {
+    it('leaves the saved history whole when a write fails part-way', async () => {
+      const realFs = await vi.importActual<typeof fs>('fs');
+      const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'smart-history-'));
+      const historyPath = path.join(dir, 'test-history.json');
+      const saved: TestHistory = { runs: [], tests: { a: [{ passed: true, duration: 1, timestamp: '2026-01-01T00:00:00.000Z' }] }, summaries: [] };
+      realFs.writeFileSync(historyPath, JSON.stringify(saved));
+      mockFs.existsSync.mockImplementation(realFs.existsSync);
+      mockFs.readFileSync.mockImplementation(realFs.readFileSync);
+      mockFs.mkdirSync.mockImplementation(realFs.mkdirSync);
+      mockFs.renameSync.mockImplementation(realFs.renameSync);
+      mockFs.rmSync.mockImplementation(realFs.rmSync);
+      // A crash or a full disk part-way through writing
+      mockFs.writeFileSync.mockImplementation((file, data) => {
+        realFs.writeFileSync(file, String(data).slice(0, 10));
+        throw new Error('ENOSPC: no space left on device');
+      });
+
+      try {
+        const collector = new HistoryCollector({}, dir);
+        collector.loadHistory();
+        expect(() => collector.updateHistory([createTestResult({ testId: 'b' })])).toThrow('ENOSPC');
+
+        expect(JSON.parse(realFs.readFileSync(historyPath, 'utf8'))).toEqual(saved);
+        expect(realFs.readdirSync(dir)).toEqual(['test-history.json']);
+      } finally {
+        realFs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 

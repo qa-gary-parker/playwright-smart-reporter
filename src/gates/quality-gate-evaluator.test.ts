@@ -6,6 +6,7 @@ import type {
   RunComparison,
   RunSummary,
   StabilityScore,
+  A11yImpact,
 } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
@@ -239,11 +240,10 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.passed).toBe(true);
     });
 
-    it('handles empty results array', () => {
+    it('skips the rule when no test ran, instead of reporting 0% as a pass', () => {
       const result = evaluator.evaluate({ minPassRate: 90 }, []);
       const rule = result.rules.find(r => r.rule === 'minPassRate');
-      expect(rule?.passed).toBe(true);
-      expect(rule?.actual).toBe('0%');
+      expect(rule).toEqual({ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true });
     });
   });
 
@@ -420,6 +420,8 @@ describe('QualityGateEvaluator', () => {
       const rule = result.rules.find(r => r.rule === 'noNewFailures');
       expect(rule?.passed).toBe(false);
       expect(rule?.actual).toBe('1');
+      // Read as a value like the other rules: "1 ≤ 0" in the terminal, a 0 limit in the summary table.
+      expect(rule?.threshold).toBe('≤ 0');
     });
 
     it('is skipped when no comparison data is provided', () => {
@@ -440,6 +442,32 @@ describe('QualityGateEvaluator', () => {
       );
       const rule = result.rules.find(r => r.rule === 'noNewFailures');
       expect(rule).toBeUndefined();
+    });
+  });
+
+  describe('minCoverage', () => {
+    const coverage = (pct: number) => ({
+      lines: { total: 18, covered: 12, pct },
+      functions: { total: 5, covered: 3, pct: 60 },
+      branches: { total: 4, covered: 4, pct: 100 },
+    });
+
+    it('passes when line coverage equals the threshold', () => {
+      const result = evaluator.evaluate({ minCoverage: 66.66 }, [createTestResult()], undefined, coverage(66.66));
+      expect(result.rules).toEqual([{ rule: 'minCoverage', passed: true, actual: '66.66%', threshold: '≥ 66.66%' }]);
+      expect(result.passed).toBe(true);
+    });
+
+    it('fails when line coverage is below the threshold', () => {
+      const result = evaluator.evaluate({ minCoverage: 70 }, [createTestResult()], undefined, coverage(66.66));
+      expect(result.rules).toEqual([{ rule: 'minCoverage', passed: false, actual: '66.66%', threshold: '≥ 70%' }]);
+      expect(result.passed).toBe(false);
+    });
+
+    it('fails when no coverage was collected', () => {
+      const result = evaluator.evaluate({ minCoverage: 0 }, [createTestResult()]);
+      expect(result.rules).toEqual([{ rule: 'minCoverage', passed: false, actual: 'no data', threshold: '≥ 0%' }]);
+      expect(result.passed).toBe(false);
     });
   });
 
@@ -570,10 +598,10 @@ describe('QualityGateEvaluator', () => {
         minPassRate: 50,
       };
       const result = evaluator.evaluate(config, results);
-      // Without outcome, maxFailures should count 0 (needs outcome === 'unexpected')
+      // Without outcome, the status decides, as it does for the summary and history
       const maxFailRule = result.rules.find(r => r.rule === 'maxFailures');
       expect(maxFailRule?.passed).toBe(true);
-      expect(maxFailRule?.actual).toBe('0');
+      expect(maxFailRule?.actual).toBe('1');
       // minPassRate: 'passed' status counts
       const passRateRule = result.rules.find(r => r.rule === 'minPassRate');
       expect(passRateRule?.passed).toBe(true);
@@ -592,6 +620,60 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.passed).toBe(false);
       // 33% < 34%
       expect(rule?.actual).toBe('33%');
+    });
+  });
+
+  // Phase 10: Accessibility
+  describe('accessibility gates', () => {
+    const a11y = (...impacts: A11yImpact[]): TestResultData['a11y'] => ({
+      violations: impacts.map((impact, i) => ({
+        id: `rule-${i}`, impact, description: '', helpUrl: '', wcagTags: [], nodes: [],
+      })),
+      passes: 10,
+      incomplete: 0,
+      inapplicable: 0,
+      timestamp: '',
+      standard: 'WCAG2AA',
+    });
+    // 4 violations over two scanned tests: 1 critical, 2 serious, 1 minor
+    const scanned = [
+      createTestResult({ testId: 't1', a11y: a11y('critical', 'serious') }),
+      createTestResult({ testId: 't2', a11y: a11y('serious', 'minor') }),
+      createTestResult({ testId: 't3' }),
+    ];
+
+    it('passes maxA11yViolations at the threshold', () => {
+      const result = evaluator.evaluate({ maxA11yViolations: 4 }, scanned);
+      expect(result.passed).toBe(true);
+      expect(result.rules).toEqual([{ rule: 'maxA11yViolations', passed: true, actual: '4', threshold: '≤ 4' }]);
+    });
+
+    it('fails maxA11yViolations above the threshold', () => {
+      const result = evaluator.evaluate({ maxA11yViolations: 3 }, scanned);
+      expect(result.passed).toBe(false);
+      expect(result.rules).toEqual([{ rule: 'maxA11yViolations', passed: false, actual: '4', threshold: '≤ 3' }]);
+    });
+
+    it('counts only the matching impact for maxA11yCritical and maxA11ySerious', () => {
+      const result = evaluator.evaluate({ maxA11yCritical: 0, maxA11ySerious: 2 }, scanned);
+      expect(result.passed).toBe(false);
+      expect(result.rules).toEqual([
+        { rule: 'maxA11yCritical', passed: false, actual: '1', threshold: '≤ 0' },
+        { rule: 'maxA11ySerious', passed: true, actual: '2', threshold: '≤ 2' },
+      ]);
+    });
+
+    it('skips a11y gates when no test was scanned', () => {
+      const result = evaluator.evaluate(
+        { maxA11yViolations: 0, maxA11yCritical: 0, maxA11ySerious: 0 },
+        [createTestResult(), createTestResult({ testId: 'test-2' })],
+      );
+      expect(result.passed).toBe(true);
+      expect(result.rules.map(r => [r.rule, r.passed, r.actual, r.skipped])).toEqual([
+        ['maxA11yViolations', true, 'N/A', true],
+        ['maxA11yCritical', true, 'N/A', true],
+        ['maxA11ySerious', true, 'N/A', true],
+      ]);
     });
   });
 });

@@ -1,0 +1,23 @@
+{
+  "ignoreFiles": ["src/ui/styles/__fixtures__/**"],
+  "rules": {
+    "color-no-hex": true,
+    "color-named": "never",
+    "function-disallowed-list": [
+      "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "color-mix",
+      "linear-gradient", "radial-gradient", "conic-gradient",
+      "repeating-linear-gradient", "repeating-radial-gradient", "repeating-conic-gradient"
+    ],
+    "property-disallowed-list": ["backdrop-filter", "text-shadow", "filter", "letter-spacing"],
+    "declaration-property-value-allowed-list": {
+      "box-shadow": ["none", "/^var\\(--elevation\\)$/"],
+      "/^border(-(top|bottom)-(left|right))?-radius$/": ["0", "50%", "/^var\\(--radius-(sm|md)\\)$/"],
+      "font-family": ["inherit", "/^var\\(--font-(sans|mono)\\)$/"],
+      "font-size": ["inherit", "/^var\\(--text-(xs|sm|base|md|lg|xl)\\)$/"],
+      "transition": ["none", "/^(opacity|transform) var\\(--duration(-fast)?\\) var\\(--ease\\)$/"]
+    },
+    "declaration-property-value-disallowed-list": {
+      "text-transform": ["uppercase"]
+    }
+  }
+}

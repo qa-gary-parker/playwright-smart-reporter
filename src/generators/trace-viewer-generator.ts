@@ -1740,7 +1740,8 @@ export function generateTraceViewerScript(): string {
         console.log('[TraceViewer] JSZip loaded, fetching trace:', tracePath);
 
         // Fetch the trace file
-        const response = await fetch(tracePath);
+        // A file path, so a # or % in the test title must be encoded before it becomes a URL.
+        const response = await fetch(/^(data|blob|https?|file):/i.test(tracePath) ? tracePath : tracePath.split('/').map((seg) => (seg === '.' || seg === '..' ? seg : encodeURIComponent(seg))).join('/'));
         console.log('[TraceViewer] Fetch response:', response.status, response.statusText);
         if (!response.ok) throw new Error('Failed to fetch trace: ' + response.status + ' ' + response.statusText);
 

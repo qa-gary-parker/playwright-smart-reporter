@@ -2,10 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { TestResult } from '@playwright/test/reporter';
 import type { AttachmentData, CustomAttachment } from '../types';
+import { COVERAGE_ATTACHMENT_NAME } from '../coverage/payload';
+import { A11Y_ATTACHMENT_NAME } from './a11y-collector';
 
 export interface AttachmentCollectorOptions {
   cspSafe?: boolean;           // If true, save screenshots as files instead of base64
   outputDir?: string;          // Directory to save screenshot files (required if cspSafe)
+  reportName?: string;         // Screenshot file prefix, so reports sharing outputDir keep their own files
 }
 
 /**
@@ -42,7 +45,8 @@ export class AttachmentCollector {
   private saveScreenshotToFile(buffer: Buffer, contentType: string): string {
     const outputDir = this.ensureOutputDir();
     const ext = contentType.includes('png') ? 'png' : 'jpg';
-    const filename = `screenshot-${++this.screenshotCounter}.${ext}`;
+    const prefix = this.options.reportName ? `${this.options.reportName}-` : '';
+    const filename = `${prefix}screenshot-${++this.screenshotCounter}.${ext}`;
     const filePath = path.join(outputDir, filename);
     fs.writeFileSync(filePath, buffer);
     // Return just the filename (same directory as HTML)
@@ -63,7 +67,8 @@ export class AttachmentCollector {
     };
 
     // Standard Playwright attachment names to exclude from custom collection
-    const standardNames = new Set(['screenshot', 'video', 'trace']);
+    // Coverage payloads are raw V8 data for the coverage collector, not something to show per test.
+    const standardNames = new Set(['screenshot', 'video', 'trace', COVERAGE_ATTACHMENT_NAME, A11Y_ATTACHMENT_NAME]);
 
     // Collect screenshots (both standard and custom image attachments)
     const screenshots = result.attachments.filter(
@@ -104,7 +109,7 @@ export class AttachmentCollector {
 
     for (const video of videos) {
       if (video.path) {
-        attachments.videos.push(video.path);
+        attachments.videos.push(this.linkPath(video.path));
       }
     }
 
@@ -131,7 +136,7 @@ export class AttachmentCollector {
       };
 
       if (custom.path) {
-        customData.path = custom.path;
+        customData.path = this.linkPath(custom.path);
       } else if (custom.body) {
         // Convert body to base64 for inline display
         customData.body = custom.body.toString('base64');
@@ -141,6 +146,11 @@ export class AttachmentCollector {
     }
 
     return attachments;
+  }
+
+  // The report links files relative to itself, so they still resolve when it is served or moved with them.
+  private linkPath(file: string): string {
+    return this.options.outputDir ? path.relative(this.options.outputDir, file).split(path.sep).join('/') : file;
   }
 
   /**

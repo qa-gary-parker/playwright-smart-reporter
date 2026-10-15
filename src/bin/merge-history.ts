@@ -56,7 +56,8 @@ Examples:
   # Merge two history files
   merge-history history1.json history2.json -o merged.json
 
-  # Merge with glob pattern and limit to 10 runs
+  # Merge with a quoted pattern and limit to 10 runs
+  # (* and ? match within one folder or file name, ** matches any folders)
   merge-history 'blob-reports/**/test-history.json' -o test-history.json --max-runs 10
 
   # Merge with max-runs limit
@@ -104,14 +105,28 @@ function mergeHistories(histories: TestHistory[]): TestHistory {
     summaries: [],
   };
 
+  // testId -> entry JSON -> times kept
+  const kept = new Map<string, Map<string, number>>();
+
   // Merge all tests
   for (const history of histories) {
-    // Merge test entries
+    // An entry restored into several inputs (shards of one run) is kept as often as one input has it
     for (const [testId, entries] of Object.entries(history.tests || {})) {
       if (!merged.tests[testId]) {
         merged.tests[testId] = [];
+        kept.set(testId, new Map());
       }
-      merged.tests[testId].push(...entries);
+      const keptCounts = kept.get(testId)!;
+      const counts = new Map<string, number>();
+      for (const entry of entries) {
+        const key = JSON.stringify(entry);
+        const count = (counts.get(key) ?? 0) + 1;
+        counts.set(key, count);
+        if (count > (keptCounts.get(key) ?? 0)) {
+          keptCounts.set(key, count);
+          merged.tests[testId].push(entry);
+        }
+      }
     }
 
     // Merge run metadata
@@ -135,15 +150,34 @@ function mergeHistories(histories: TestHistory[]): TestHistory {
     return true;
   });
 
-  // Remove duplicate summaries (by runId)
-  const seenSummaryIds = new Set<string>();
-  merged.summaries = merged.summaries!.filter((summary) => {
-    if (seenSummaryIds.has(summary.runId)) {
-      return false;
+  // Keep a summary restored into several inputs once, and combine the shards of one run (same runId)
+  const seenSummaries = new Set<string>();
+  const summariesByRunId = new Map<string, RunSummary>();
+  for (const summary of merged.summaries!) {
+    const key = JSON.stringify(summary);
+    if (seenSummaries.has(key)) continue;
+    seenSummaries.add(key);
+    const prev = summariesByRunId.get(summary.runId);
+    if (!prev) {
+      summariesByRunId.set(summary.runId, summary);
+      continue;
     }
-    seenSummaryIds.add(summary.runId);
-    return true;
-  });
+    const total = prev.total + summary.total;
+    const passed = prev.passed + summary.passed;
+    summariesByRunId.set(summary.runId, {
+      ...prev,
+      timestamp: summary.timestamp < prev.timestamp ? summary.timestamp : prev.timestamp,
+      total,
+      passed,
+      failed: prev.failed + summary.failed,
+      skipped: prev.skipped + summary.skipped,
+      flaky: prev.flaky + summary.flaky,
+      slow: prev.slow + summary.slow,
+      duration: Math.max(prev.duration, summary.duration),
+      passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
+    });
+  }
+  merged.summaries = [...summariesByRunId.values()];
 
   // Sort runs and summaries by timestamp
   merged.runs.sort((a, b) => {
@@ -179,11 +213,8 @@ function limitHistory(history: TestHistory, maxRuns: number): TestHistory {
 
   // Only keep test entries from runs we're keeping
   if (history.summaries && history.summaries.length > 0) {
-    // Calculate how many entries to keep per test
-    // based on maxRuns
-    const oldestKeptTimestamp = limited.runs.length > 0
-      ? new Date(limited.runs[0].timestamp).getTime()
-      : 0;
+    // Keep entries from the start of the oldest kept run on; runs[] is empty without drilldown
+    const oldestKeptTimestamp = new Date(limited.summaries![0].timestamp).getTime();
 
     for (const [testId, entries] of Object.entries(history.tests || {})) {
       limited.tests[testId] = entries.filter((entry) => {
@@ -222,6 +253,35 @@ function writeHistory(history: TestHistory, outputPath: string): void {
   }
 }
 
+function readDir(dir: string): fs.Dirent[] {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Files matching a pattern: * and ? match within one folder or file name, ** matches any folders
+ */
+function globFiles(pattern: string): string[] {
+  const root = path.parse(pattern).root;
+  let matches = [root || '.'];
+  for (const segment of pattern.slice(root.length).split(/[\\/]/).filter(Boolean)) {
+    if (segment === '**') {
+      const walk = (dir: string): string[] =>
+        [dir, ...readDir(dir).filter((e) => e.isDirectory()).flatMap((e) => walk(path.join(dir, e.name)))];
+      matches = matches.flatMap(walk);
+    } else if (/[*?]/.test(segment)) {
+      const regex = new RegExp(`^${segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`);
+      matches = matches.flatMap((dir) => readDir(dir).filter((e) => regex.test(e.name)).map((e) => path.join(dir, e.name)));
+    } else {
+      matches = matches.map((dir) => path.join(dir, segment));
+    }
+  }
+  return matches.filter((file) => fs.existsSync(file) && fs.statSync(file).isFile()).sort();
+}
+
 /**
  * Expand glob patterns in file paths
  */
@@ -229,20 +289,12 @@ function expandPaths(patterns: string[]): string[] {
   const expanded: string[] = [];
 
   for (const pattern of patterns) {
-    // Check if pattern contains glob characters
-    if (pattern.includes('*') || pattern.includes('?') || pattern.includes('[')) {
-      // Use glob expansion via shell
-      try {
-        const { globSync } = require('glob');
-        const matches = globSync(pattern);
-        if (matches.length === 0) {
-          console.warn(`Warning: No files matched pattern: ${pattern}`);
-        } else {
-          expanded.push(...matches);
-        }
-      } catch {
-        // Fallback: treat as literal path
-        expanded.push(pattern);
+    if (pattern.includes('*') || pattern.includes('?')) {
+      const matches = globFiles(pattern);
+      if (matches.length === 0) {
+        console.warn(`Warning: No files matched pattern: ${pattern}`);
+      } else {
+        expanded.push(...matches);
       }
     } else {
       expanded.push(pattern);

@@ -204,6 +204,30 @@ describe('json-exporter', () => {
       expect(test.aiSuggestion).toBe('Add wait before click');
     });
 
+    it('carries the causal timeline of a failed test', () => {
+      const timeline: TestResultData['timeline'] = {
+        duration: 1_210,
+        lanes: {
+          steps: [{ title: 'load orders', start: 160, end: 200, category: 'test.step' }],
+          network: [{ start: 170, end: 185, method: 'GET', url: 'http://app.test/api/orders', status: 500 }],
+          console: [],
+        },
+        firstAnomaly: { kind: 'network-error', at: 185, summary: 'GET http://app.test/api/orders returned 500', ref: { lane: 'network', index: 0 } },
+      };
+
+      exportJsonData([createTestResult({ status: 'failed', timeline })], createTestHistory(), Date.now(), {});
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.tests[0].timeline).toEqual(timeline);
+    });
+
+    it('carries each test\'s owners and where they came from', () => {
+      exportJsonData([createTestResult({ owners: ['@acme/payments'], ownerSource: 'codeowners' })], createTestHistory(), Date.now(), {});
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect([written.tests[0].owners, written.tests[0].ownerSource]).toEqual([['@acme/payments'], 'codeowners']);
+    });
+
     it('failure clusters are included when present', () => {
       const clusterTest = createTestResult({ testId: 'fail-1', status: 'failed' });
       const clusters: FailureCluster[] = [
@@ -232,8 +256,8 @@ describe('json-exporter', () => {
         baselineRun: createRunSummary({ runId: 'baseline', passRate: 70 }),
         currentRun: createRunSummary({ runId: 'current', passRate: 90 }),
         changes: {
-          newFailures: [],
-          fixedTests: [],
+          newFailures: [createTestResult({ testId: 'broke', status: 'failed' })],
+          fixedTests: [createTestResult({ testId: 'fixed' })],
           newTests: [],
           regressions: [],
           improvements: [],
@@ -243,10 +267,9 @@ describe('json-exporter', () => {
       exportJsonData([createTestResult()], createTestHistory(), Date.now(), {}, comparison);
 
       const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
-      expect(written.comparison).toBeDefined();
       expect(written.comparison.baselineRun.runId).toBe('baseline');
       expect(written.comparison.currentRun.runId).toBe('current');
-      expect(written.comparison.changes).toBeDefined();
+      expect(written.comparison.changes).toEqual(comparison.changes);
     });
 
     it('history data is included', () => {
@@ -268,6 +291,17 @@ describe('json-exporter', () => {
       expect(written.history.runCount).toBe(2);
       expect(written.history.runs).toHaveLength(2);
       expect(written.history.summaries).toHaveLength(2);
+    });
+
+    it('includes coverage totals but not per-line hits or source', () => {
+      const totals = { total: 12, covered: 9, pct: 75 };
+      const summary = { lines: totals, functions: totals, branches: totals };
+      const coverage = { summary, files: [{ path: 'src/math.ts', ...summary, hits: [1, 0], source: 'secret source' }] };
+
+      exportJsonData([createTestResult()], createTestHistory(), Date.now(), {}, undefined, undefined, undefined, undefined, undefined, undefined, coverage);
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.coverage).toEqual({ summary, files: [{ path: 'src/math.ts', ...summary }] });
     });
 
     it('handles history with undefined summaries', () => {
@@ -371,13 +405,29 @@ describe('json-exporter', () => {
       expect(written.metadata.projectName).toBe('my-project');
     });
 
+    it('writes the locations, rootDir and gate result the github command needs', () => {
+      const failing = createTestResult({
+        status: 'failed', outcome: 'unexpected', line: 4, column: 5, error: 'Error: boom',
+        errorLocation: { file: 'helpers/assert.ts', line: 3, column: 32 },
+      });
+      const gates = { passed: false, rules: [{ rule: 'maxFailures', passed: false, actual: '1', threshold: '≤ 0' }] };
+
+      exportJsonData([failing], createTestHistory(), Date.now(), {}, undefined, undefined, '/out', 'smart-report', gates, '/repo/e2e');
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.metadata.rootDir).toBe('/repo/e2e');
+      expect(written.qualityGates).toEqual(gates);
+      expect(written.tests[0].line).toBe(4);
+      expect(written.tests[0].column).toBe(5);
+      expect(written.tests[0].errorLocation).toEqual({ file: 'helpers/assert.ts', line: 3, column: 32 });
+    });
+
     it('JSON output is pretty-printed with 2-space indentation', () => {
       exportJsonData([createTestResult()], createTestHistory(), Date.now(), {});
 
       const writtenContent = mockFs.writeFileSync.mock.calls[0][1] as string;
-      // Pretty-printed JSON has newlines and indentation
-      expect(writtenContent).toContain('\n');
-      expect(writtenContent).toContain('  ');
+      expect(writtenContent).toMatch(/^\{\n  "/);
+      expect(writtenContent).toBe(JSON.stringify(JSON.parse(writtenContent), null, 2));
     });
   });
 });

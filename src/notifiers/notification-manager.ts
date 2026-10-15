@@ -4,6 +4,7 @@ import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
 import { EmailNotifier } from './email-notifier';
 import { CustomWebhookNotifier } from './custom-webhook-notifier';
+import { runStabilityGrade } from '../analyzers/stability-scorer';
 
 interface NotificationContext {
   total: number;
@@ -25,14 +26,7 @@ function buildContext(results: TestResultData[], startTime: number): Notificatio
   const duration = Date.now() - startTime;
   const passRate = results.length > 0 ? Math.round((passed / results.length) * 100) : 0;
 
-  const gradedTests = results.filter(r => r.stabilityScore?.grade);
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
-  let grade = 'N/A';
-  if (gradedTests.length > 0) {
-    const sum = gradedTests.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-    grade = reverseGradeMap[Math.round(sum / gradedTests.length)] || 'C';
-  }
+  const grade = runStabilityGrade(results) ?? 'N/A';
 
   const failedTests = results
     .filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))
@@ -41,28 +35,6 @@ function buildContext(results: TestResultData[], startTime: number): Notificatio
     .join(', ');
 
   return { total: results.length, passed, failed, skipped, flaky, passRate, duration, grade, failedTests };
-}
-
-function computeAverageGrade(results: TestResultData[]): number {
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const gradedTests = results.filter(r => r.stabilityScore?.grade);
-  if (gradedTests.length === 0) return 0;
-  const sum = gradedTests.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-  return sum / gradedTests.length;
-}
-
-/**
- * Derive a numeric stability grade from a pass rate percentage.
- * Used as a baseline grade proxy when RunComparison only carries RunSummary
- * (which has passRate but no stabilityGrade field).
- * Mapping: >=90% -> A(5), >=80% -> B(4), >=70% -> C(3), >=60% -> D(2), <60% -> F(1)
- */
-function gradeFromPassRate(passRate: number): number {
-  if (passRate >= 90) return 5; // A
-  if (passRate >= 80) return 4; // B
-  if (passRate >= 70) return 3; // C
-  if (passRate >= 60) return 2; // D
-  return 1; // F
 }
 
 function evaluateConditions(conditions: NotificationCondition, ctx: NotificationContext, results: TestResultData[], comparison?: RunComparison): boolean {
@@ -78,17 +50,16 @@ function evaluateConditions(conditions: NotificationCondition, ctx: Notification
     if (!hasTagFailure) return false;
   }
   if (conditions.stabilityGradeDrop) {
-    if (!comparison) return false;
-    const currentGrade = computeAverageGrade(results);
-    if (currentGrade === 0) return false;
-    // Baseline grade derived from pass rate since RunSummary lacks a stabilityGrade field
-    const baselineGrade = gradeFromPassRate(comparison.baselineRun.passRate);
-    if (currentGrade >= baselineGrade) return false;
+    const baselineGrade = comparison?.baselineRun.stabilityGrade;
+    if (!baselineGrade || ctx.grade === 'N/A') return false;
+    // A lower grade is a later letter: A < B < C < D < F.
+    if (ctx.grade <= baselineGrade) return false;
   }
   return true;
 }
 
-function renderTemplate(template: string, ctx: NotificationContext): string {
+// Replacer functions, because a replacement string would expand $& and $' found in a test title.
+function renderTemplate(template: string, ctx: NotificationContext, escape: (value: string) => string = value => value): string {
   return template
     .replace(/\{\{total\}\}/g, String(ctx.total))
     .replace(/\{\{passed\}\}/g, String(ctx.passed))
@@ -97,8 +68,8 @@ function renderTemplate(template: string, ctx: NotificationContext): string {
     .replace(/\{\{flaky\}\}/g, String(ctx.flaky))
     .replace(/\{\{passRate\}\}/g, String(ctx.passRate))
     .replace(/\{\{duration\}\}/g, String(Math.round(ctx.duration / 1000)))
-    .replace(/\{\{grade\}\}/g, ctx.grade)
-    .replace(/\{\{failedTests\}\}/g, ctx.failedTests);
+    .replace(/\{\{grade\}\}/g, () => escape(ctx.grade))
+    .replace(/\{\{failedTests\}\}/g, () => escape(ctx.failedTests));
 }
 
 export class NotificationManager {
@@ -109,19 +80,28 @@ export class NotificationManager {
   }
 
   async notify(results: TestResultData[], startTime: number, comparison?: RunComparison): Promise<void> {
-    const ctx = buildContext(results, startTime);
+    const runCtx = buildContext(results, startTime);
 
     for (const config of this.configs) {
       try {
+        // Owner routing: scope counts, conditions and the failure list to tests these owners own
+        const owners = config.owners?.length ? new Set(config.owners.map(o => o.toLowerCase())) : undefined;
+        const scoped = owners ? results.filter(r => r.owners?.some(o => owners.has(o.toLowerCase()))) : results;
+        if (owners && !scoped.some(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))) {
+          continue;
+        }
+        const ctx = owners ? buildContext(scoped, startTime) : runCtx;
+
         // Evaluate conditions
-        if (config.conditions && !evaluateConditions(config.conditions, ctx, results, comparison)) {
+        if (config.conditions && !evaluateConditions(config.conditions, ctx, scoped, comparison)) {
           continue;
         }
 
         // Render message
         const message = config.template
           ? renderTemplate(config.template, ctx)
-          : `Test Run: ${ctx.passed}/${ctx.total} passed (${ctx.passRate}%) — ${ctx.failed} failures`;
+          : `Test Run: ${ctx.passed}/${ctx.total} passed (${ctx.passRate}%) — ${ctx.failed} failures` +
+            (owners ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
 
         // Dispatch to channel
         switch (config.channel) {
@@ -148,7 +128,7 @@ export class NotificationManager {
           case 'webhook': {
             const notifier = new CustomWebhookNotifier(config.config.url);
             const payload = config.config.payloadTemplate
-              ? renderTemplate(config.config.payloadTemplate, ctx)
+              ? renderTemplate(config.config.payloadTemplate, ctx, value => JSON.stringify(value).slice(1, -1))
               : JSON.stringify(ctx);
             let parsedHeaders: Record<string, string> | undefined;
             if (config.config.headers) {

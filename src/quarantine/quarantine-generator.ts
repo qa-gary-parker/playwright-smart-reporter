@@ -43,6 +43,7 @@ export class QuarantineGenerator {
     };
 
     const filePath = path.resolve(outputDir, this.config.outputFile);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(quarantineFile, null, 2));
 
     return quarantineFile;

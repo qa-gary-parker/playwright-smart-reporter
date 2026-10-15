@@ -2,6 +2,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import type { QualityGateConfig } from '../types';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -13,6 +14,9 @@ Usage: playwright-smart-reporter <command> [options]
 Commands:
   gate      Evaluate quality gates against a JSON export
   digest    Generate a test health digest from history
+  failures  Print the redacted failure bundle for coding agents
+  mcp       Serve the failure bundle to coding agents over MCP (stdio)
+  github    Publish a JSON export to GitHub (job summary, annotations, PR comment)
 
 Run playwright-smart-reporter <command> --help for command-specific help.
 `);
@@ -27,6 +31,8 @@ function parseFlag(flag: string): string | undefined {
 function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
+
+const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
 
 async function runGate(): Promise<void> {
   if (hasFlag('--help')) {
@@ -71,6 +77,18 @@ Options:
   const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
 
+  if (!data || !Array.isArray(data.tests) || !data.summary) {
+    console.error(`Error: ${dataPath} is not a Smart Reporter JSON export (it has no tests and summary). Pass the file written by exportJson: true.`);
+    process.exitCode = 1;
+    return;
+  }
+  const unknown = Object.keys(config ?? {}).find((key) => !(GATE_RULES as readonly string[]).includes(key));
+  if (unknown) {
+    console.error(`Error: unknown quality gate rule "${unknown}". Known rules: ${GATE_RULES.join(', ')}.`);
+    process.exitCode = 1;
+    return;
+  }
+
   // Reconstruct minimal TestResultData from JSON export
   const results = (data.tests || []).map((t: any) => ({
     testId: t.testId,
@@ -92,10 +110,11 @@ Options:
     retry: t.retry,
     steps: [],
     history: [],
+    a11y: t.a11y,
   }));
 
   const evaluator = new QualityGateEvaluator();
-  const result = evaluator.evaluate(config, results, data.comparison);
+  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary);
 
   console.log(formatGateReport(result));
 
@@ -125,6 +144,12 @@ Options:
   const historyPath = parseFlag('--history') ?? 'test-history.json';
   const output = parseFlag('--output');
   const format = (parseFlag('--format') ?? 'markdown') as 'markdown' | 'text';
+
+  if (!['markdown', 'text'].includes(format)) {
+    console.error(`Error: Invalid format "${format}". Use markdown or text.`);
+    process.exitCode = 1;
+    return;
+  }
 
   if (!['daily', 'weekly', 'monthly'].includes(period)) {
     console.error(`Error: Invalid period "${period}". Use daily, weekly, or monthly.`);
@@ -162,6 +187,110 @@ Options:
   }
 }
 
+const FAILURE_DATA_DEFAULTS = ['smart-report-failures.json', 'smart-report-data.json'];
+
+const FAILURE_DATA_HELP = `  --data <path>    smart-report-failures.json (exportFailures), smart-report-data.json (exportJson),
+                   or <name>-data.js (assetMode: 'external')
+                   (default: first of ${FAILURE_DATA_DEFAULTS.join(', ')} found in the current directory)`;
+
+function failureDataPath(): string | undefined {
+  return parseFlag('--data') ?? FAILURE_DATA_DEFAULTS.find((f) => fs.existsSync(f));
+}
+
+async function loadFailures() {
+  const dataPath = failureDataPath();
+  if (!dataPath || !fs.existsSync(dataPath)) {
+    console.error(`Error: Data file not found: ${dataPath ?? FAILURE_DATA_DEFAULTS.join(' or ')}`);
+    console.error('Run your tests with exportFailures: true (or exportJson: true) to generate it.');
+    process.exitCode = 1;
+    return undefined;
+  }
+  const { loadFailureBundle } = await import('../agent/failure-bundle');
+  return loadFailureBundle(dataPath, { rootDir: process.cwd() });
+}
+
+async function runGithub(): Promise<void> {
+  if (hasFlag('--help')) {
+    console.log(`
+Usage: playwright-smart-reporter github [options]
+
+Publish a JSON export to GitHub Actions: append a job summary to $GITHUB_STEP_SUMMARY,
+print error annotations at each failing assertion, and create or update one PR comment.
+The PR comment needs \`pull-requests: write\`; fork PRs and 403s fall back to summary
+and annotations only. Requires the gh CLI with GH_TOKEN set for the comment.
+
+Options:
+  --data <path>         Path to smart-report-data.json (default: smart-report-data.json)
+  --report-url <url>    Link to the uploaded report (default: the workflow run page)
+  --help                Show this help
+`);
+    return;
+  }
+
+  const { runGithubCommand } = await import('../github');
+  process.exitCode = runGithubCommand({
+    dataPath: parseFlag('--data') ?? 'smart-report-data.json',
+    reportUrl: parseFlag('--report-url'),
+  });
+}
+
+async function runFailures(): Promise<void> {
+  if (hasFlag('--help')) {
+    console.log(`
+Usage: playwright-smart-reporter failures [--json] [options]
+
+Print the failed tests with error, call log, failing step, network and console
+context, and history. Secrets are redacted.
+
+Options:
+  --json           Print the full failure bundle as JSON
+${FAILURE_DATA_HELP}
+  --help           Show this help
+`);
+    return;
+  }
+
+  const bundle = await loadFailures();
+  if (!bundle) return;
+
+  if (hasFlag('--json')) {
+    console.log(JSON.stringify(bundle, null, 2));
+    return;
+  }
+  const { formatFailureText } = await import('../agent/failure-bundle');
+  console.log(`${bundle.failures.length} failure(s) of ${bundle.run.total} test(s)`);
+  for (const f of bundle.failures) console.log(`\n${formatFailureText(f)}`);
+}
+
+async function runMcp(): Promise<void> {
+  if (hasFlag('--help')) {
+    console.log(`
+Usage: playwright-smart-reporter mcp [options]
+
+Start an MCP server on stdio with the tools list_failures, get_failure, and
+get_trace_context. Register it with Claude Code:
+
+  claude mcp add smart-reporter -- npx playwright-smart-reporter mcp --data ./smart-report-failures.json
+
+Options:
+${FAILURE_DATA_HELP}
+  --help           Show this help
+`);
+    return;
+  }
+
+  // Start even before the first test run; each tool call reads the file afresh.
+  const dataPath = path.resolve(failureDataPath() ?? FAILURE_DATA_DEFAULTS[0]);
+  const { loadFailureBundle } = await import('../agent/failure-bundle');
+  const { startFailuresMcpServer } = await import('../agent/mcp-server');
+  await startFailuresMcpServer(() => {
+    if (!fs.existsSync(dataPath)) {
+      throw new Error(`No failure data at ${dataPath}. Run your tests with exportFailures: true, then call the tool again.`);
+    }
+    return loadFailureBundle(dataPath, { rootDir: process.cwd() });
+  });
+}
+
 async function main(): Promise<void> {
   switch (command) {
     case 'gate':
@@ -169,6 +298,15 @@ async function main(): Promise<void> {
       break;
     case 'digest':
       await runDigest();
+      break;
+    case 'github':
+      await runGithub();
+      break;
+    case 'failures':
+      await runFailures();
+      break;
+    case 'mcp':
+      await runMcp();
       break;
     case '--help':
     case '-h':

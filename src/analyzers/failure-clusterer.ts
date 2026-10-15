@@ -52,6 +52,7 @@ export class FailureClusterer {
 
     // Check for common patterns
     if (firstLine.includes('TimeoutError')) return 'Timeout Error';
+    if (/^Test timeout of \d+ms exceeded/.test(firstLine)) return 'Test Timeout';
     if (firstLine.includes('AssertionError')) return 'Assertion Error';
     if (firstLine.includes('TypeError')) return 'Type Error';
     if (firstLine.includes('ReferenceError')) return 'Reference Error';

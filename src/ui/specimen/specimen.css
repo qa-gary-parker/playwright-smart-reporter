@@ -1,0 +1,150 @@
+.spec {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 var(--space-4) var(--space-6);
+}
+
+.spec-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.spec-head__title {
+  margin-right: auto;
+  font-weight: 600;
+}
+
+.spec-head .tabs {
+  border-bottom: 0;
+}
+
+.spec-block {
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.spec-block__title {
+  margin-bottom: var(--space-4);
+  font-weight: 600;
+}
+
+.spec-example {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-2) 0;
+}
+
+.spec-example__label {
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+}
+
+.spec-example__body,
+.spec-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.spec-row__list {
+  width: 320px;
+  border-top: 1px solid var(--border);
+}
+
+.spec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+
+.spec-swatch {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.spec-swatch__chip {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.spec-type {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+}
+
+.spec-type__meta {
+  flex: 0 0 96px;
+  font-size: var(--text-xs);
+}
+
+.spec-space {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+}
+
+.spec-space__bar {
+  height: 16px;
+  background: var(--accent);
+}
+
+.spec-radius {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.spec-list,
+.spec-panel {
+  max-width: 720px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.spec-panel > .section:first-child {
+  border-top: 0;
+}
+
+.spec-wide {
+  width: 360px;
+}
+
+.spec-dialog-body {
+  padding: var(--space-4);
+}
+
+.spec-split {
+  height: 160px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.spec-fill {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--text-faint);
+}

@@ -2,9 +2,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison } from '../types';
+import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison, A11yResult } from '../types';
 import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
+import type { CoverageSummary } from '../report-data/schema';
 
 interface GateOptions {
   inputPath: string;
@@ -14,6 +15,8 @@ interface GateOptions {
   maxFlakyRate?: number;
   minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
   noNewFailures?: boolean;
+  maxA11yViolations?: number;
+  minCoverage?: number;
 }
 
 function printUsage(): void {
@@ -30,12 +33,16 @@ Options:
   --max-flaky-rate <n>        Maximum flaky rate percentage
   --min-stability-grade <g>   Minimum stability grade (A, B, C, D)
   --no-new-failures           Fail if new failures detected (requires comparison data)
+  --max-a11y-violations <n>   Maximum accessibility violations (skipped when no test was scanned)
+  --min-coverage <n>          Minimum line coverage percentage (fails when no coverage was collected)
   -h, --help                  Show this help message
 
 Examples:
-  playwright-smart-reporter gate --config gates.json
-  playwright-smart-reporter gate --max-failures 5 --min-pass-rate 90
-  playwright-smart-reporter gate --input ./report/smart-report-data.json --max-flaky-rate 5
+  node node_modules/playwright-smart-reporter/dist/bin/gate.js --config gates.json
+  node node_modules/playwright-smart-reporter/dist/bin/gate.js --max-failures 5 --min-pass-rate 90
+  node node_modules/playwright-smart-reporter/dist/bin/gate.js --input ./report/smart-report-data.json --max-flaky-rate 5
+
+(npx playwright-smart-reporter gate takes the rules from a --config file only.)
 `);
 }
 
@@ -56,30 +63,50 @@ function parseArgs(argv: string[]): GateOptions {
     inputPath: path.resolve(process.cwd(), 'smart-report-data.json'),
   };
 
+  const fail = (message: string): never => {
+    console.error(`Error: ${message}`);
+    process.exit(1);
+  };
+  const value = (flag: string, i: number): string => args[i] ?? fail(`${flag} needs a value.`);
+  const number = (flag: string, i: number): number => {
+    const raw = value(flag, i);
+    const n = Number(raw);
+    return raw.trim() !== '' && Number.isFinite(n) ? n : fail(`${flag} needs a number (got "${raw}").`);
+  };
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
     switch (arg) {
       case '--input':
-        options.inputPath = path.resolve(process.cwd(), args[++i]);
+        options.inputPath = path.resolve(process.cwd(), value(arg, ++i));
         break;
       case '--config':
-        options.configPath = path.resolve(process.cwd(), args[++i]);
+        options.configPath = path.resolve(process.cwd(), value(arg, ++i));
         break;
       case '--max-failures':
-        options.maxFailures = parseInt(args[++i], 10);
+        options.maxFailures = number(arg, ++i);
         break;
       case '--min-pass-rate':
-        options.minPassRate = parseFloat(args[++i]);
+        options.minPassRate = number(arg, ++i);
         break;
       case '--max-flaky-rate':
-        options.maxFlakyRate = parseFloat(args[++i]);
+        options.maxFlakyRate = number(arg, ++i);
         break;
-      case '--min-stability-grade':
-        options.minStabilityGrade = args[++i] as 'A' | 'B' | 'C' | 'D';
+      case '--min-stability-grade': {
+        const grade = value(arg, ++i);
+        if (!['A', 'B', 'C', 'D'].includes(grade)) fail(`${arg} must be A, B, C or D (got "${grade}").`);
+        options.minStabilityGrade = grade as 'A' | 'B' | 'C' | 'D';
         break;
+      }
       case '--no-new-failures':
         options.noNewFailures = true;
+        break;
+      case '--max-a11y-violations':
+        options.maxA11yViolations = number(arg, ++i);
+        break;
+      case '--min-coverage':
+        options.minCoverage = number(arg, ++i);
         break;
     }
   }
@@ -110,6 +137,8 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   if (options.maxFlakyRate !== undefined) config.maxFlakyRate = options.maxFlakyRate;
   if (options.minStabilityGrade !== undefined) config.minStabilityGrade = options.minStabilityGrade;
   if (options.noNewFailures !== undefined) config.noNewFailures = options.noNewFailures;
+  if (options.maxA11yViolations !== undefined) config.maxA11yViolations = options.maxA11yViolations;
+  if (options.minCoverage !== undefined) config.minCoverage = options.minCoverage;
 
   return config;
 }
@@ -128,6 +157,7 @@ interface JsonTestEntry {
     overall: number;
     grade: string;
   };
+  a11y?: A11yResult;
 }
 
 function toTestResultData(entry: JsonTestEntry): TestResultData {
@@ -155,6 +185,7 @@ function toTestResultData(entry: JsonTestEntry): TestResultData {
     stabilityScore,
     steps: [],
     history: [],
+    a11y: entry.a11y,
   };
 }
 
@@ -167,7 +198,11 @@ function main(): void {
     || config.minPassRate !== undefined
     || config.maxFlakyRate !== undefined
     || config.minStabilityGrade !== undefined
-    || config.noNewFailures !== undefined;
+    || config.noNewFailures !== undefined
+    || config.maxA11yViolations !== undefined
+    || config.maxA11yCritical !== undefined
+    || config.maxA11ySerious !== undefined
+    || config.minCoverage !== undefined;
 
   if (!hasRules) {
     console.error('Error: No quality gate rules configured. Use --config or inline flags.');
@@ -194,9 +229,10 @@ function main(): void {
   const tests: JsonTestEntry[] = (report.tests as JsonTestEntry[]) || [];
   const results = tests.map(toTestResultData);
   const comparison = report.comparison as RunComparison | undefined;
+  const coverage = (report.coverage as { summary?: CoverageSummary } | undefined)?.summary;
 
   const evaluator = new QualityGateEvaluator();
-  const gateResult = evaluator.evaluate(config, results, comparison);
+  const gateResult = evaluator.evaluate(config, results, comparison, coverage);
 
   console.log(formatGateReport(gateResult));
 

@@ -1,16 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
-import { renderMarkdownLite } from '../utils';
+import { isFailedTest, isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
+import { stepDurationsOf } from '../analyzers/causal-timeline';
+import { runStabilityGrade } from '../analyzers/stability-scorer';
 
 /**
  * Manages test history persistence and retrieval
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf'>;
   private outputDir: string;
   private currentRun: RunMetadata;
   private startTime: number;
@@ -77,6 +79,7 @@ export class HistoryCollector {
       quarantine: options.quarantine,
       live: options.live,
       exportPdfFull: options.exportPdfFull,
+      enableCausalTimeline: options.enableCausalTimeline,
     };
     this.outputDir = outputDir;
     this.currentRun = {
@@ -123,7 +126,9 @@ export class HistoryCollector {
   /**
    * Update history with test results
    */
-  updateHistory(results: TestResultData[]): void {
+  updateHistory(results: TestResultData[], forecasts?: Record<string, number>): void {
+    // A run with no tests (global setup failed, nothing matched) says nothing, and would become the next baseline.
+    if (results.length === 0) return;
     const timestamp = new Date().toISOString();
     const runId = this.currentRun.runId;
 
@@ -133,12 +138,13 @@ export class HistoryCollector {
       }
 
       this.history.tests[result.testId].push({
-        passed: result.status === 'passed' || result.outcome === 'expected' || result.outcome === 'flaky',
+        passed: isPassedTest(result),
         duration: result.duration,
         timestamp,
-        ...(this.options.enableHistoryDrilldown ? { runId } : {}),
-        skipped: result.status === 'skipped',
+        runId,
+        skipped: isSkippedTest(result),
         retry: result.retry, // NEW: Track retry count
+        ...this.stepDurationsEntry(result),
       });
 
       // Keep only last N runs
@@ -150,16 +156,9 @@ export class HistoryCollector {
     }
 
     // Add run summary
-    const passed = results.filter(r =>
-      r.status === 'passed' ||
-      r.outcome === 'expected' ||
-      r.outcome === 'flaky'
-    ).length;
-    const failed = results.filter(r =>
-      (r.status === 'failed' || r.status === 'timedOut') &&
-      r.outcome !== 'expected' && r.outcome !== 'flaky'
-    ).length;
-    const skipped = results.filter(r => r.status === 'skipped').length;
+    const passed = results.filter(isPassedTest).length;
+    const failed = results.filter(isFailedTest).length;
+    const skipped = results.filter(isSkippedTest).length;
     const flaky = results.filter(r => r.outcome === 'flaky').length;
     const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
     const total = results.length;
@@ -176,6 +175,7 @@ export class HistoryCollector {
       slow,
       duration,
       passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
+      stabilityGrade: runStabilityGrade(results),
     };
 
     this.history.summaries!.push(summary);
@@ -254,9 +254,44 @@ export class HistoryCollector {
       }
     }
 
-    // Save to disk
+    if (forecasts) {
+      const recorded = (this.history.forecasts ??= {});
+      recorded[runId] = { ...recorded[runId], ...forecasts };
+      for (const oldRunId of Object.keys(recorded).slice(0, -this.options.maxHistoryRuns)) {
+        delete recorded[oldRunId];
+      }
+    }
+
+    // Write beside the history and rename over it, so a crash or a concurrent run leaves the old file or the new one, never half of one
     const historyPath = path.resolve(this.outputDir, this.options.historyFile);
-    fs.writeFileSync(historyPath, JSON.stringify(this.history, null, 2));
+    fs.mkdirSync(path.dirname(historyPath), { recursive: true });
+    const tmpPath = `${historyPath}.${process.pid}-${Date.now()}.tmp`;
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(this.history, null, 2));
+      fs.renameSync(tmpPath, historyPath);
+    } catch (err) {
+      fs.rmSync(tmpPath, { force: true });
+      throw err;
+    }
+  }
+
+  private stepDurationsEntry(result: TestResultData): { stepDurations?: Record<string, number> } {
+    if (this.options.enableCausalTimeline === false) return {};
+    const stepDurations = stepDurationsOf(result.steps ?? []);
+    return stepDurations ? { stepDurations } : {};
+  }
+
+  // Moves history saved under a test's old id (current id -> old id) to its current one. Every test
+  // sharing an old id gets a copy. An old id that is still a current id stays put.
+  adoptLegacyIds(legacyIds: Map<string, string>): void {
+    const tests = this.history.tests;
+    const moved = new Set<string>();
+    for (const [id, legacy] of legacyIds) {
+      if (!tests[legacy] || legacyIds.has(legacy)) continue;
+      tests[id] ??= [...tests[legacy]];
+      moved.add(legacy);
+    }
+    for (const legacy of moved) delete tests[legacy];
   }
 
   /**
@@ -295,9 +330,11 @@ export class HistoryCollector {
       return null;
     }
 
-    // If specific baseline specified, find it
+    // The runId the baseline ran with, which history saves as run-<runId>, or the saved id itself
     if (this.options.baselineRunId) {
-      return this.history.summaries.find(s => s.runId === this.options.baselineRunId) || null;
+      const wanted = this.options.baselineRunId.trim();
+      const saved = `run-${sanitizeFilename(wanted, 100)}`;
+      return this.history.summaries.find(s => s.runId === saved) ?? this.history.summaries.find(s => s.runId === wanted) ?? null;
     }
 
     // Otherwise, use previous run

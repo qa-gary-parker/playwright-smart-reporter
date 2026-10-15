@@ -44,6 +44,9 @@ export interface NotificationConfig {
   config: Record<string, string>;
   conditions?: NotificationCondition;
   template?: string;
+  // Phase 9: Ownership and routing
+  // Fire only for failures owned by one of these owners (CODEOWNERS handles or git author emails)
+  owners?: string[];
 }
 
 // ============================================================================
@@ -128,7 +131,10 @@ export interface SmartReporterOptions {
   projectName?: string;            // e.g., 'api-tests' or 'ui-regression'
 
   // Report size optimization
-  maxEmbeddedSize?: number;        // Max bytes for inline base64 (default: 5MB). Traces larger are file-referenced.
+  /** @deprecated No effect since 3.0.0: traces are always copied next to the report and never embedded. */
+  maxEmbeddedSize?: number;
+  // Where report data lives: inline in the HTML, in a companion <name>-data.js, or chosen by size (default: 'auto')
+  assetMode?: 'inline' | 'external' | 'auto';
 
   // Issue #26: External run ID for consistent IDs across CI shards
   runId?: string;                  // Unique identifier for this test run (e.g. GITHUB_RUN_ID)
@@ -162,6 +168,33 @@ export interface SmartReporterOptions {
 
   // Full PDF report (legacy HTML-to-PDF, replaces default executive PDF)
   exportPdfFull?: boolean;
+
+  // Phase 0.5: Local model support (Ollama)
+  ai?: AIConfig;
+  // Phase 7: Flake forecasting. Advisory only; never feeds quarantine.
+  forecast?: ForecastConfig;
+  // Phase 9: Ownership and routing
+  // enabled defaults to true when a CODEOWNERS file is found or source is 'git'
+  ownership?: { enabled?: boolean; source?: 'codeowners' | 'git' | 'auto'; codeownersPath?: string };
+  // Phase 10: Accessibility
+  // Read by withAccessibility() and injected into `use.smartReporterA11y`
+  accessibility?: AccessibilityConfig;
+  // Phase 4: Causal failure timeline
+  enableCausalTimeline?: boolean;  // Default: true (timeline + first-anomaly suggestion on failed tests)
+  // Phase 8: agent-ready output
+  exportFailures?: boolean;        // Write redacted <name>-failures.json for coding agents (default: false)
+  // Phase 5: CI surface integrations
+  exportCtrf?: boolean;            // Write <name>-ctrf.json (Common Test Report Format) alongside HTML
+}
+
+export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
+
+export interface AIConfig {
+  provider?: AIProviderName;  // Default: detected from env (see resolveAIProvider). Set to skip detection.
+  baseUrl?: string;           // OpenAI-compatible providers only (openai, ollama, openai-compatible)
+  model?: string;             // Overrides the selected provider's default model
+  timeoutMs?: number;         // Per-call timeout (default: 60000)
+  maxTotalMs?: number;        // Cap on total AI analysis time per run (default: 300000)
 }
 
 // ============================================================================
@@ -175,6 +208,9 @@ export interface TestHistoryEntry {
   skipped?: boolean;
   retry?: number;  // NEW: Track retry count in history
   runId?: string;  // NEW: Run identifier for drilldown
+
+  // Phase 4: Causal failure timeline
+  stepDurations?: Record<string, number>;  // test.step title -> duration (ms), the slow-step baseline
 }
 
 export interface RunSummary {
@@ -189,6 +225,7 @@ export interface RunSummary {
   duration: number;
   passRate: number;
   ciInfo?: CIInfo;  // NEW: CI metadata
+  stabilityGrade?: StabilityScore['grade'];
 }
 
 export interface RunMetadata {
@@ -203,6 +240,8 @@ export interface TestHistory {
   };
   summaries?: RunSummary[];
   runFiles?: Record<string, string>; // runId -> relative JSON snapshot path
+  // Phase 7: runId -> testId -> forecast risk recorded that run (risk 0 omitted), pruned to maxHistoryRuns
+  forecasts?: Record<string, Record<string, number>>;
 }
 
 export interface TestResultSnapshot {
@@ -242,6 +281,10 @@ export interface StepData {
   duration: number;
   category: string;
   isSlowest?: boolean;
+
+  // Phase 4: Causal failure timeline
+  startTime?: number;  // ms offset from the attempt's start
+  failed?: boolean;
 }
 
 // Test annotation (beyond tags) - captures @slow, @fixme, custom annotations
@@ -250,13 +293,25 @@ export interface TestAnnotation {
   description?: string;      // Optional description/reason
 }
 
+export interface AttemptData {
+  retry: number;
+  status: TestResultData['status'];
+  duration: number;
+  error?: string;
+  steps: StepData[];
+}
+
 export interface TestResultData {
   testId: string;
   title: string;
   file: string;
+  line?: number;
+  column?: number;
   status: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
   duration: number;
   error?: string;
+  errorSnippet?: string;     // Playwright's source snippet around the failing line
+  errorLocation?: { file: string; line: number; column: number };
   retry: number;
   // Playwright outcome and expected status for proper handling of retries and test.fail()
   outcome?: 'expected' | 'unexpected' | 'flaky' | 'skipped';
@@ -271,7 +326,8 @@ export interface TestResultData {
   screenshot?: string;
   videoPath?: string;
   tracePath?: string;      // NEW: Trace file path
-  traceData?: string;      // NEW: Base64 encoded trace data
+  /** @deprecated Not set since 3.0.0. */
+  traceData?: string;
   history: TestHistoryEntry[];
 
   // NEW: Tag/Suite filtering
@@ -293,6 +349,15 @@ export interface TestResultData {
   attachments?: AttachmentData;
   performanceMetrics?: PerformanceMetrics;
   networkLogs?: NetworkLogData;        // NEW: Network logs from trace
+  attempts?: AttemptData[];            // Every attempt in retry order, final attempt last
+
+  // Phase 9: Ownership and routing
+  owners?: string[];
+  ownerSource?: 'codeowners' | 'git';
+  // Phase 10: Accessibility
+  a11y?: A11yResult;
+  // Phase 4: Causal failure timeline
+  timeline?: CausalTimeline;           // Failed attempts only
 }
 
 // NEW: Retry Analysis
@@ -451,6 +516,13 @@ export interface QualityGateConfig {
   maxFlakyRate?: number;
   minStabilityGrade?: 'A' | 'B' | 'C' | 'D';
   noNewFailures?: boolean;
+
+  // Phase 10: Accessibility (each rule is skipped when no test was scanned)
+  maxA11yViolations?: number;
+  maxA11yCritical?: number;
+  maxA11ySerious?: number;
+  // Phase 6: Code coverage (minimum line coverage percentage)
+  minCoverage?: number;
 }
 
 export interface QualityGateRuleResult {
@@ -550,4 +622,143 @@ export interface DigestOptions {
   output?: string;
   ai?: boolean;
   format?: 'markdown' | 'text';
+}
+
+// ============================================================================
+// Phase 7: Flake forecasting
+// ============================================================================
+
+export interface ForecastConfig {
+  enabled?: boolean;    // Default: true
+  minRuns?: number;     // Default: 5; values below 3 are raised to 3
+  threshold?: number;   // Default: 0.5; risk at or above this lists the test as at risk
+}
+
+export type ForecastSignal = 'duration-drift' | 'duration-variance' | 'retry-trend' | 'outcome-instability';
+
+export interface ForecastReason {
+  signal: ForecastSignal;
+  detail: string;
+  weight: number;       // this signal's contribution to risk, 0-1
+}
+
+export type FlakeForecast =
+  | { state: 'insufficient-history'; runs: number; minRuns: number }
+  | { state: 'scored'; risk: number; reasons: ForecastReason[] };
+
+export interface ForecastSummary {
+  atRisk: string[];     // testIds, highest risk first
+  threshold: number;
+  minRuns: number;
+}
+
+// ============================================================================
+// Phase 10: Accessibility
+// ============================================================================
+
+export interface AccessibilityConfig {
+  enabled: boolean;
+  standard?: 'WCAG2A' | 'WCAG2AA' | 'WCAG2AAA';
+  failOnSeverity?: A11yImpact;
+  include?: string[];
+  exclude?: string[];
+  selector?: string;
+}
+
+export type A11yImpact = 'minor' | 'moderate' | 'serious' | 'critical';
+
+export interface A11yNode {
+  target: string[];
+  html: string;
+  failureSummary: string;
+}
+
+export interface A11yViolation {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  nodes: A11yNode[];
+}
+
+export interface A11yResult {
+  violations: A11yViolation[];
+  passes: number;
+  incomplete: number;
+  inapplicable: number;
+  timestamp: string;
+  standard: string;
+  url?: string;
+}
+
+export interface A11yRuleSummary {
+  id: string;
+  impact: A11yImpact;
+  description: string;
+  helpUrl: string;
+  wcagTags: string[];
+  tests: number;
+  nodes: number;
+  testIds: string[];
+}
+
+export interface A11ySummary {
+  testsScanned: number;
+  testsWithViolations: number;
+  pagesScanned: number;
+  totalViolations: number;
+  byImpact: Record<A11yImpact, number>;
+  byRule: A11yRuleSummary[];        // most-hit rule first
+  rating: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+// ============================================================================
+// Phase 4: Causal failure timeline
+// ============================================================================
+
+// All times are ms offsets from the failed attempt's start (TestResult.startTime).
+
+export interface TimelineStep {
+  title: string;
+  start: number;
+  end: number;
+  category: string;
+  failed?: boolean;
+}
+
+export interface TimelineRequest {
+  start: number;
+  end: number;               // equals start for failed requests; the timeline end for requests still in flight
+  method: string;
+  url: string;
+  status: number;            // -1 when no response arrived
+  failure?: string;          // e.g. 'net::ERR_CONNECTION_REFUSED'
+}
+
+export interface TimelineConsoleEvent {
+  at: number;
+  level: string;             // console message type; uncaught page errors are 'error' with an "Uncaught " prefix
+  text: string;
+}
+
+/**
+ * Heuristic suggestion, not a diagnosis: the earliest unusual event before the failure.
+ */
+export interface TimelineAnomaly {
+  kind: 'network-error' | 'console-error' | 'slow-step';
+  at: number;
+  summary: string;
+  ref: { lane: 'network' | 'console' | 'steps'; index: number };
+}
+
+export interface CausalTimeline {
+  duration: number;
+  lanes: {
+    steps: TimelineStep[];
+    network: TimelineRequest[];
+    console: TimelineConsoleEvent[];
+  };
+  /** Suggestion only (heuristic). Absent when nothing unusual happened before the failure. */
+  firstAnomaly?: TimelineAnomaly;
 }

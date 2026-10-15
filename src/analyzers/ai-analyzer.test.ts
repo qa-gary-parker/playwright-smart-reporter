@@ -91,6 +91,8 @@ function clearAiKeys() {
   delete process.env.OPENAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  delete process.env.OLLAMA_HOST;
+  delete process.env.OLLAMA_MODEL;
 }
 
 describe('AIAnalyzer', () => {
@@ -101,6 +103,8 @@ describe('AIAnalyzer', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    mockSpawn.mockReset();
+    mockFetch.mockReset();
   });
 
   describe('isAvailable', () => {
@@ -237,8 +241,8 @@ describe('AIAnalyzer', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'oauth-123');
 
-      const child = makeFakeChild();
-      mockSpawn.mockImplementationOnce(() => {
+      mockSpawn.mockImplementation(() => {
+        const child = makeFakeChild();
         queueMicrotask(() => {
           const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException;
           err.code = 'ENOENT';
@@ -257,9 +261,14 @@ describe('AIAnalyzer', () => {
 
       await analyzer.analyzeFailed(results);
 
-      // batch 1 spawns up to 3 in parallel before the first ENOENT lands; batch 2 must not spawn
-      expect(mockSpawn.mock.calls.length).toBeLessThanOrEqual(3);
-      expect(results.every(r => r.aiSuggestion === undefined)).toBe(true);
+      // batch 1 spawns all 3 before the first ENOENT lands; batch 2 must not spawn
+      expect(mockSpawn).toHaveBeenCalledTimes(3);
+      const notFound = 'CLAUDE_CODE_OAUTH_TOKEN is set but the "claude" CLI was not found on PATH. Install Claude Code (https://claude.com/claude-code) or use an API key instead.';
+      expect(consoleSpy.mock.calls.map(([, err]) => err.message)).toEqual([
+        notFound, notFound, notFound,
+        'Claude CLI unavailable (previous call failed to find the binary)',
+      ]);
+      expect(results.map(r => r.aiSuggestion)).toEqual([undefined, undefined, undefined, undefined]);
 
       consoleSpy.mockRestore();
     });
@@ -435,21 +444,24 @@ describe('AIAnalyzer', () => {
     it('processes in batches of 3 concurrent requests', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {});
       vi.stubEnv('ANTHROPIC_API_KEY', 'key');
-      for (let i = 0; i < 5; i++) {
-        mockFetch.mockResolvedValueOnce(mockAnthropicResponse(`suggestion-${i}`));
-      }
+      let inFlight = 0;
+      const inFlightAtStart: number[] = [];
+      mockFetch.mockImplementation(async () => {
+        const call = inFlightAtStart.push(++inFlight) - 1;
+        await new Promise(resolve => setTimeout(resolve, 5));
+        inFlight--;
+        return mockAnthropicResponse(`suggestion-${call}`);
+      });
 
       const analyzer = new AIAnalyzer();
-      const results = Array.from({ length: 5 }, (_, i) =>
+      const results = Array.from({ length: 7 }, (_, i) =>
         createTestResult({ testId: `test-${i}`, status: 'failed', error: `Error ${i}` })
       );
 
       await analyzer.analyzeFailed(results);
 
-      expect(mockFetch).toHaveBeenCalledTimes(5);
-      results.forEach((r, i) => {
-        expect(r.aiSuggestion).toBe(`suggestion-${i}`);
-      });
+      expect(inFlightAtStart).toEqual([1, 2, 3, 1, 2, 3, 1]);
+      expect(results.map(r => r.aiSuggestion)).toEqual(results.map((_, i) => `suggestion-${i}`));
     });
 
     it('handles API error gracefully', async () => {
@@ -485,7 +497,9 @@ describe('AIAnalyzer', () => {
 
       await analyzer.analyzeFailed(results);
 
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy.mock.calls.map(([message, err]) => [message, err.message])).toEqual([
+        ['Failed to get AI suggestion for "Test 1":', 'Anthropic API error: 500'],
+      ]);
       expect(results[0].aiSuggestion).toBeUndefined();
 
       consoleSpy.mockRestore();
@@ -766,11 +780,12 @@ describe('AIAnalyzer', () => {
 
       const recommendations = analyzer.generateRecommendations(results, stats);
 
-      for (let i = 0; i < recommendations.length - 1; i++) {
-        expect(recommendations[i].priority).toBeGreaterThanOrEqual(
-          recommendations[i + 1].priority
-        );
-      }
+      expect(recommendations.map(r => [r.priority, r.title])).toEqual([
+        [95, 'Improve Suite Pass Rate'],
+        [90, 'Fix Flaky Tests'],
+        [85, 'Improve Suite Stability'],
+        [60, 'Improve Test Performance'],
+      ]);
     });
   });
 });

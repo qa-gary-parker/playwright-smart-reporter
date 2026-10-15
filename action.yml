@@ -1,0 +1,51 @@
+name: Playwright Smart Reporter
+description: Publish a Smart Reporter run to the job summary, as annotations on failing lines, and as one sticky pull request comment.
+author: Gary Parker
+branding:
+  icon: check-circle
+  color: blue
+
+# Job permissions:
+#   contents: read         actions/checkout
+#   pull-requests: write   create or update the pull request comment
+# Without pull-requests: write (for example, pull requests from forks) the comment is skipped
+# with a warning; the job summary and annotations are still published and the step passes.
+# Run the tests with exportJson: true so that smart-report-data.json exists.
+
+inputs:
+  data:
+    description: Path to the smart-report-data.json that the reporter writes when exportJson is true.
+    required: false
+    default: smart-report-data.json
+  report-url:
+    description: Link to the uploaded report, for example the artifact-url output of actions/upload-artifact@v4. Defaults to the workflow run page.
+    required: false
+    default: ''
+  github-token:
+    description: Token that the gh CLI uses to read and write the pull request comment.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Publish Smart Reporter results
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SMART_REPORTER_DATA: ${{ inputs.data }}
+        SMART_REPORTER_URL: ${{ inputs.report-url }}
+        SMART_REPORTER_LOCAL_CLI: ${{ github.action_path }}/dist/bin/cli.js
+        SMART_REPORTER_ACTION_REF: ${{ github.action_ref }}
+      run: |
+        args=(github --data "$SMART_REPORTER_DATA")
+        if [ -n "$SMART_REPORTER_URL" ]; then args+=(--report-url "$SMART_REPORTER_URL"); fi
+        # `uses: ./` in this repository runs the freshly built CLI; everyone else gets the package via npx.
+        if [ -f "$SMART_REPORTER_LOCAL_CLI" ]; then
+          node "$SMART_REPORTER_LOCAL_CLI" "${args[@]}"
+        else
+          # Run the package version that matches the action tag (v3.0.0 -> 3.0.0, v3 -> 3), never whatever is latest.
+          version=3
+          if [[ "$SMART_REPORTER_ACTION_REF" =~ ^v([0-9]+(\.[0-9]+){0,2})$ ]]; then version="${BASH_REMATCH[1]}"; fi
+          npx --yes "playwright-smart-reporter@$version" "${args[@]}"
+        fi

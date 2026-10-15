@@ -44,6 +44,7 @@ export class StepCollector {
     const steps: StepData[] = [];
     const filterPwApi = this.options.filterPwApiSteps;
     const showExpect = this.options.showExpectSteps;
+    const attemptStart = result.startTime.getTime();
 
     // Recursively extract steps from the result
     const processStep = (step: TestResult['steps'][0]) => {
@@ -59,6 +60,8 @@ export class StepCollector {
           title: step.title,
           duration: step.duration,
           category: step.category,
+          startTime: step.startTime.getTime() - attemptStart,
+          ...(step.error ? { failed: true } : {}),
         });
       }
 

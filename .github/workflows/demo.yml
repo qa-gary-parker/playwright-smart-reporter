@@ -2,15 +2,18 @@ name: Demo - Smart Reporter
 
 on:
   push:
-    branches: [master]
+    branches: [master, v3]
   pull_request:
-    branches: [master]
+    branches: [master, v3]
   workflow_dispatch: # Allow manual trigger
 
 jobs:
   test:
     name: Run Demo Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # sticky Smart Reporter comment on pull requests
 
     steps:
       - name: Checkout code
@@ -30,6 +33,16 @@ jobs:
 
       - name: Build reporter
         run: npm run build
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run causal timeline acceptance tests
+        run: npm run test:timeline
+      - name: Run reporter acceptance tests
+        run: npm run test:acceptance
+      - name: Run coverage acceptance tests
+        run: COVERAGE_E2E=1 npx vitest run src/coverage/coverage-example.test.ts
 
       # Restore test history from cache for flakiness detection
       - name: Restore test history
@@ -52,14 +65,27 @@ jobs:
           path: example/test-history.json
           key: test-history-${{ github.ref_name }}-${{ github.run_id }}
 
-      # Upload the HTML report as an artifact
+      # Upload the HTML report and its JSON/CTRF exports as an artifact
       - name: Upload Smart Report
+        id: upload-report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: smart-report
-          path: example/smart-report.html
+          path: |
+            example/smart-report.html
+            example/smart-report-data.json
+            example/smart-report-ctrf.json
           retention-days: 30
+
+      # Job summary, failure annotations and one sticky PR comment (this repo's action.yml)
+      - name: Publish Smart Report to the pull request
+        # Only when the demo ran far enough to write its data.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && hashFiles('example/smart-report-data.json') != '' }}
+        uses: ./
+        with:
+          data: example/smart-report-data.json
+          report-url: ${{ steps.upload-report.outputs.artifact-url }}
 
       # Upload screenshots from failed tests
       - name: Upload test artifacts
@@ -68,4 +94,31 @@ jobs:
         with:
           name: test-results
           path: test-results/
+          retention-days: 7
+
+  ui:
+    name: UI design system
+    runs-on: ubuntu-latest
+    # Screenshot baselines are generated in this image; keep its tag equal to the locked @playwright/test version.
+    container: mcr.microsoft.com/playwright:v1.57.0-noble
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint UI styles
+        run: npm run lint:css
+
+      - name: Run UI tests
+        run: npm run test:ui
+
+      - name: Upload UI test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-test-results
+          path: test-results/ui/
           retention-days: 7

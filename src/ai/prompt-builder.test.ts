@@ -330,6 +330,42 @@ describe('buildPlaywrightStyleAiPrompt', () => {
     expect(result).toContain('Attached stderr');
   });
 
+  it('adds the timeline first anomaly as a labelled heuristic section after the error details', () => {
+    const result = buildPlaywrightStyleAiPrompt({
+      config: makeConfig(),
+      test: makeTestCase(),
+      result: makeTestResult({ errors: [makeError()] }),
+      firstAnomaly: {
+        kind: 'network-error',
+        at: 185,
+        summary: 'GET http://app.test/api/orders returned 500',
+        ref: { lane: 'network', index: 1 },
+      },
+    });
+
+    expect(result).toContain([
+      '# Possible first anomaly (heuristic)',
+      '',
+      "A suggestion from Smart Reporter's failure timeline, not a diagnosis: the earliest unusual event before the failure.",
+      '',
+      '- Kind: network-error',
+      '- At: 185ms after the test started',
+      '- Detail: GET http://app.test/api/orders returned 500',
+    ].join('\n'));
+    expect(result.indexOf('# Possible first anomaly (heuristic)')).toBeGreaterThan(result.indexOf('# Error details'));
+  });
+
+  it('has no anomaly section when the timeline found none', () => {
+    const result = buildPlaywrightStyleAiPrompt({
+      config: makeConfig(),
+      test: makeTestCase(),
+      result: makeTestResult({ errors: [makeError()] }),
+    });
+
+    expect(result).toContain('# Error details');
+    expect(result).not.toContain('Possible first anomaly');
+  });
+
   it('includes error-context attachment content', () => {
     const result = buildPlaywrightStyleAiPrompt({
       config: makeConfig(),

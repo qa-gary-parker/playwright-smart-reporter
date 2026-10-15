@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 3,
+  "meta": {
+    "generatedAt": "2026-10-08T12:00:00.000Z",
+    "reporterVersion": "3.0.0",
+    "runId": "run-fixture",
+    "startTime": 1791460800000,
+    "duration": 42000,
+    "ci": { "provider": "github", "branch": "main", "commit": "abc1234", "buildId": "42" },
+    "projectName": "web",
+    "outputBasename": "smart-report"
+  },
+  "config": {
+    "features": { "gallery": true, "comparison": false, "trends": true, "traceViewer": true, "historyDrilldown": false, "live": false, "networkLogs": true },
+    "exports": { "json": false, "junit": false, "pdf": false }
+  },
+  "summary": { "total": 5, "passed": 3, "failed": 2, "skipped": 0, "flaky": 1, "slow": 0, "newTests": 0, "passRate": 60, "duration": 42000, "grades": { "A": 0, "B": 0, "C": 1, "D": 0, "F": 0 } },
+  "tests": [
+    {
+      "testId": "[chromium] tests/auth/login.spec.ts::shows the dashboard after login",
+      "title": "shows the dashboard after login",
+      "file": "tests/auth/login.spec.ts",
+      "line": 10,
+      "column": 5,
+      "status": "failed",
+      "outcome": "unexpected",
+      "expectedStatus": "passed",
+      "duration": 6200,
+      "retry": 1,
+      "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('heading', { name: 'Dashboard' })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('heading', { name: 'Dashboard' })\n\n\n    at /ci/workspace/tests/auth/login.spec.ts:14:61",
+      "errorSnippet": "  12 |   await page.getByLabel('Password').fill(process.env.PASSWORD!);\n  13 |   await page.getByRole('button', { name: 'Sign in' }).click();\n> 14 |   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();\n     |                                                             ^\n  15 | });",
+      "errorLocation": { "file": "tests/auth/login.spec.ts", "line": 14, "column": 61 },
+      "aiPrompt": "Environment: PASSWORD=do-not-ship-this",
+      "flakinessScore": 0.33,
+      "averageDuration": 5200,
+      "stabilityScore": { "overall": 72, "flakiness": 67, "performance": 80, "reliability": 70, "grade": "C", "needsAttention": false },
+      "steps": [
+        { "title": "Navigate to \"/login\"", "duration": 300, "category": "pw:api" },
+        { "title": "Sign in", "duration": 6000, "category": "test.step" }
+      ],
+      "attempts": [
+        { "retry": 0, "status": "failed", "duration": 6100, "error": "Error: expect(locator).toBeVisible() failed\n\nCall log:\n  - waiting for getByRole('heading', { name: 'Dashboard' })\n\n    at /ci/workspace/tests/auth/login.spec.ts:14:61", "steps": [] },
+        { "retry": 1, "status": "failed", "duration": 6200, "error": "Error: expect(locator).toBeVisible() failed\n\nCall log:\n  - waiting for getByRole('heading', { name: 'Dashboard' })\n\n    at /ci/workspace/tests/auth/login.spec.ts:14:61", "steps": [] }
+      ],
+      "history": [
+        { "passed": true, "duration": 5000, "timestamp": "2026-10-05T12:00:00.000Z" },
+        { "passed": false, "duration": 6000, "timestamp": "2026-10-06T12:00:00.000Z" },
+        { "passed": false, "skipped": true, "duration": 0, "timestamp": "2026-10-07T12:00:00.000Z" }
+      ],
+      "tags": ["@smoke"],
+      "suite": "Login",
+      "suites": ["Auth", "Login"],
+      "browser": "chromium",
+      "project": "chromium",
+      "networkLogs": {
+        "entries": [
+          {
+            "method": "GET", "url": "https://app.example.test/login", "urlPath": "/login", "status": 200, "statusText": "OK",
+            "duration": 120, "timestamp": "2026-10-08T11:59:00.100Z", "contentType": "text/html", "requestSize": 0, "responseSize": 2048
+          },
+          {
+            "method": "POST", "url": "https://app.example.test/api/session", "urlPath": "/api/session", "status": 500, "statusText": "Internal Server Error",
+            "duration": 400, "timestamp": "2026-10-08T11:59:00.400Z", "contentType": "application/json", "requestSize": 64, "responseSize": 32,
+            "requestHeaders": { "Authorization": "Bearer fixture-session-0123456789", "Content-Type": "application/json" },
+            "responseHeaders": { "Set-Cookie": "sid=fixture-sid-value; HttpOnly", "Content-Type": "application/json" },
+            "requestBody": { "email": "qa@example.test", "password": "fixture-password" },
+            "responseBody": { "error": "boom" }
+          }
+        ],
+        "totalRequests": 2,
+        "totalDuration": 520,
+        "summary": { "byStatus": { "200": 1, "500": 1 }, "byMethod": { "GET": 1, "POST": 1 }, "slowest": null, "errors": [] }
+      },
+      "timeline": {
+        "duration": 6200,
+        "lanes": {
+          "steps": [
+            { "title": "Navigate to \"/login\"", "start": 0, "end": 300, "category": "pw:api" },
+            { "title": "Sign in", "start": 300, "end": 6200, "category": "test.step", "failed": true },
+            { "title": "Expect \"toBeVisible\"", "start": 1100, "end": 6150, "category": "expect", "failed": true }
+          ],
+          "network": [
+            { "start": 100, "end": 220, "method": "GET", "url": "https://app.example.test/login", "status": 200 },
+            { "start": 700, "end": 1100, "method": "POST", "url": "https://app.example.test/api/session", "status": 500 }
+          ],
+          "console": [
+            { "at": 50, "level": "log", "text": "app booted" },
+            { "at": 1105, "level": "error", "text": "Failed to load resource: the server responded with a status of 500 ()" }
+          ]
+        },
+        "firstAnomaly": { "kind": "network-error", "at": 700, "summary": "POST /api/session returned 500", "ref": { "lane": "network", "index": 1 } }
+      },
+      "signals": ["new-failure"]
+    },
+    {
+      "testId": "tests/export.spec.ts::exports a CSV",
+      "title": "exports a CSV",
+      "file": "tests/export.spec.ts",
+      "line": 6,
+      "column": 1,
+      "status": "timedOut",
+      "outcome": "unexpected",
+      "duration": 30000,
+      "retry": 0,
+      "error": "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for locator('#export')\n\n    at Locator.click (/repo/node_modules/playwright-core/lib/client/locator.js:107:12)\n    at ExportPage.download (/repo/tests/pages/export-page.ts:22:15)\n    at /repo/tests/export.spec.ts:8:3",
+      "steps": [{ "title": "Click locator('#export')", "duration": 30000, "category": "pw:api" }],
+      "history": [],
+      "signals": []
+    },
+    {
+      "testId": "tests/home.spec.ts::renders",
+      "title": "renders",
+      "file": "tests/home.spec.ts",
+      "status": "passed",
+      "outcome": "expected",
+      "duration": 900,
+      "retry": 0,
+      "steps": [],
+      "history": [],
+      "signals": []
+    },
+    {
+      "testId": "tests/home.spec.ts::flaky search",
+      "title": "flaky search",
+      "file": "tests/home.spec.ts",
+      "status": "passed",
+      "outcome": "flaky",
+      "duration": 1500,
+      "retry": 1,
+      "error": "Error: first attempt failed",
+      "steps": [],
+      "history": [],
+      "signals": ["flaky"]
+    },
+    {
+      "testId": "tests/home.spec.ts::known bug",
+      "title": "known bug",
+      "file": "tests/home.spec.ts",
+      "status": "failed",
+      "outcome": "expected",
+      "expectedStatus": "failed",
+      "duration": 400,
+      "retry": 0,
+      "error": "Error: expected failure",
+      "steps": [],
+      "history": [],
+      "signals": []
+    }
+  ],
+  "clusters": [],
+  "trends": [],
+  "ai": {}
+}

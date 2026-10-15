@@ -6,9 +6,14 @@ import type {
   SmartReporterOptions,
   RunComparison,
   FailureCluster,
+  A11yResult,
+  CausalTimeline,
+  QualityGateResult,
 } from '../types';
+import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
+import { isFailedTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
 
-function getReporterVersion(): string {
+export function getReporterVersion(): string {
   try {
     const pkgPath = path.resolve(__dirname, '../../package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -23,6 +28,8 @@ export interface JsonExportData {
     generatedAt: string;
     reporterVersion: string;
     projectName?: string;
+    // Phase 5: CI surface integrations — absolute directory that test `file` paths are relative to
+    rootDir?: string;
   };
   summary: {
     total: number;
@@ -42,9 +49,16 @@ export interface JsonExportData {
     runs: TestHistory['runs'];
     summaries?: TestHistory['summaries'];
   };
+  // Phase 5: CI surface integrations
+  qualityGates?: QualityGateResult;
+  // Phase 6: Code coverage (totals only; per-line hits and source live in the report data)
+  coverage?: {
+    summary: CoverageSummary;
+    files: Array<CoverageSummary & { path: string }>;
+  };
 }
 
-interface JsonTestEntry {
+export interface JsonTestEntry {
   testId: string;
   title: string;
   file: string;
@@ -64,6 +78,16 @@ interface JsonTestEntry {
   browser?: string;
   project?: string;
   aiSuggestion?: string;
+  // Phase 10: Accessibility
+  a11y?: A11yResult;
+  // Phase 4: Causal failure timeline
+  timeline?: CausalTimeline;
+  owners?: string[];
+  ownerSource?: TestResultData['ownerSource'];
+  // Phase 5: CI surface integrations
+  line?: number;
+  column?: number;
+  errorLocation?: TestResultData['errorLocation'];
 }
 
 interface JsonClusterEntry {
@@ -83,6 +107,9 @@ export function exportJsonData(
   failureClusters?: FailureCluster[],
   outputDir?: string,
   basename?: string,
+  qualityGateResult?: QualityGateResult,
+  rootDir?: string,
+  coverage?: ReportCoverage,
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -92,9 +119,9 @@ export function exportJsonData(
   const filename = `${basename ?? 'smart-report'}-data.json`;
   const outputPath = path.resolve(baseDir, filename);
 
-  const passed = results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-  const failed = results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
+  const passed = results.filter(isPassedTest).length;
+  const failed = results.filter(isFailedTest).length;
+  const skipped = results.filter(isSkippedTest).length;
   const flaky = results.filter(r => r.outcome === 'flaky').length;
   const duration = Date.now() - startTime;
 
@@ -128,6 +155,13 @@ export function exportJsonData(
     browser: r.browser,
     project: r.project,
     aiSuggestion: r.aiSuggestion,
+    a11y: r.a11y,
+    timeline: r.timeline,
+    owners: r.owners,
+    ownerSource: r.ownerSource,
+    line: r.line,
+    column: r.column,
+    errorLocation: r.errorLocation,
   }));
 
   const clusters: JsonClusterEntry[] | undefined = failureClusters?.map(c => ({
@@ -143,6 +177,7 @@ export function exportJsonData(
       generatedAt: new Date().toISOString(),
       reporterVersion: getReporterVersion(),
       projectName: options.projectName,
+      rootDir,
     },
     summary: {
       total: results.length,
@@ -161,6 +196,11 @@ export function exportJsonData(
       runCount: history.runs.length,
       runs: history.runs,
       summaries: history.summaries,
+    },
+    qualityGates: qualityGateResult,
+    coverage: coverage && {
+      summary: coverage.summary,
+      files: coverage.files.map(({ path, lines, functions, branches }) => ({ path, lines, functions, branches })),
     },
   };
 

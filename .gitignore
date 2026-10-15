@@ -7,6 +7,7 @@ dist/
 *.bak*
 
 # Test artifacts
+.ui-specimen/
 test-results/
 playwright-report/
 blob-report/
@@ -15,6 +16,8 @@ blobs/
 
 # Example outputs
 example/smart-report.html
+example/smart-report-a11y.html
+example/test-history-a11y.json
 example/test-history.json
 example/parallel/smart-report.html
 example/parallel/test-history.json
@@ -23,9 +26,14 @@ example/traces/
 example/*.pdf
 example/*.xml
 example/*-data.json
+example/*-ctrf.json
 example/.smart-quarantine.json
 example/test-history-premium.json
 example/premium-report.html
+example/timeline/out/
+example/acceptance/out/
+example/coverage/app/dist/
+example/coverage/coverage-report/
 
 # Pack archives
 *.tgz
@@ -45,4 +53,4 @@ benchmark/specs/
 .worktrees/
 
 # Coverage output
-coverage/
+/coverage/

@@ -1,18 +1,23 @@
 import type { QualityGateResult, QualityGateRuleResult } from '../types';
 
-const ruleLabels: Record<string, string> = {
+export const ruleLabels: Record<string, string> = {
   maxFailures: 'Max failures',
   minPassRate: 'Min pass rate',
   maxFlakyRate: 'Max flaky rate',
   minStabilityGrade: 'Min stability grade',
   noNewFailures: 'No new failures',
+  maxA11yViolations: 'Max a11y violations',
+  maxA11yCritical: 'Max a11y critical',
+  maxA11ySerious: 'Max a11y serious',
+  minCoverage: 'Min line coverage',
 };
 
 function formatRuleLine(rule: QualityGateRuleResult): string {
   const label = ruleLabels[rule.rule] || rule.rule;
 
   if (rule.skipped) {
-    return `  \u25CB ${padRight(label, 20)} (skipped \u2014 no comparison data)`;
+    const reason = rule.rule.startsWith('maxA11y') ? 'no accessibility scans' : 'no comparison data';
+    return `  \u25CB ${padRight(label, 20)} (skipped \u2014 ${reason})`;
   }
 
   const icon = rule.passed ? '\u2713' : '\u2717';
