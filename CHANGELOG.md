@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - **Theme presets.** `ocean`, `sunset`, `dracula`, `cyberpunk`, `forest`, and `rose` now set the accent colour only, on the active mode. `default`, `light`, `dark`, and `high-contrast` set the mode. No preset value errors.
 - **Report data file.** `assetMode` defaults to `'auto'`: above 32 MB of data the reporter writes `<name>-data.js` next to the HTML. `cspSafe: true` always writes `<name>-data.js`, as well as `<name>.css` and `<name>.js`. Keep these files next to the HTML.
 - **Quality gates fail the run.** A run with a breached reporter-side gate now exits 1. See Fixed.
+- **Test ids.** A test inside `test.describe` now has the id `[project] file::describe › title`. In 2.x it was `[project] file::title`, so two tests with one title in different describe blocks shared one result and one history. The id no longer depends on which tests run together (a shard, `--grep`). History saved under a 2.x id moves to the new id the first time the test runs. Where two tests shared a 2.x id, only the tests in that first run keep the shared history. The JSON export, failure bundle, and quarantine file use the new ids.
 - **Requirements.** The Playwright peer dependency is unchanged (`@playwright/test >=1.40.0`). New runtime dependency `@modelcontextprotocol/sdk` 1.31.0 (Node 18 or later), loaded only by the `mcp` command. New optional peer dependency `@axe-core/playwright >=4.0.0`, needed only for accessibility scanning.
 
 ### Added

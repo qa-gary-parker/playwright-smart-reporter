@@ -70,6 +70,27 @@ describe('test ids', () => {
     expect(Object.keys(history(out).tests).sort()).toEqual(ids);
   }, TIMEOUT);
 
+  it('gives a test in a describe block the same id whichever other tests run with it', () => {
+    const out = path.join(tmp, 'describe-alone');
+    runSuite(out, {}, ['--grep', 'first block', '--retries=0']);
+    runSuite(out, {}, ['--grep', 'same title', '--retries=0']);
+
+    expect(Object.keys(history(out).tests).sort()).toEqual([id('first block › same title'), id('second block › same title')]);
+    expect(history(out).tests[id('first block › same title')].map((e) => e.passed)).toEqual([true, true]);
+  }, TIMEOUT);
+
+  it('moves history saved under the old file::title id to the describe-path id', () => {
+    const out = path.join(tmp, 'legacy-id');
+    fs.mkdirSync(out, { recursive: true });
+    const legacy = { passed: false, duration: 5, timestamp: '2026-01-01T00:00:00.000Z' };
+    fs.writeFileSync(path.join(out, 'test-history.json'), JSON.stringify({ runs: [], tests: { [id('same title')]: [legacy] }, summaries: [] }));
+    runSuite(out, {}, ['--grep', 'first block', '--retries=0']);
+
+    const tests = history(out).tests;
+    expect(Object.keys(tests)).toEqual([id('first block › same title')]);
+    expect(tests[id('first block › same title')].map((e) => [e.passed, e.timestamp === legacy.timestamp])).toEqual([[false, true], [true, false]]);
+  }, TIMEOUT);
+
   it('reports each --repeat-each copy as its own test, and only retries as attempts', () => {
     const out = path.join(tmp, 'repeat-each');
     runSuite(out, {}, ['--grep', 'fails when asked|passes on retry', '--repeat-each=2']);

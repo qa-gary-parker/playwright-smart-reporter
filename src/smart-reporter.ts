@@ -177,7 +177,7 @@ class SmartReporter implements Reporter {
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
     this.fullConfig = config;
     this.allTests = suite.allTests();
-    this.assignTestIds(this.allTests);
+    const legacyIds = this.assignTestIds(this.allTests);
 
     // Auto-detect CI environment
     this.ciInfo = detectCIInfo();
@@ -192,6 +192,7 @@ class SmartReporter implements Reporter {
     // Initialize HistoryCollector and load history
     this.historyCollector = new HistoryCollector(this.options, this.outputDir);
     this.historyCollector.loadHistory();
+    this.historyCollector.adoptLegacyIds(legacyIds);
 
     // Re-initialize attachment collector with output directory for CSP-safe mode
     const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');
@@ -954,10 +955,10 @@ class SmartReporter implements Reporter {
    * Create a unique test ID from test file, title, and project name
    * Issue #26: Include project name for parameterized projects
    * @param test - Playwright TestCase
-   * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login Test")
+   * @returns Test ID string (e.g., "[Chrome] src/tests/login.spec.ts::Login › signs in")
    */
   private getTestId(test: TestCase): string {
-    return this.testIds.get(test.id) ?? this.idFor(test, [test.title]);
+    return this.testIds.get(test.id) ?? this.idFor(test, [...describePath(test), test.title]);
   }
 
   private idFor(test: TestCase, titles: string[]): string {
@@ -969,23 +970,18 @@ class SmartReporter implements Reporter {
     return `${prefix}${file}::${titles.join(' › ')}`;
   }
 
-  // Only tests whose id collides (one title in two describe blocks) get their describe path in it:
-  // changing any other id would cut that test off from its history. --repeat-each copies get a suffix,
-  // so each copy is its own result and attempts stay retries.
-  private assignTestIds(tests: TestCase[]): void {
-    const byId = new Map<string, TestCase[]>();
+  // The id includes the describe path, so it does not depend on which other tests are in the run
+  // (a shard, --grep, --project). --repeat-each copies get a suffix, so each copy is its own result and
+  // attempts stay retries. Returns each id -> the file::title id 2.x saved history under.
+  private assignTestIds(tests: TestCase[]): Map<string, string> {
+    const legacyIds = new Map<string, string>();
     for (const test of tests) {
-      const id = this.idFor(test, [test.title]);
-      if (!byId.has(id)) byId.set(id, []);
-      byId.get(id)!.push(test);
+      const suffix = test.repeatEachIndex > 0 ? ` (repeat ${test.repeatEachIndex})` : '';
+      const id = this.idFor(test, [...describePath(test), test.title]) + suffix;
+      this.testIds.set(test.id, id);
+      legacyIds.set(id, this.idFor(test, [test.title]) + suffix);
     }
-    for (const [id, same] of byId) {
-      const collides = new Set(same.map((t) => describePath(t).join(' › '))).size > 1;
-      for (const test of same) {
-        const unique = collides ? this.idFor(test, [...describePath(test), test.title]) : id;
-        this.testIds.set(test.id, test.repeatEachIndex > 0 ? `${unique} (repeat ${test.repeatEachIndex})` : unique);
-      }
-    }
+    return legacyIds;
   }
 
 }

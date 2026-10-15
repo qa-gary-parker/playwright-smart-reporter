@@ -139,6 +139,35 @@ describe('HistoryCollector', () => {
     });
   });
 
+  describe('adoptLegacyIds', () => {
+    const old = { passed: false, duration: 5, timestamp: '2024-01-01T10:00:00Z' };
+    const kept = { passed: true, duration: 7, timestamp: '2024-01-02T10:00:00Z' };
+
+    function load(tests: TestHistory['tests']): HistoryCollector {
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ runs: [], tests, summaries: [] }));
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+      return collector;
+    }
+
+    it('copies an old id shared by two tests to both, removes it, and keeps history already under a new id', () => {
+      const collector = load({ 'a.spec.ts::t': [old], 'a.spec.ts::B › t': [kept], 'b.spec.ts::u': [old] });
+
+      collector.adoptLegacyIds(new Map([['a.spec.ts::A › t', 'a.spec.ts::t'], ['a.spec.ts::B › t', 'a.spec.ts::t']]));
+
+      expect(collector.getHistory().tests).toEqual({ 'a.spec.ts::A › t': [old], 'a.spec.ts::B › t': [kept], 'b.spec.ts::u': [old] });
+    });
+
+    it('leaves an old id that is still a current id with its test', () => {
+      const collector = load({ 'a.spec.ts::t': [old] });
+
+      collector.adoptLegacyIds(new Map([['a.spec.ts::t', 'a.spec.ts::t'], ['a.spec.ts::A › t', 'a.spec.ts::t']]));
+
+      expect(collector.getHistory().tests).toEqual({ 'a.spec.ts::t': [old] });
+    });
+  });
+
   describe('getTestHistory', () => {
     it('returns empty array for unknown test', () => {
       mockFs.existsSync.mockReturnValue(false);

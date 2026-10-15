@@ -281,6 +281,19 @@ export class HistoryCollector {
     return stepDurations ? { stepDurations } : {};
   }
 
+  // Moves history saved under a test's old id (current id -> old id) to its current one. Every test
+  // sharing an old id gets a copy. An old id that is still a current id stays put.
+  adoptLegacyIds(legacyIds: Map<string, string>): void {
+    const tests = this.history.tests;
+    const moved = new Set<string>();
+    for (const [id, legacy] of legacyIds) {
+      if (!tests[legacy] || legacyIds.has(legacy)) continue;
+      tests[id] ??= [...tests[legacy]];
+      moved.add(legacy);
+    }
+    for (const legacy of moved) delete tests[legacy];
+  }
+
   /**
    * Get history for a specific test
    */
