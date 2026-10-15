@@ -1,3 +1,5 @@
+![playwright-smart-reporter: see why your Playwright tests failed, with failures grouped by cause](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/banner.png)
+
 # playwright-smart-reporter
 
 A Playwright HTML reporter with a run dashboard and a failures inbox. It groups failures by cause, shows a causal timeline for each failed test, tracks flakiness across runs, and can run AI failure analysis with your own key or a local model. Free and open source (MIT). Every feature is included.
