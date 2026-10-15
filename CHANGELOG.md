@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.0.0] - 2026-10-08
+## [3.0.0] - 2026-10-15
 
 ### Breaking changes
 - **New report renderer.** The template-string HTML report is replaced by a Preact single-page app built from a versioned `ReportData` payload (`schemaVersion: 3`). The report still opens over `file://` with no server. Insights (the landing view) and Failures replace Overview; Trends and Comparison are tabs of History; filters move from the sidebar to a filter bar. Number keys `1`–`5` now open Failures, All tests, Insights, History, and Gallery.
