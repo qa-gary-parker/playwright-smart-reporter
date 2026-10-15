@@ -26,10 +26,13 @@ function contentStreams(file: string): string[] {
 }
 
 // Text of each BT…ET block in drawing order. The standard fonts encode text as WinAnsi hex strings.
+// WinAnsi bytes 0x80-0x9F. Node 20's TextDecoder('windows-1252') decodes these as C1 control characters.
+const WIN_ANSI_80_9F = '€\x81‚ƒ„…†‡ˆ‰Š‹Œ\x8DŽ\x8F\x90‘’“”•–—˜™š›œ\x9DžŸ';
+const winAnsi = (bytes: Buffer) => [...bytes].map(b => (b >= 0x80 && b < 0xa0 ? WIN_ANSI_80_9F[b - 0x80] : String.fromCharCode(b))).join('');
+
 function pdfLines(file: string): string[] {
-  const winAnsi = new TextDecoder('windows-1252');
   return contentStreams(file).flatMap(content => [...content.matchAll(/\bBT\b[\s\S]*?\bET\b/g)].map(([block]) =>
-    [...block.matchAll(/<([0-9a-f]+)>/gi)].map(([, hex]) => winAnsi.decode(Buffer.from(hex, 'hex'))).join('')));
+    [...block.matchAll(/<([0-9a-f]+)>/gi)].map(([, hex]) => winAnsi(Buffer.from(hex, 'hex'))).join('')));
 }
 
 function expectDrawn(lines: string[], run: unknown[]): void {
