@@ -296,7 +296,7 @@ describe('failed attempts', () => {
       .map((p) => path.posix.normalize(p));
     const files = outputFiles(out);
 
-    expect(files.filter((f) => !linked.includes(f))).toEqual(['pw.json', 'smart-report-data.js', 'smart-report.css', 'smart-report.html', 'smart-report.js', 'test-history.json']);
+    expect(files.filter((f) => !linked.includes(f))).toEqual(['pw-junit.xml', 'pw.json', 'smart-report-data.js', 'smart-report.css', 'smart-report.html', 'smart-report.js', 'test-history.json']);
     expect(files.filter((f) => linked.includes(f))).toEqual(['smart-report-screenshot-1.png', `traces/${TRACE}`]);
   });
 
@@ -308,6 +308,7 @@ describe('failed attempts', () => {
     expect(test.attempts?.map((a) => a.tracePath)).toEqual([undefined, undefined]);
     expect(test.attachments?.screenshots).toEqual(['smart-report-screenshot-1.png']);
     expect(outputFiles(out)).toEqual([
+      'pw-junit.xml',
       'pw.json',
       'smart-report-data.js',
       'smart-report-screenshot-1.png',
