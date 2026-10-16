@@ -233,30 +233,6 @@ describe('PerformanceAnalyzer', () => {
         expect(analyzer.getStatus(undefined)).toBe('stable');
       });
     });
-
-    describe('calculateSmartThreshold', () => {
-      it('returns looser threshold for very fast tests', () => {
-        expect(analyzer.calculateSmartThreshold(50)).toBe(0.5);
-        expect(analyzer.calculateSmartThreshold(99)).toBe(0.5);
-      });
-
-      it('returns moderate threshold for fast tests', () => {
-        expect(analyzer.calculateSmartThreshold(100)).toBe(0.3);
-        expect(analyzer.calculateSmartThreshold(500)).toBe(0.3);
-        expect(analyzer.calculateSmartThreshold(999)).toBe(0.3);
-      });
-
-      it('returns default threshold for normal tests', () => {
-        expect(analyzer.calculateSmartThreshold(1000)).toBe(0.2);
-        expect(analyzer.calculateSmartThreshold(5000)).toBe(0.2);
-        expect(analyzer.calculateSmartThreshold(9999)).toBe(0.2);
-      });
-
-      it('returns tighter threshold for slow tests', () => {
-        expect(analyzer.calculateSmartThreshold(10000)).toBe(0.15);
-        expect(analyzer.calculateSmartThreshold(30000)).toBe(0.15);
-      });
-    });
   });
 
   describe('with custom threshold', () => {

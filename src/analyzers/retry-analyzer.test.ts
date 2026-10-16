@@ -138,7 +138,14 @@ describe('RetryAnalyzer', () => {
           needsAttention: false,
         };
 
-        expect(analyzer.getRetrySummary(test)).toBe('Passed on retry 3/3');
+        expect(analyzer.getRetrySummary(test)).toBe('Passed on attempt 3 of 3');
+      });
+
+      it('labels a pass on the first retry as the second of two attempts', () => {
+        const test = createTestResult({ status: 'passed', retry: 1 });
+        analyzer.analyze(test, []);
+
+        expect(analyzer.getRetrySummary(test)).toBe('Passed on attempt 2 of 2');
       });
 
       it('returns summary for failed test', () => {

@@ -126,22 +126,4 @@ export class PerformanceAnalyzer {
     if (trend.startsWith('↓')) return 'fast';
     return 'stable';
   }
-
-  /**
-   * Calculate smart thresholds based on test duration
-   * Shorter tests should have tighter thresholds
-   */
-  calculateSmartThreshold(duration: number): number {
-    // For very fast tests (<100ms), use tighter threshold
-    if (duration < 100) return 0.5; // 50% variance allowed
-
-    // For fast tests (<1s), use moderate threshold
-    if (duration < 1000) return 0.3; // 30% variance allowed
-
-    // For normal tests (<10s), use default threshold
-    if (duration < 10000) return this.performanceThreshold;
-
-    // For slow tests (>10s), use looser threshold
-    return 0.15; // 15% variance allowed
-  }
 }
