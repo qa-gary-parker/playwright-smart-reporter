@@ -1,12 +1,86 @@
+import * as crypto from 'crypto';
 import type { TestResultData, FailureCluster } from '../types';
-import { hashString } from '../utils/sanitizers';
+import { parseError, type StackFrame } from '../utils/error-stack';
+import { truncate } from '../utils/sanitizers';
+
+export interface FailureFingerprint {
+  /** First 16 hex characters of a SHA-256 over the fingerprint parts. The same failure gets the same id in every run. */
+  id: string;
+  /** Matcher or masked first message line, then the locator and the failing location. */
+  label: string;
+}
+
+// The reporter strips only SGR codes; OSC hyperlinks (BEL or ST ended) and other CSI sequences can remain.
+const ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]/g;
+// Retries, waits and element states in Playwright's call log change from run to run.
+const CALL_LOG = /^\s*Call log:/m;
+const MATCHER = /expect(?:\.\w+)?\(.*?\)\s*\.\s*(not\s*\.\s*)?(\w+)/;
+// One level of nested parentheses covers filter({ has: locator(...) }) and getByText('Pay (now)').
+const LOCATOR = /\b(?:locator|frameLocator|getBy[A-Z][A-Za-z]*)\((?:[^()]|\([^()]*\))*\)(?:\.[A-Za-z]+\((?:[^()]|\([^()]*\))*\))*/;
+const URL_PATTERN = /\b[a-z][a-z\d+.-]*:\/\/[^\s'"`<>()]+/gi;
+// A quote that touches a word character is an apostrophe ("can't"), not a delimiter.
+const QUOTED = /(?<!\w)(?:"[^"\n]*"|'[^'\n]*'|`[^`\n]*`)(?!\w)/g;
+const UUID = /(?<![\da-z])[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(?![\da-z])/gi;
+// 0x literals, or 8+ hex characters with at least one digit and one letter; plain numbers fall to DIGITS.
+const HEX_ID = /(?<![\da-z])(?:0x[\da-f]+|(?=[a-f]*\d)(?=\d*[a-f])[\da-f]{8,})(?![\da-z])/gi;
+const DIGITS = /\d+(?:\.\d+)*/g;
+const LABEL_MAX = 80;
+
+const toPosix = (p: string) => p.replace(/\\/g, '/');
+
+function maskIds(text: string): string {
+  return text.replace(UUID, '<uuid>').replace(HEX_ID, '<hex>');
+}
+
+function maskMessage(line: string): string {
+  return maskIds(line.replace(URL_PATTERN, '<url>').replace(QUOTED, '<str>')).replace(DIGITS, '<n>');
+}
+
+// errorLocation and test.file are relative to the Playwright rootDir; stack frames are absolute, so only their line is used.
+function failureLocation(test: Pick<TestResultData, 'errorLocation' | 'file'>, frames: StackFrame[]): string {
+  if (test.errorLocation) return `${toPosix(test.errorLocation.file)}:${test.errorLocation.line}`;
+  const file = toPosix(test.file);
+  const spec = file.replace(/^(\.\.?\/)+/, '');
+  const frame = frames.find((f) => {
+    const frameFile = toPosix(f.file);
+    return frameFile === spec || frameFile.endsWith(`/${spec}`);
+  });
+  return frame ? `${file}:${frame.line}` : file;
+}
+
+/**
+ * Fingerprints a failure by error type, masked message, failing location and locator, so failures with one root
+ * cause share an id while different elements or code paths do not.
+ */
+export function fingerprintFailure(test: Pick<TestResultData, 'error' | 'errorLocation' | 'file'>): FailureFingerprint {
+  const { message, frames } = parseError((test.error ?? '').replace(ESCAPES, ''));
+  const lines = message
+    .split(CALL_LOG)[0]
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+  const firstLine = lines[0] ?? '';
+  const masked = lines.map(maskMessage);
+
+  const matcher = MATCHER.exec(firstLine);
+  const assertion = matcher ? `${matcher[1] ? 'not.' : ''}${matcher[2]}` : '';
+  const type = assertion ? `expect.${assertion}` : (/^\w*(?:Error|Exception)\b/.exec(firstLine)?.[0] ?? '');
+  const rawLocator = LOCATOR.exec(message)?.[0];
+  const locator = rawLocator ? maskIds(rawLocator.replace(/\s+/g, ' ')) : '';
+  const location = failureLocation(test, frames);
+
+  const what = assertion || truncate((masked[0] ?? '').replace(/^Error\b:?\s*/, '') || 'Unknown Error', LABEL_MAX);
+  const label = `${what}${locator ? ` on ${locator}` : ''}${location ? ` at ${location}` : ''}`;
+  const id = crypto.createHash('sha256').update([type, masked.join('\n'), location, locator].join('\0')).digest('hex').slice(0, 16);
+  return { id, label };
+}
 
 /**
  * Clusters similar test failures together for better analysis and reporting
  */
 export class FailureClusterer {
   /**
-   * Cluster failed tests by error type
+   * Cluster failed tests by failure fingerprint
    * Excludes expected failures (tests marked with test.fail() that actually fail)
    */
   clusterFailures(results: TestResultData[]): FailureCluster[] {
@@ -16,82 +90,18 @@ export class FailureClusterer {
       r.outcome !== 'expected'  // Exclude expected failures
     );
 
-    if (failedTests.length === 0) return [];
-
-    // Group by error type
-    const clusters = new Map<string, TestResultData[]>();
-
+    const clusters = new Map<string, FailureCluster>();
     for (const test of failedTests) {
-      const errorType = this.extractErrorType(test.error);
-      const clusterId = hashString(errorType);
-
-      if (!clusters.has(clusterId)) {
-        clusters.set(clusterId, []);
+      const { id, label } = fingerprintFailure(test);
+      const cluster = clusters.get(id);
+      if (cluster) {
+        cluster.tests.push(test);
+        cluster.count = cluster.tests.length;
+      } else {
+        clusters.set(id, { id, errorType: label, count: 1, tests: [test] });
       }
-      clusters.get(clusterId)!.push(test);
     }
-
-    // Convert to FailureCluster objects
-    return Array.from(clusters.entries()).map(([id, tests]) => ({
-      id,
-      errorType: this.extractErrorType(tests[0].error),
-      count: tests.length,
-      tests,
-    }));
-  }
-
-  /**
-   * Extract error type from error message
-   */
-  private extractErrorType(error?: string): string {
-    if (!error) return 'Unknown Error';
-
-    // Try to extract the error class/type from the stack trace
-    const lines = error.split('\n');
-    const firstLine = lines[0].trim();
-
-    // Check for common patterns
-    if (firstLine.includes('TimeoutError')) return 'Timeout Error';
-    if (/^Test timeout of \d+ms exceeded/.test(firstLine)) return 'Test Timeout';
-    if (firstLine.includes('AssertionError')) return 'Assertion Error';
-    if (firstLine.includes('TypeError')) return 'Type Error';
-    if (firstLine.includes('ReferenceError')) return 'Reference Error';
-    if (firstLine.includes('NetworkError')) return 'Network Error';
-    if (firstLine.includes('ElementNotFound')) return 'Element Not Found';
-    if (firstLine.includes('Selector')) return 'Selector Error';
-
-    // Playwright assertion failures: "Error: expect(locator).toBeVisible() failed",
-    // including soft (expect.soft(...)) and negated (.not.toBeVisible) forms.
-    // Cluster by matcher so similar assertion failures group together.
-    const expectMatch = firstLine.match(/expect(?:\.\w+)?\(.*?\)\s*\.\s*(?:not\s*\.\s*)?(\w+)/);
-    if (expectMatch) return `Assertion: ${expectMatch[1]}`;
-
-    // Look for a named error class ("TypeError:", "AxeError:", ...) —
-    // a bare "Error:" carries no information, so skip it here.
-    const errorMatch = firstLine.match(/(\w+Error):/);
-    if (errorMatch && errorMatch[1] !== 'Error') return errorMatch[1];
-
-    // Bare "Error: <message>" — use the message itself as the cluster name.
-    const bareError = firstLine.match(/^Error:\s*(.+)/);
-    if (bareError) {
-      const message = bareError[1].trim();
-      if (message.length > 0) {
-        return message.length > 60 ? `${message.slice(0, 57)}...` : message;
-      }
-      return 'Unknown Error';
-    }
-    if (/^Error:?\s*$/.test(firstLine)) return 'Unknown Error';
-
-    // Look for "expected" pattern (assertions)
-    if (firstLine.includes('expected')) return 'Assertion Error';
-
-    // Extract first meaningful word
-    const words = firstLine.split(/\s+/);
-    if (words.length > 0 && words[0].length > 0) {
-      return words[0].length > 50 ? 'Unknown Error' : words[0];
-    }
-
-    return 'Unknown Error';
+    return [...clusters.values()];
   }
 
   /**

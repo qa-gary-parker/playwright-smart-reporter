@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FailureClusterer } from './failure-clusterer';
+import { FailureClusterer, fingerprintFailure } from './failure-clusterer';
 import type { TestResultData, FailureCluster } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
@@ -31,7 +31,7 @@ describe('FailureClusterer', () => {
       expect(clusters).toEqual([]);
     });
 
-    it('groups failures by error type', () => {
+    it('groups failures by fingerprint, not by error class alone', () => {
       const results = [
         createTestResult({
           testId: 'test-1',
@@ -46,19 +46,16 @@ describe('FailureClusterer', () => {
         createTestResult({
           testId: 'test-3',
           status: 'failed',
-          error: 'AssertionError: expected true to be false',
+          error: 'TimeoutError: Waiting for selector',
         }),
       ];
 
       const clusters = clusterer.clusterFailures(results);
 
-      expect(clusters.length).toBe(2);
-
-      const timeoutCluster = clusters.find(c => c.errorType === 'Timeout Error');
-      const assertionCluster = clusters.find(c => c.errorType === 'Assertion Error');
-
-      expect(timeoutCluster?.count).toBe(2);
-      expect(assertionCluster?.count).toBe(1);
+      expect(clusters.map(c => [c.errorType, c.count])).toEqual([
+        ['TimeoutError: Waiting for selector at test.spec.ts', 2],
+        ['TimeoutError: Navigation timeout at test.spec.ts', 1],
+      ]);
     });
 
     it('includes timedOut status in failures', () => {
@@ -89,16 +86,16 @@ describe('FailureClusterer', () => {
       const clusters = clusterer.clusterFailures(results);
 
       expect(clusters.length).toBe(1);
-      expect(clusters[0].errorType).toBe('Unknown Error');
+      expect(clusters[0].errorType).toBe('Unknown Error at test.spec.ts');
       expect(clusters[0].count).toBe(2);
     });
 
-    it('extracts error type from various patterns', () => {
+    it('labels a cluster with its masked first message line', () => {
       const testCases = [
-        { error: 'TypeError: Cannot read property', expectedType: 'Type Error' },
-        { error: 'ReferenceError: foo is not defined', expectedType: 'Reference Error' },
-        { error: 'NetworkError: Failed to fetch', expectedType: 'Network Error' },
-        { error: 'expected 5 to equal 10', expectedType: 'Assertion Error' },
+        { error: 'TypeError: Cannot read property', expectedType: 'TypeError: Cannot read property at test.spec.ts' },
+        { error: 'ReferenceError: foo is not defined', expectedType: 'ReferenceError: foo is not defined at test.spec.ts' },
+        { error: 'NetworkError: Failed to fetch', expectedType: 'NetworkError: Failed to fetch at test.spec.ts' },
+        { error: 'expected 5 to equal 10', expectedType: 'expected <n> to equal <n> at test.spec.ts' },
       ];
 
       for (const tc of testCases) {
@@ -112,7 +109,7 @@ describe('FailureClusterer', () => {
       }
     });
 
-    it('uses CustomError pattern for unknown error types', () => {
+    it('keeps a custom error class in the label', () => {
       const results = [
         createTestResult({
           status: 'failed',
@@ -122,27 +119,29 @@ describe('FailureClusterer', () => {
 
       const clusters = clusterer.clusterFailures(results);
 
-      expect(clusters[0].errorType).toBe('CustomError');
+      expect(clusters[0].errorType).toBe('CustomError: Something went wrong at test.spec.ts');
     });
 
-    it('clusters Playwright expect failures by matcher name', () => {
+    it('splits Playwright expect failures by locator, and labels them by matcher', () => {
       const results = [
         createTestResult({ testId: 't1', status: 'failed', error: "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#a')" }),
         createTestResult({ testId: 't2', status: 'failed', error: "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#b')" }),
-        createTestResult({ testId: 't3', status: 'failed', error: 'Error: expect(locator).toHaveText(expected) failed' }),
+        createTestResult({ testId: 't3', status: 'failed', error: "Error: expect(locator).toBeVisible() failed\n\nLocator: locator('#a')" }),
+        createTestResult({ testId: 't4', status: 'failed', error: 'Error: expect(locator).toHaveText(expected) failed' }),
       ];
 
       const clusters = clusterer.clusterFailures(results);
 
-      const visible = clusters.find(c => c.errorType === 'Assertion: toBeVisible');
-      const haveText = clusters.find(c => c.errorType === 'Assertion: toHaveText');
-      expect(visible?.count).toBe(2);
-      expect(haveText?.count).toBe(1);
+      expect(clusters.map(c => [c.errorType, c.tests.map(t => t.testId)])).toEqual([
+        ["toBeVisible on locator('#a') at test.spec.ts", ['t1', 't3']],
+        ["toBeVisible on locator('#b') at test.spec.ts", ['t2']],
+        ['toHaveText at test.spec.ts', ['t4']],
+      ]);
     });
 
-    it('names test timeouts as a timeout cluster, not "Test"', () => {
+    it('labels test timeouts by their masked message', () => {
       const clusters = clusterer.clusterFailures([createTestResult({ status: 'timedOut', error: 'Test timeout of 4000ms exceeded.' })]);
-      expect(clusters[0].errorType).toBe('Test Timeout');
+      expect(clusters[0].errorType).toBe('Test timeout of <n>ms exceeded. at test.spec.ts');
     });
 
     it('never produces a bare "Error" cluster name', () => {
@@ -152,27 +151,27 @@ describe('FailureClusterer', () => {
 
       const clusters = clusterer.clusterFailures(results);
 
-      expect(clusters[0].errorType).toBe('something exploded in the fixture');
+      expect(clusters[0].errorType).toBe('something exploded in the fixture at test.spec.ts');
     });
 
-    it('clusters negated assertions by matcher, not "not"', () => {
+    it('labels negated assertions by the negated matcher', () => {
       const results = [
         createTestResult({ status: 'failed', error: 'Error: expect(locator).not.toBeVisible() failed' }),
       ];
 
       const clusters = clusterer.clusterFailures(results);
 
-      expect(clusters[0].errorType).toBe('Assertion: toBeVisible');
+      expect(clusters[0].errorType).toBe('not.toBeVisible at test.spec.ts');
     });
 
-    it('clusters soft assertions by matcher', () => {
+    it('labels soft assertions by matcher', () => {
       const results = [
         createTestResult({ status: 'failed', error: 'Error: expect.soft(locator).toHaveText(expected) failed' }),
       ];
 
       const clusters = clusterer.clusterFailures(results);
 
-      expect(clusters[0].errorType).toBe('Assertion: toHaveText');
+      expect(clusters[0].errorType).toBe('toHaveText at test.spec.ts');
     });
 
     it('falls back to Unknown Error for empty bare Error messages', () => {
@@ -180,20 +179,102 @@ describe('FailureClusterer', () => {
         const clusters = clusterer.clusterFailures([
           createTestResult({ status: 'failed', error }),
         ]);
-        expect(clusters[0].errorType).toBe('Unknown Error');
+        expect(clusters[0].errorType).toBe('Unknown Error at test.spec.ts');
       }
     });
 
-    it('truncates long bare error messages used as cluster names', () => {
-      const longMessage = 'x'.repeat(80);
+    it('truncates long messages used as cluster labels', () => {
       const results = [
-        createTestResult({ status: 'failed', error: `Error: ${longMessage}` }),
+        createTestResult({ status: 'failed', error: `Error: ${'x'.repeat(100)}` }),
       ];
 
       const clusters = clusterer.clusterFailures(results);
 
-      expect(clusters[0].errorType.length).toBeLessThanOrEqual(60);
-      expect(clusters[0].errorType.endsWith('...')).toBe(true);
+      expect(clusters[0].errorType).toBe(`${'x'.repeat(77)}... at test.spec.ts`);
+    });
+  });
+
+  describe('fingerprints', () => {
+    const ROOT = '/home/runner/work/shop/shop';
+    const at = (file: string, line: number, column = 5) => `\n    at ${ROOT}/${file}:${line}:${column}`;
+    const cartPage = { file: 'pages/cart.page.ts', line: 12, column: 32 };
+    const clickTimeout = (locator: string, callLog = '') =>
+      `TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n  - waiting for ${locator}\n${callLog}${at('pages/cart.page.ts', 12, 32)}`;
+    const toHaveText = (received: string, resolved: number) =>
+      `Error: expect(locator).toHaveText(expected) failed\n\nLocator:  locator('h1')\nExpected: "Total 30"\nReceived: "${received}"\nTimeout:  5000ms\n\n` +
+      `Call log:\n  - Expect "toHaveText" with timeout 5000ms\n  - waiting for locator('h1')\n    ${resolved} × locator resolved to <h1>${received}</h1>\n` +
+      at('tests/cart.spec.ts', 15, 36);
+    const failed = (testId: string, error: string | undefined, over: Partial<TestResultData> = {}) =>
+      createTestResult({ testId, status: 'failed', outcome: 'unexpected', file: 'tests/cart.spec.ts', error, ...over });
+    const summary = (clusters: FailureCluster[]) => clusters.map((c) => [c.errorType, c.tests.map((t) => t.testId)]);
+
+    it('splits timeouts on one line by locator, and ignores the call log', () => {
+      const clusters = clusterer.clusterFailures([
+        failed('save', clickTimeout("getByRole('button', { name: 'Save' })"), { errorLocation: cartPage }),
+        failed('cancel', clickTimeout("getByRole('button', { name: 'Cancel' })"), { errorLocation: cartPage }),
+        failed('save-retried', clickTimeout("getByRole('button', { name: 'Save' })", '  - retrying click action, attempt #2\n'), { errorLocation: cartPage }),
+      ]);
+
+      expect(summary(clusters)).toEqual([
+        ["TimeoutError: locator.click: Timeout <n>ms exceeded. on getByRole('button', { name: 'Save' }) at pages/cart.page.ts:12", ['save', 'save-retried']],
+        ["TimeoutError: locator.click: Timeout <n>ms exceeded. on getByRole('button', { name: 'Cancel' }) at pages/cart.page.ts:12", ['cancel']],
+      ]);
+    });
+
+    it('merges an assertion that fails with different received values', () => {
+      const location = { file: 'tests/cart.spec.ts', line: 15, column: 36 };
+      const clusters = clusterer.clusterFailures([
+        failed('twelve', toHaveText('Total 12', 3), { errorLocation: location }),
+        failed('seven', toHaveText('Total 7', 5), { errorLocation: location }),
+      ]);
+
+      expect(summary(clusters)).toEqual([["toHaveText on locator('h1') at tests/cart.spec.ts:15", ['twelve', 'seven']]]);
+    });
+
+    it('masks digits, UUIDs, hex ids, quoted values and URLs', () => {
+      const clusters = clusterer.clusterFailures([
+        failed('a', `Error: order 1041 for user 3f2a9c1d-1b2c-4d5e-8f90-1234567890ab session 5f1e2d3c4b5a69788796a5b4 got "rejected" from https://shop.test/api/orders/1041?retry=1${at('tests/cart.spec.ts', 30)}`),
+        failed('b', `Error: order 2087 for user 9E8D7C6B-5A49-4382-A716-5544332211FF session 0x1f2e got 'timed out' from https://shop.test/api/orders/2087${at('tests/cart.spec.ts', 30)}`),
+      ]);
+
+      expect(summary(clusters)).toEqual([['order <n> for user <uuid> session <hex> got <str> from <url> at tests/cart.spec.ts:30', ['a', 'b']]]);
+    });
+
+    it("keeps apostrophes in words as text, so they do not swallow the message", () => {
+      const clusters = clusterer.clusterFailures([failed('a', "Error: can't save draft 12, isn't signed in")]);
+
+      expect(summary(clusters)).toEqual([["can't save draft <n>, isn't signed in at tests/cart.spec.ts", ['a']]]);
+    });
+
+    it('locates a failure by errorLocation, then a stack frame in the test file, then the test file', () => {
+      const clusters = clusterer.clusterFailures([
+        failed('location', `Error: boom${at('tests/cart.spec.ts', 9)}`, { errorLocation: { file: 'tests\\helpers.ts', line: 4, column: 1 } }),
+        failed('frame', `Error: boom\n    at helper (${ROOT}/node_modules/lib/index.js:1:1)${at('tests/cart.spec.ts', 9)}`),
+        failed('file', 'Error: boom'),
+      ]);
+
+      expect(summary(clusters)).toEqual([
+        ['boom at tests/helpers.ts:4', ['location']],
+        ['boom at tests/cart.spec.ts:9', ['frame']],
+        ['boom at tests/cart.spec.ts', ['file']],
+      ]);
+    });
+
+    it('ignores escape sequences that the SGR strip leaves behind', () => {
+      const plain = fingerprintFailure({ file: 'a.spec.ts', error: 'Error: boom docs' });
+
+      expect(fingerprintFailure({ file: 'a.spec.ts', error: 'Error: \x1b[2Kboom \x1b]8;;https://x.test\x07docs\x1b]8;;\x07' })).toEqual(plain);
+      expect(fingerprintFailure({ file: 'a.spec.ts', error: 'Error: boom \x1b]8;;https://x.test\x1b\\docs\x1b]8;;\x1b\\' })).toEqual(plain);
+      expect(plain.label).toBe('boom docs at a.spec.ts');
+    });
+
+    // Ids are stored in history, so these values must not drift between runs or releases.
+    it('gives a fixed 16-character hex id that follows the failing line, not the column', () => {
+      const error = clickTimeout("locator('#save')");
+
+      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error, errorLocation: cartPage }).id).toBe('78aef7acc7c76ad4');
+      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error, errorLocation: { ...cartPage, column: 99 } }).id).toBe('78aef7acc7c76ad4');
+      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error, errorLocation: { ...cartPage, line: 13 } }).id).toBe('6c2515953fa38794');
     });
   });
 
@@ -216,7 +297,7 @@ describe('FailureClusterer', () => {
       clusterer.assignClusters(results, clusters);
 
       expect(results[0].failureCluster).toBeDefined();
-      expect(results[0].failureCluster?.errorType).toBe('Timeout Error');
+      expect(results[0].failureCluster?.errorType).toBe('TimeoutError: Test at test.spec.ts');
       expect(results[0].failureCluster?.count).toBe(2);
       expect(results[0].failureCluster?.tests).toEqual([]); // Empty to avoid circular refs
     });

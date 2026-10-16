@@ -257,6 +257,22 @@ Sends each failure's context to an AI provider and shows the suggestion in the t
 
 With AI off or without a provider, every failed test still has **Copy AI prompt**. It copies a prompt with the error, call log, and code frame for use with any AI assistant.
 
+### Failure Clustering
+
+Failures with the same fingerprint form one cluster. The Failures queue groups by cluster, Insights lists the clusters, and AI analysis and the PDF report use them. Expected failures (`test.fail()`) are not clustered. Set `enableFailureClustering: false` to turn clustering off.
+
+The fingerprint has four parts:
+- The error class, or the Playwright matcher, such as `toBeVisible`.
+- The error message without the call log. Digits, UUIDs, hex ids, quoted values, and URLs are masked.
+- The failing location: Playwright's error location (file and line), else the line of the test file in the stack, else the test file.
+- The first locator in the error, such as `getByRole('button', { name: 'Save' })`.
+
+So two timeouts on different locators give two clusters, and one assertion that fails with different numbers gives one cluster.
+
+The cluster label is the matcher or the masked first message line, then the locator and the location. For example: `toBeVisible on getByRole('button', { name: 'Save' }) at pages/checkout.page.ts:42`.
+
+The cluster id is the first 16 hex characters of a SHA-256 of the fingerprint. The same failure gets the same id in every run. The id changes when the failing line moves, for example when lines are added above it.
+
 ### Causal Failure Timeline
 
 ![Causal failure timeline](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-causal-timeline-dark.png)

@@ -184,6 +184,26 @@ describe('AI analysis', () => {
   }, 60_000);
 });
 
+describe('failure clustering', () => {
+  it('splits timeouts by locator, merges failures that differ only in numbers, and keeps ids across runs', () => {
+    const clusters = (out: string) => {
+      runSuite(out, {}, ['--retries=0'], 'test', { ACCEPTANCE_MATCH: 'cluster.fixtures.ts' });
+      return reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).clusters;
+    };
+    const first = clusters(path.join(tmp, 'clusters-1'));
+    const second = clusters(path.join(tmp, 'clusters-2'));
+
+    expect(first.map((c) => [c.errorType, c.testIds])).toEqual([
+      ["TimeoutError: locator.click: Timeout <n>ms exceeded. on locator('#save') at cluster.fixtures.ts:5", ['cluster.fixtures.ts::clicks the missing save button']],
+      ["TimeoutError: locator.click: Timeout <n>ms exceeded. on locator('#cancel') at cluster.fixtures.ts:5", ['cluster.fixtures.ts::clicks the missing cancel button']],
+      ['cart <n> holds <n> items at cluster.fixtures.ts:19', ['cluster.fixtures.ts::cart 1041 is empty', 'cluster.fixtures.ts::cart 2087 is empty']],
+    ]);
+    expect(first.map((c) => c.id)).toEqual([expect.stringMatching(/^[0-9a-f]{16}$/), expect.stringMatching(/^[0-9a-f]{16}$/), expect.stringMatching(/^[0-9a-f]{16}$/)]);
+    expect(new Set(first.map((c) => c.id)).size).toBe(3);
+    expect(second).toEqual(first);
+  });
+});
+
 describe('report write failure', () => {
   it('says the report could not be written, and does not print its path as if it was', () => {
     const out = path.join(tmp, 'blocked');
