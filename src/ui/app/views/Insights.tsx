@@ -185,8 +185,8 @@ export function Insights() {
         </Panel>
         <Panel title="Most flaky">
           <TestLines
-            tests={tests.filter((t) => (t.flakinessScore ?? 0) > 0 && (t.flakinessScore ?? 0) < 1).sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0)).slice(0, 5)}
-            value={(t) => `${Math.round((t.flakinessScore ?? 0) * 100)}%`}
+            tests={tests.filter((t) => t.flakinessStatus === 'flaky' || t.flakinessStatus === 'unstable').sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0)).slice(0, 5)}
+            value={(t) => `${Math.round((t.flakinessScore ?? 0) * 100)}% of ${plural(t.flakinessRuns ?? 0, 'run')}`}
           />
         </Panel>
         <Panel title="Fixed">
@@ -203,7 +203,9 @@ export function Insights() {
                   <li class="lines__item">
                     <StatusGlyph status="quarantined" />
                     <span class="lines__label">{e.title}</span>
-                    <span class="lines__value mono">{Math.round(e.flakinessScore * 100)}%</span>
+                    <span class="lines__value mono">
+                      {Math.round(e.flakinessScore * 100)}%{e.runs !== undefined && ` of ${plural(e.runs, 'run')}`}
+                    </span>
                   </li>
                 ))}
               </ul>

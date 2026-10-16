@@ -222,6 +222,13 @@ test('the top bar counts each test once, so the counts add up to the total', asy
   expect(values.map(Number).reduce((a, b) => a + b, 0)).toBe(57);
 });
 
+test('Most flaky lists the tests history classifies as flaky or unstable, with the runs behind each score', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  const panel = page.locator('.panel', { has: page.getByRole('heading', { name: 'Most flaky' }) });
+  await expect(panel.locator('.lines__label')).toHaveText(['flaky network-dependent check', 'flaky network-dependent check', 'flaky behavior - random failure', 'flaky behavior - random failure']);
+  await expect(panel.locator('.lines__value')).toHaveText(['99% of 11 runs', '99% of 11 runs', '64% of 11 runs', '45% of 11 runs']);
+});
+
 test('the retry comparison appears for a test that failed and then passed, and not for one that always failed', async ({ page }) => {
   await page.goto(url('screen=flaky&mode=light'));
   await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();

@@ -592,7 +592,7 @@ describe('AIAnalyzer', () => {
       const analyzer = new AIAnalyzer();
       const stats = createSuiteStats({ failed: 3, passRate: 70 });
       const clusters = [createFailureCluster({ count: 3, errorType: 'Authentication Error' })];
-      const flakyResults = [createTestResult({ flakinessScore: 0.5 })];
+      const flakyResults = [createTestResult({ flakinessScore: 0.5, flakinessStatus: 'flaky' })];
 
       const result = await analyzer.analyzeSuiteHealth(flakyResults, stats, clusters, []);
 
@@ -700,8 +700,10 @@ Provide a brief, actionable suggestion to fix these failures.`);
     it('recommends fixing consistently failing tests separately from flaky ones', () => {
       const analyzer = new AIAnalyzer();
       const results = [
-        createTestResult({ testId: 'broken-1', flakinessScore: 1, outcome: 'unexpected' }),
-        createTestResult({ testId: 'flaky-1', flakinessScore: 0.5 }),
+        createTestResult({ testId: 'broken-1', flakinessScore: 1, flakinessStatus: 'failing', outcome: 'unexpected' }),
+        createTestResult({ testId: 'flaky-1', flakinessScore: 0.5, flakinessStatus: 'flaky' }),
+        // Broken for 5 runs, then fixed: a high failure rate, but not flaky
+        createTestResult({ testId: 'fixed-1', flakinessScore: 0.45, flakinessStatus: 'stable' }),
       ];
       const stats = createSuiteStats();
 
@@ -716,8 +718,8 @@ Provide a brief, actionable suggestion to fix these failures.`);
     it('generates flakiness recommendations for flaky tests', () => {
       const analyzer = new AIAnalyzer();
       const results = [
-        createTestResult({ testId: 'test-1', flakinessScore: 0.5 }),
-        createTestResult({ testId: 'test-2', flakinessScore: 0.8 }),
+        createTestResult({ testId: 'test-1', flakinessScore: 0.5, flakinessStatus: 'flaky' }),
+        createTestResult({ testId: 'test-2', flakinessScore: 0.8, flakinessStatus: 'flaky' }),
       ];
       const stats = createSuiteStats();
 
@@ -733,8 +735,8 @@ Provide a brief, actionable suggestion to fix these failures.`);
     it('does not generate flakiness recommendations for stable tests', () => {
       const analyzer = new AIAnalyzer();
       const results = [
-        createTestResult({ flakinessScore: 0.1 }),
-        createTestResult({ flakinessScore: 0.2 }),
+        createTestResult({ flakinessScore: 0.1, flakinessStatus: 'stable' }),
+        createTestResult({ flakinessScore: 0.2, flakinessStatus: 'unstable' }),
       ];
       const stats = createSuiteStats();
 
@@ -831,7 +833,7 @@ Provide a brief, actionable suggestion to fix these failures.`);
     it('sorts recommendations by priority (highest first)', () => {
       const analyzer = new AIAnalyzer();
       const results = [
-        createTestResult({ testId: 'test-1', flakinessScore: 0.5 }),
+        createTestResult({ testId: 'test-1', flakinessScore: 0.5, flakinessStatus: 'flaky' }),
         createTestResult({ testId: 'test-2', performanceTrend: '↑ 50%' }),
       ];
       const stats = createSuiteStats({ passRate: 75, averageStability: 55 });

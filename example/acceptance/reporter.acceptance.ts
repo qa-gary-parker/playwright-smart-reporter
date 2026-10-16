@@ -92,12 +92,11 @@ describe('quarantine', () => {
     const out = path.join(tmp, 'quarantine');
     const outputFile = path.join(tmp, 'quarantine-store', 'nested', 'quarantine.json');
     const options = { quarantine: { enabled: true, threshold: 0.01, outputFile } };
-    // A failed run and a passed run before this one make the test flaky by history (score 0.5).
-    runSuite(out, options, ['--grep', 'fails when asked'], 'test', { ACCEPTANCE_FAIL: '1' });
-    runSuite(out, options, ['--grep', 'fails when asked']);
-    runSuite(out, options, ['--grep', 'fails when asked']);
+    // Passing on a retry in two runs in a row makes the test flaky (score 0.99).
+    runSuite(out, options, ['--grep', 'passes on retry']);
+    runSuite(out, options, ['--grep', 'passes on retry']);
 
-    expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual(['suite.fixtures.ts::fails when asked']);
+    expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual(['suite.fixtures.ts::passes on retry']);
   });
 });
 

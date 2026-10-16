@@ -194,9 +194,33 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.newFlakyTests.length).toBe(1);
-      expect(result.newFlakyTests[0].testId).toBe('test-flaky');
-      expect(result.newFlakyTests[0].flakinessScore).toBeGreaterThanOrEqual(0.3);
+      expect(result.newFlakyTests).toEqual([{ testId: 'test-flaky', flakinessScore: 0.6, runs: 5 }]);
+    });
+
+    it('does not report a test that was broken and then fixed in the period as newly flaky', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {
+          'test-fixed': [
+            createEntry({ passed: true, timestamp: timestamp(14) }),
+            createEntry({ passed: true, timestamp: timestamp(12) }),
+            // In period: failed 3 runs, then fixed
+            createEntry({ passed: false, timestamp: timestamp(6) }),
+            createEntry({ passed: false, timestamp: timestamp(5) }),
+            createEntry({ passed: false, timestamp: timestamp(4) }),
+            createEntry({ passed: true, timestamp: timestamp(3) }),
+            createEntry({ passed: true, timestamp: timestamp(2) }),
+          ],
+        },
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6) }),
+          createSummary({ runId: 'r2', timestamp: timestamp(2) }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.newFlakyTests).toEqual([]);
     });
 
     it('does not report a consistently failing test as newly flaky', () => {
@@ -508,7 +532,7 @@ describe('HealthDigest', () => {
       expect(md).toContain('# Test Health Digest');
       expect(md).toContain('## Summary');
       expect(md).toContain('## New Flaky Tests');
-      expect(md).toContain('`test-flaky`');
+      expect(md).toContain('- `test-flaky` (flakiness: 0.67, 3 runs)');
     });
 
     it('handles empty sections', () => {
@@ -556,7 +580,7 @@ describe('HealthDigest', () => {
       expect(text).not.toContain('#');
       expect(text).not.toContain('`');
       expect(text).toContain('Test Health Digest');
-      expect(text).toContain('test-flaky');
+      expect(text).toContain('- test-flaky (flakiness: 0.67, 3 runs)');
     });
   });
 });

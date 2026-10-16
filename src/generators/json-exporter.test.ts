@@ -170,6 +170,8 @@ describe('json-exporter', () => {
           error: 'Element not found',
           outcome: 'unexpected',
           flakinessScore: 0.3,
+          flakinessStatus: 'flaky',
+          flakinessRuns: 10,
           stabilityScore: createStabilityScore({ overall: 75, grade: 'C' }),
           performanceTrend: '↑ 15% slower',
           tags: ['@smoke'],
@@ -195,6 +197,7 @@ describe('json-exporter', () => {
       expect(test.error).toBe('Element not found');
       expect(test.outcome).toBe('unexpected');
       expect(test.flakinessScore).toBe(0.3);
+      expect([test.flakinessStatus, test.flakinessRuns]).toEqual(['flaky', 10]);
       expect(test.stabilityScore).toEqual({ overall: 75, grade: 'C' });
       expect(test.performanceTrend).toBe('↑ 15% slower');
       expect(test.tags).toEqual(['@smoke']);

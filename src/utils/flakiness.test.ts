@@ -37,15 +37,17 @@ describe('flakiness helpers', () => {
   });
 
   describe('isFlakyTest', () => {
-    it('treats a flaky outcome as flaky regardless of score', () => {
-      expect(isFlakyTest({ outcome: 'flaky', flakinessScore: 1 })).toBe(true);
-      expect(isFlakyTest({ outcome: 'flaky', flakinessScore: undefined })).toBe(true);
+    it('treats a flaky outcome as flaky regardless of history', () => {
+      expect(isFlakyTest({ outcome: 'flaky', flakinessStatus: 'failing' })).toBe(true);
+      expect(isFlakyTest({ outcome: 'flaky' })).toBe(true);
     });
 
-    it('uses the score when outcome is not flaky', () => {
-      expect(isFlakyTest({ outcome: 'unexpected', flakinessScore: 0.5 })).toBe(true);
-      expect(isFlakyTest({ outcome: 'unexpected', flakinessScore: 1 })).toBe(false);
-      expect(isFlakyTest({ outcome: 'expected', flakinessScore: 0.1 })).toBe(false);
+    it('uses the history classification, not the failure rate, when outcome is not flaky', () => {
+      const flaky = { outcome: 'unexpected' as const, flakinessStatus: 'flaky' as const, flakinessScore: 0.5 };
+      const broken = { outcome: 'unexpected' as const, flakinessStatus: 'failing' as const, flakinessScore: 0.45 };
+      const fixed = { outcome: 'expected' as const, flakinessStatus: 'stable' as const, flakinessScore: 0.45 };
+
+      expect([isFlakyTest(flaky), isFlakyTest(broken), isFlakyTest(fixed)]).toEqual([true, false, false]);
     });
   });
 });

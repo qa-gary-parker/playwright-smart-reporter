@@ -382,6 +382,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1075,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -593,6 +595,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1090,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -804,6 +808,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1039,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1015,6 +1021,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1068,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1226,6 +1234,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1085,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1437,6 +1447,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1086,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1852,8 +1864,10 @@
      "errors": []
     }
    },
-   "flakinessScore": 0.4,
-   "flakinessIndicator": "🔴 Flaky",
+   "flakinessScore": 0.45,
+   "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 877,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -2005,9 +2019,7 @@
     }
    ],
    "clusterId": "47536c14",
-   "signals": [
-    "flaky"
-   ]
+   "signals": []
   },
   {
    "testId": "[Desktop Chrome] feature-demo.spec.ts::navigation links are present",
@@ -2144,6 +2156,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1077,
    "performanceTrend": "↓ 35% faster",
    "performanceMetrics": {
@@ -2554,8 +2568,10 @@
      "errors": []
     }
    },
-   "flakinessScore": 0.4,
-   "flakinessIndicator": "🔴 Flaky",
+   "flakinessScore": 0.45,
+   "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 1095,
    "performanceTrend": "↓ 29% faster",
    "performanceMetrics": {
@@ -2702,9 +2718,7 @@
     }
    ],
    "clusterId": "47536c14",
-   "signals": [
-    "flaky"
-   ]
+   "signals": []
   },
   {
    "testId": "[Mobile Chrome] demo.spec.ts::broken login - element not found",
@@ -3051,6 +3065,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 2772,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -3544,6 +3560,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 2712,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -4037,6 +4055,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 2688,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -4530,6 +4550,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 5802,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5023,6 +5045,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 2699,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5326,6 +5350,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 4009,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5552,6 +5578,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 3688,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5761,8 +5789,10 @@
    "project": "Mobile Chrome",
    "outcome": "expected",
    "expectedStatus": "passed",
-   "flakinessScore": 0,
-   "flakinessIndicator": "🟢 Stable",
+   "flakinessScore": 0.45,
+   "flakinessIndicator": "🔴 Flaky",
+   "flakinessStatus": "flaky",
+   "flakinessRuns": 11,
    "averageDuration": 675,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5827,7 +5857,9 @@
      ]
     }
    ],
-   "signals": []
+   "signals": [
+    "flaky"
+   ]
   },
   {
    "testId": "[Mobile Chrome] demo.spec.ts::skipped test - not implemented yet",
@@ -6279,8 +6311,10 @@
    "project": "Desktop Chrome",
    "outcome": "flaky",
    "expectedStatus": "passed",
-   "flakinessScore": 0.1,
-   "flakinessIndicator": "🟡 Unstable",
+   "flakinessScore": 0.64,
+   "flakinessIndicator": "🔴 Flaky",
+   "flakinessStatus": "flaky",
+   "flakinessRuns": 11,
    "averageDuration": 737,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -6533,6 +6567,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 687,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -7055,6 +7091,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 625,
    "performanceTrend": "↑ 28% slower",
    "performanceMetrics": {
@@ -7265,6 +7303,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 630,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -7479,6 +7519,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 961,
    "performanceTrend": "↓ 29% faster",
    "performanceMetrics": {
@@ -7690,6 +7732,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 737,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -8257,6 +8301,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 5845,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -8543,8 +8589,10 @@
    "project": "Desktop Chrome",
    "outcome": "flaky",
    "expectedStatus": "passed",
-   "flakinessScore": 0,
-   "flakinessIndicator": "🟢 Stable",
+   "flakinessScore": 0.99,
+   "flakinessIndicator": "🔴 Flaky",
+   "flakinessStatus": "flaky",
+   "flakinessRuns": 11,
    "averageDuration": 649,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9003,6 +9051,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 3244,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9294,6 +9344,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 629,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9498,6 +9550,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 624,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9709,6 +9763,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 2611,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9921,6 +9977,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 622,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10128,6 +10186,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 635,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10330,6 +10390,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 610,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10537,6 +10599,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 821,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10744,6 +10808,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 645,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10965,6 +11031,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 653,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11186,6 +11254,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 625,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11597,6 +11667,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 2743,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11903,6 +11975,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 716,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -12252,8 +12326,10 @@
    "project": "Mobile Chrome",
    "outcome": "flaky",
    "expectedStatus": "passed",
-   "flakinessScore": 0,
-   "flakinessIndicator": "🟢 Stable",
+   "flakinessScore": 0.99,
+   "flakinessIndicator": "🔴 Flaky",
+   "flakinessStatus": "flaky",
+   "flakinessRuns": 11,
    "averageDuration": 1215,
    "performanceTrend": "↓ 33% faster",
    "performanceMetrics": {
@@ -12722,6 +12798,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 5809,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13038,6 +13116,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 675,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13452,6 +13532,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 5818,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13750,6 +13832,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 2704,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13967,6 +14051,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 1065,
    "performanceTrend": "↑ 548% slower",
    "performanceMetrics": {
@@ -14177,6 +14263,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 653,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14379,6 +14467,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 652,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14586,6 +14676,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 836,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14793,6 +14885,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 599,
    "performanceTrend": "↑ 26% slower",
    "performanceMetrics": {
@@ -15227,6 +15321,8 @@
    },
    "flakinessScore": 1,
    "flakinessIndicator": "🔴 Failing",
+   "flakinessStatus": "failing",
+   "flakinessRuns": 11,
    "averageDuration": 5826,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -15575,6 +15671,8 @@
    "expectedStatus": "passed",
    "flakinessScore": 0,
    "flakinessIndicator": "🟢 Stable",
+   "flakinessStatus": "stable",
+   "flakinessRuns": 11,
    "averageDuration": 714,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {

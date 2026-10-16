@@ -323,10 +323,11 @@ describe('baselineRunId', () => {
 describe('flaky', () => {
   it('counts a run as flaky only for tests that passed on retry in it, the same in the report, the trend and history', () => {
     const out = path.join(tmp, 'flaky-by-history');
-    // Failed, then passed: flaky by history, but this run it passes first time.
-    runSuite(out, {}, ['--grep', 'fails when asked', '--retries=0'], { ACCEPTANCE_FAIL: '1' });
-    runSuite(out, {}, ['--grep', 'fails when asked']);
-    runSuite(out, {}, ['--grep', 'fails when asked']);
+    // Failed, passed, failed, passed: flaky by history, but this run it passes first time.
+    for (const fail of [true, false, true, false, false]) {
+      if (fail) runSuite(out, {}, ['--grep', 'fails when asked', '--retries=0'], { ACCEPTANCE_FAIL: '1' });
+      else runSuite(out, {}, ['--grep', 'fails when asked']);
+    }
 
     const data = reportData(out);
     expect(data.tests[0].signals).toContain('flaky');
@@ -348,6 +349,28 @@ describe('flaky', () => {
     const [test] = reportData(out).tests;
     expect([test.flakinessScore, test.flakinessIndicator]).toEqual([0.99, '🔴 Flaky']);
     expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual([id('passes on retry')]);
+  }, TIMEOUT);
+
+  it('counts this run: a fixed test is stable and not quarantined, a retry pass after clean runs is flaky', () => {
+    const out = path.join(tmp, 'flaky-this-run');
+    const outputFile = path.join(out, 'quarantine.json');
+    const entries = (results: boolean[]) => results.map((passed) => ({ passed, duration: 5, timestamp: new Date(0).toISOString() }));
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'test-history.json'), JSON.stringify({
+      runs: [],
+      summaries: [],
+      tests: {
+        // Broken for 5 runs, then fixed
+        [id('passes')]: entries([false, false, false, false, false, true, true, true, true, true]),
+        [id('passes on retry')]: entries(Array(9).fill(true)),
+      },
+    }));
+    runSuite(out, { quarantine: { enabled: true, threshold: 0.01, outputFile } }, ['--grep', 'passes', '--grep-invert', 'expected failure']);
+
+    const flakiness = Object.fromEntries(reportData(out).tests.map((t) => [t.title, [t.flakinessIndicator, t.flakinessRuns, t.signals.includes('flaky')]]));
+    expect(flakiness).toEqual({ passes: ['🟢 Stable', 11, false], 'passes on retry': ['🔴 Flaky', 10, true] });
+    const entriesOut = JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string; runs?: number }) => [e.testId, e.runs]);
+    expect(entriesOut).toEqual([[id('passes on retry'), 10]]);
   }, TIMEOUT);
 });
 

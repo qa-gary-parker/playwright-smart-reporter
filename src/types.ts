@@ -54,7 +54,8 @@ export interface NotificationConfig {
 // ============================================================================
 
 export interface ThresholdConfig {
-  // Flakiness thresholds (0-1 scale, where 0 = never fails, 1 = always fails)
+  // Flakiness status thresholds on instability, 0-1: changes between pass and fail after the first,
+  // plus passes on a retry, per run
   flakinessStable?: number;        // Default: 0.1 (below this = stable)
   flakinessUnstable?: number;      // Default: 0.3 (below this = unstable, above = flaky)
 
@@ -331,6 +332,8 @@ export interface AttemptRequestDiff {
   passed?: number;                  // status in the passing attempt; absent when that attempt did not send it
 }
 
+export type FlakinessStatus = 'stable' | 'unstable' | 'flaky' | 'failing';
+
 export interface TestResultData {
   testId: string;
   title: string;
@@ -349,6 +352,8 @@ export interface TestResultData {
   aiPrompt?: string;         // NEW: Playwright-style prompt sent to AI (no binaries)
   flakinessScore?: number;
   flakinessIndicator?: string;
+  flakinessStatus?: FlakinessStatus;
+  flakinessRuns?: number;    // Non-skipped runs behind the score and status, this run included
   performanceTrend?: string;
   averageDuration?: number;
   aiSuggestion?: string;
@@ -586,6 +591,7 @@ export interface QuarantineEntry {
   title: string;
   file: string;
   flakinessScore: number;
+  runs?: number;            // Runs behind flakinessScore; missing in files written before 4.0.0
   quarantinedAt: string;
 }
 

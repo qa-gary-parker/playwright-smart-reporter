@@ -19,9 +19,9 @@ export class QuarantineGenerator {
 
     const entries: QuarantineEntry[] = results
       .filter(r => r.outcome !== 'skipped')
-      // Quarantine is for flaky tests (mixed pass/fail). A test failing every
-      // run is consistently failing — it should fail CI, not be hidden.
-      .filter(r => isFlakyScore(r.flakinessScore, this.config.threshold))
+      // Quarantine is for flaky tests. A test that fails every run, or that broke
+      // and still fails, should fail CI, not be hidden; a fixed test needs nothing.
+      .filter(r => r.flakinessStatus === 'flaky' && isFlakyScore(r.flakinessScore, this.config.threshold))
       .sort((a, b) => b.flakinessScore! - a.flakinessScore!)
       .slice(0, this.config.maxQuarantined)
       .map(r => ({
@@ -29,6 +29,7 @@ export class QuarantineGenerator {
         title: r.title,
         file: r.file,
         flakinessScore: r.flakinessScore!,
+        runs: r.flakinessRuns,
         quarantinedAt: now,
       }));
 

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { QuarantineGenerator } from './quarantine-generator';
 import { getQuarantinedPattern } from './quarantine-helper';
+import { FlakinessAnalyzer } from '../analyzers/flakiness-analyzer';
 import type { TestResultData, QuarantineConfig, QuarantineFile } from '../types';
 
 vi.mock('fs');
@@ -19,6 +20,8 @@ function createTestResult(overrides: Partial<TestResultData> = {}): TestResultDa
     retry: 0,
     steps: [],
     history: [],
+    flakinessStatus: 'flaky',
+    flakinessRuns: 10,
     ...overrides,
   };
 }
@@ -50,7 +53,7 @@ describe('QuarantineGenerator', () => {
     it('does not quarantine consistently failing tests (score of 1)', () => {
       const generator = new QuarantineGenerator({ enabled: true, threshold: 0.3 });
       const results = [
-        createTestResult({ testId: 'always-fails', title: 'Broken test', flakinessScore: 1 }),
+        createTestResult({ testId: 'always-fails', title: 'Broken test', flakinessScore: 1, flakinessStatus: 'failing' }),
         createTestResult({ testId: 'flaky-1', title: 'Flaky test', flakinessScore: 0.5 }),
       ];
 
@@ -59,6 +62,19 @@ describe('QuarantineGenerator', () => {
       expect(result).not.toBeNull();
       expect(result!.entries).toHaveLength(1);
       expect(result!.entries[0].testId).toBe('flaky-1');
+    });
+
+    it('does not quarantine a test that was broken and then fixed, and records the runs behind each score', () => {
+      const analyzer = new FlakinessAnalyzer();
+      const historyOf = (runs: string) => [...runs].map((r) => ({ passed: r === 'P', duration: 1000, timestamp: '' }));
+      const fixed = createTestResult({ testId: 'fixed', flakinessStatus: undefined, flakinessRuns: undefined });
+      analyzer.analyze(fixed, historyOf('FFFFFPPPPP'));
+      const flaky = createTestResult({ testId: 'flaky', flakinessStatus: undefined, flakinessRuns: undefined });
+      analyzer.analyze(flaky, historyOf('PFPFPFPFPF'));
+
+      const result = new QuarantineGenerator({ enabled: true, threshold: 0.3 }).generate([fixed, flaky], '/output');
+
+      expect(result!.entries.map((e) => [e.testId, e.flakinessScore, e.runs])).toEqual([['flaky', 0.45, 11]]);
     });
 
     it('excludes tests below threshold', () => {

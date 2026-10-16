@@ -338,14 +338,30 @@ Smart Reporter tracks flakiness **across runs**, not within a single run:
 
 | | Playwright HTML Report | Smart Reporter |
 |---|---|---|
-| **Scope** | Single test run | Historical across multiple runs |
-| **Criteria** | Fails then passes on retry | Failed 30%+ of the time historically |
+| **Scope** | Single test run | This run and the runs in history |
+| **Criteria** | Fails then passes on retry | Passes on retry, or results that keep changing between pass and fail |
 | **Use Case** | Immediate retry success | Chronically unreliable tests |
 
-Indicators:
-- **Stable** (<10% failure rate) — **Unstable** (10-30%) — **Flaky** (>30%) — **New** (no history)
+A test with history gets three values. Skipped runs are left out of all of them.
 
-The Flaky queue lists both kinds: tests that passed on retry in this run, and tests that history marks as flaky.
+- `flakinessScore`: the share of runs, this run included, that failed or passed only on a retry (0 to 1). A score of exactly 1 means every run failed.
+- `flakinessRuns`: the number of runs behind the score, this run included.
+- `flakinessStatus`: the classification, shown as an indicator. It measures instability, not the failure rate.
+
+Instability is the number of times the result changed between pass and fail from one run to the next, plus the runs that passed only on a retry, divided by the number of runs. The first change is not counted: a test that was broken and then fixed, or that broke and still fails, changed once and is not flaky.
+
+| Indicator | `flakinessStatus` | When |
+|---|---|---|
+| 🔴 Flaky | `flaky` | The test passed on a retry this run, or instability is at least `thresholds.flakinessUnstable` (default 0.3) |
+| 🟡 Unstable | `unstable` | Instability is at least `thresholds.flakinessStable` (default 0.1) |
+| 🟢 Stable | `stable` | Instability is lower, and the test passed this run |
+| 🔴 Failing | `failing` | Every run failed, or instability is lower and the test failed this run |
+| ⚪ New | none | The test has no history |
+| ⚪ Skipped | none | The test was skipped this run, or in every run in history |
+
+For example, a test that failed in 5 runs and then passed in 6 has a score of 0.45 and is Stable. Before 4.0.0 it was Flaky with a score of 0.5, because only history was counted.
+
+The Flaky queue lists both kinds: tests that passed on retry in this run, and tests whose status is `flaky`. Quarantine, the AI recommendations and the health digest also use the status. The Most flaky panel in Insights lists `flaky` and `unstable` tests by score, with the run count, for example `45% of 11 runs`.
 
 ### Flake Forecasting
 
@@ -730,6 +746,8 @@ reporter: [
   }],
 ]
 ```
+
+A test is quarantined when its `flakinessStatus` is `flaky` and its `flakinessScore` is at least `threshold` (see [Flakiness Detection](#flakiness-detection)). A test that fails every run, or that was broken and then fixed, is not quarantined. Each entry records `runs`, the number of runs behind its score.
 
 Quarantined tests appear in the Quarantined queue and in the Quarantine panel in Insights.
 

@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import type { AIConfig, AIProviderName, TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
-import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
+import { isFlakyTest, isConsistentlyFailingScore } from '../utils';
 import { createRedactor } from '../agent/redact';
 import { formatPassRate } from '../utils/run-stats';
 
@@ -272,7 +272,7 @@ export class AIAnalyzer {
 
     console.log('\n   Generating AI suite health summary...');
 
-    const flakyTests = results.filter(r => isFlakyScore(r.flakinessScore));
+    const flakyTests = results.filter(isFlakyTest);
     const slowTests = results.filter(r => r.performanceTrend?.startsWith('↑'));
     const retryTests = results.filter(r => r.retryInfo?.needsAttention);
 
@@ -298,7 +298,7 @@ export class AIAnalyzer {
     const recommendations: TestRecommendation[] = [];
 
     // Flakiness recommendations
-    const flakyTests = results.filter(r => isFlakyScore(r.flakinessScore));
+    const flakyTests = results.filter(isFlakyTest);
     if (flakyTests.length > 0) {
       recommendations.push({
         type: 'flakiness',
