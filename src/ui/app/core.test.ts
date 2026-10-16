@@ -84,6 +84,15 @@ describe('grouping', () => {
     ]);
   });
 
+  it('keeps two clusters with the same label in separate groups', () => {
+    const other = t({ testId: 'o', status: 'failed', outcome: 'unexpected', clusterId: 'c2' });
+    const twins = { clusters: [...data.clusters, { id: 'c2', errorType: 'toBeVisible failed', testIds: ['o'] }] };
+    expect(groupTests([failed, timedOut, other], 'cluster', twins).map((g) => [g.key, g.label, g.tests.map((x) => x.testId)])).toEqual([
+      ['c1', 'toBeVisible failed', ['to', 'f']],
+      ['c2', 'toBeVisible failed', ['o']],
+    ]);
+  });
+
   it('puts a test in every tag group it carries and counts sum per mode', () => {
     const tagged = t({ testId: 'm', tags: ['@smoke', '@payments', '@smoke'] });
     const groups = groupTests([failed, tagged, passed], 'tag', data);

@@ -14,12 +14,19 @@ interface Grouping {
   label: string;
   mono: boolean;
   keys: (t: ReportTest, clusters: Map<string, string>) => string[];
+  name?: (key: string, clusters: Map<string, string>) => string;
 }
 
 const NONE = '(none)';
 
 export const GROUPINGS: Record<GroupBy, Grouping> = {
-  cluster: { label: 'Cluster', mono: true, keys: (t, c) => [(t.clusterId && c.get(t.clusterId)) || 'Not clustered'] },
+  // Keyed by id: two clusters can share a label.
+  cluster: {
+    label: 'Cluster',
+    mono: true,
+    keys: (t, c) => [t.clusterId && c.has(t.clusterId) ? t.clusterId : 'Not clustered'],
+    name: (key, c) => c.get(key) ?? key,
+  },
   file: { label: 'File', mono: true, keys: (t) => [t.file] },
   project: { label: 'Project', mono: false, keys: (t) => [t.project ?? NONE] },
   suite: { label: 'Suite', mono: false, keys: (t) => [t.suites?.length ? t.suites.join(' › ') : NONE] },
@@ -52,7 +59,7 @@ export function groupTests(tests: ReportTest[], by: GroupBy, data: Pick<ReportDa
     for (const key of grouping.keys(t, clusters)) map.set(key, [...(map.get(key) ?? []), t]);
   }
   return [...map.entries()]
-    .map(([key, ts]) => ({ key, label: key, mono: grouping.mono, tests: [...ts].sort(byPriority) }))
+    .map(([key, ts]) => ({ key, label: grouping.name?.(key, clusters) ?? key, mono: grouping.mono, tests: [...ts].sort(byPriority) }))
     .sort((a, b) => {
       const [ra, rb] = [rank(a.tests), rank(b.tests)];
       for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return rb[i] - ra[i];
