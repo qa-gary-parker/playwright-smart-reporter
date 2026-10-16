@@ -287,11 +287,27 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.passed).toBe(true);
     });
 
-    it('handles empty results array', () => {
+    it('skips the rule when no test ran, like minPassRate', () => {
       const result = evaluator.evaluate({ maxFlakyRate: 5 }, []);
-      const rule = result.rules.find(r => r.rule === 'maxFlakyRate');
-      expect(rule?.passed).toBe(true);
-      expect(rule?.actual).toBe('0%');
+      expect(result.rules).toEqual([{ rule: 'maxFlakyRate', passed: true, actual: 'N/A', threshold: '≤ 5%', skipped: true }]);
+    });
+
+    it('leaves skipped tests out: 1 flaky and 1 passed among 8 skipped is 50%', () => {
+      const results = [
+        createTestResult({ testId: 'k', status: 'passed', outcome: 'flaky' }),
+        createTestResult({ testId: 'p', status: 'passed', outcome: 'expected' }),
+        ...Array.from({ length: 8 }, (_, i) => createTestResult({ testId: `s${i}`, status: 'skipped', outcome: 'skipped' })),
+      ];
+      expect(evaluator.evaluate({ maxFlakyRate: 40 }, results).rules).toEqual([
+        { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '≤ 40%' },
+      ]);
+    });
+
+    it('skips the rule when every test was skipped', () => {
+      const results = Array.from({ length: 3 }, (_, i) => createTestResult({ testId: `s${i}`, status: 'skipped', outcome: 'skipped' }));
+      expect(evaluator.evaluate({ maxFlakyRate: 5 }, results).rules).toEqual([
+        { rule: 'maxFlakyRate', passed: true, actual: 'N/A', threshold: '≤ 5%', skipped: true },
+      ]);
     });
   });
 

@@ -16,7 +16,7 @@ function formatRuleLine(rule: QualityGateRuleResult): string {
   const label = ruleLabels[rule.rule] || rule.rule;
 
   if (rule.skipped) {
-    const reason = rule.rule.startsWith('maxA11y') ? 'no accessibility scans' : rule.rule === 'minPassRate' ? 'no test ran' : 'no comparison data';
+    const reason = rule.rule.startsWith('maxA11y') ? 'no accessibility scans' : rule.rule === 'minPassRate' || rule.rule === 'maxFlakyRate' ? 'no test ran' : 'no comparison data';
     return `  \u25CB ${padRight(label, 20)} (skipped \u2014 ${reason})`;
   }
 

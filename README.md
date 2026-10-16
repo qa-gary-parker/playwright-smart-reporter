@@ -698,7 +698,7 @@ reporter: [
 
 The result shows in the top bar and in the Quality gate panel in Insights, and is logged at the end of the run. A breached gate fails the Playwright run (exit code `1`), even when every test passed.
 
-`minPassRate` uses the pass rate described under [Insights](#insights). When every test was skipped, the rule is skipped, not passed. A notification `maxPassRate` condition does not fire for such a run.
+`minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
 
 The CLI gate checks a finished run again, for example in a later CI step. It reads the JSON export (`exportJson: true`) and a JSON file with the same rules:
 

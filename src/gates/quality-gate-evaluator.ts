@@ -100,20 +100,22 @@ export class QualityGateEvaluator {
     };
   }
 
-  private evaluateMaxFlakyRate(threshold: number, { flaky, total }: RunStats): QualityGateRuleResult {
-    if (total === 0) {
+  // Out of the same tests as the pass rate: the ones that ran.
+  private evaluateMaxFlakyRate(threshold: number, { flaky, rated }: RunStats): QualityGateRuleResult {
+    if (rated === 0) {
       return {
         rule: 'maxFlakyRate',
         passed: true,
-        actual: '0%',
+        actual: 'N/A',
         threshold: `≤ ${threshold}%`,
+        skipped: true,
       };
     }
 
     return {
       rule: 'maxFlakyRate',
-      passed: compareRate(flaky, total, threshold) <= 0,
-      actual: formatRate(flaky, total, Math.ceil),
+      passed: compareRate(flaky, rated, threshold) <= 0,
+      actual: formatRate(flaky, rated, Math.ceil),
       threshold: `≤ ${threshold}%`,
     };
   }
