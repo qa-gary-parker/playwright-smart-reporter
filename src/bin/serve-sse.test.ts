@@ -72,9 +72,12 @@ describe('SSE handler: file truncation and recreation', () => {
     fs.writeFileSync(tmpFile, '{"event":"start","totalExpected":3}\n');
     await new Promise(r => setTimeout(r, 700));
 
-    const allEvents = sent.filter(s => s.startsWith('data:'));
-    // Should have the 2 initial + at least 1 new event from the truncated file
-    expect(allEvents.length).toBeGreaterThanOrEqual(3);
+    // The 2 initial events, then the new run's start once
+    expect(sent.filter(s => s.startsWith('data:'))).toEqual([
+      'data: {"event":"start","totalExpected":5}\n\n',
+      'data: {"event":"test","testId":"t1","status":"passed"}\n\n',
+      'data: {"event":"start","totalExpected":3}\n\n',
+    ]);
 
     handler.stop();
     fs.unlinkSync(tmpFile);
@@ -100,9 +103,7 @@ describe('SSE handler: file truncation and recreation', () => {
     fs.writeFileSync(tmpFile, '{"event":"start","totalExpected":2}\n');
     await new Promise(r => setTimeout(r, 700));
 
-    const events = sent.filter(s => s.startsWith('data:'));
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0]).toContain('"start"');
+    expect(sent.filter(s => s.startsWith('data:'))).toEqual(['data: {"event":"start","totalExpected":2}\n\n']);
 
     handler.stop();
     fs.unlinkSync(tmpFile);
