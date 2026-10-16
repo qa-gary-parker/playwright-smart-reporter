@@ -561,8 +561,10 @@ class SmartReporter implements Reporter {
     for (const r of this.results) this.settleAttemptEvidence(r);
 
     // Durations below are Date.now() - startTime. merge-reports calls onBegin at merge time,
-    // so start the clock from the run's own duration instead.
-    if (result.duration > 0) this.startTime = Date.now() - result.duration;
+    // so start the clock from the run's own duration instead. Playwright's duration is fractional;
+    // round it so the history run id stays a whole number.
+    if (result.duration > 0) this.startTime = Date.now() - Math.round(result.duration);
+    this.historyCollector.setRunStart(this.startTime);
 
     // Signal live reporting that the run is complete
     // Note: JSONL file is intentionally NOT cleaned up here — the SSE handler

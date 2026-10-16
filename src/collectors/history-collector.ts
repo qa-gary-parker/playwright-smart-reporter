@@ -14,8 +14,8 @@ export class HistoryCollector {
   private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf'>> &
                    Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf'>;
   private outputDir: string;
-  private currentRun: RunMetadata;
-  private startTime: number;
+  private currentRun!: RunMetadata;
+  private startTime!: number;
 
   constructor(options: SmartReporterOptions, outputDir: string) {
     // Issue #21: Support {project} placeholder in historyFile path
@@ -82,11 +82,19 @@ export class HistoryCollector {
       enableCausalTimeline: options.enableCausalTimeline,
     };
     this.outputDir = outputDir;
+    this.setRunStart(Date.now());
+  }
+
+  /**
+   * Set when the run started. merge-reports builds the collector at merge time, so the reporter
+   * passes the run's own start once onEnd knows it. The summary duration, timestamp and run id follow it.
+   */
+  setRunStart(startTime: number): void {
+    this.startTime = startTime;
     this.currentRun = {
-      runId: `run-${this.options.runId ?? Date.now()}`,
-      timestamp: new Date().toISOString(),
+      runId: `run-${this.options.runId ?? startTime}`,
+      timestamp: new Date(startTime).toISOString(),
     };
-    this.startTime = Date.now();
   }
 
   /**

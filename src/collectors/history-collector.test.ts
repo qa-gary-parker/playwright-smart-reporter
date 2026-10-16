@@ -348,6 +348,40 @@ describe('HistoryCollector', () => {
       expect(mockFs.writeFileSync).toHaveBeenCalled();
     });
 
+    // merge-reports builds the collector at merge time; the reporter then passes the run's own start.
+    describe('run clock', () => {
+      const T0 = Date.parse('2026-10-16T12:00:00.000Z');
+      beforeEach(() => vi.useFakeTimers({ now: T0 }));
+      afterEach(() => vi.useRealTimers());
+
+      it('saves the duration, start and id of the run, not of the merge', () => {
+        const collector = new HistoryCollector({}, outputDir);
+        collector.loadHistory();
+        vi.advanceTimersByTime(50);
+        const runStart = Date.now() - 600_000;
+
+        collector.setRunStart(runStart);
+        collector.updateHistory([createTestResult()]);
+
+        const { runId, timestamp, duration } = collector.getHistory().summaries![0];
+        expect({ runId, timestamp, duration }).toEqual({ runId: `run-${runStart}`, timestamp: '2026-10-16T11:50:00.050Z', duration: 600_000 });
+        expect(collector.getCurrentRun()).toEqual({ runId: `run-${runStart}`, timestamp: '2026-10-16T11:50:00.050Z' });
+        expect(collector.getHistory().tests['test-1'][0].runId).toBe(`run-${runStart}`);
+      });
+
+      it('keeps the runId option as the run id', () => {
+        const collector = new HistoryCollector({ runId: 'ci-7' }, outputDir);
+        collector.loadHistory();
+        vi.advanceTimersByTime(50);
+
+        collector.setRunStart(Date.now() - 600_000);
+        collector.updateHistory([createTestResult()]);
+
+        const { runId, timestamp, duration } = collector.getHistory().summaries![0];
+        expect({ runId, timestamp, duration }).toEqual({ runId: 'run-ci-7', timestamp: '2026-10-16T11:50:00.050Z', duration: 600_000 });
+      });
+    });
+
     it('records forecast risks under the current run id', () => {
       const collector = new HistoryCollector({ runId: '42' }, outputDir);
       collector.loadHistory();

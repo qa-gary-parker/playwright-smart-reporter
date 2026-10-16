@@ -333,4 +333,26 @@ describe('merge-reports', () => {
     expect(summary.total).toBe(1);
     expect(summary.duration).toBeGreaterThanOrEqual(1000);
   });
+
+  it('saves the duration, start and id of the sharded run in history, not of the merge', () => {
+    const blobs = path.join(tmp, 'shard-blobs');
+    const out = path.join(tmp, 'merged-shards');
+    fs.mkdirSync(blobs, { recursive: true });
+    for (const n of [1, 2]) {
+      const shardBlobs = path.join(tmp, `shard-${n}-blob`);
+      runSuite(path.join(tmp, `shard-${n}`), {}, ['--reporter=blob', '--grep', 'takes a second|passes$', '--fully-parallel', `--shard=${n}/2`], 'test', { PLAYWRIGHT_BLOB_OUTPUT_DIR: shardBlobs });
+      for (const zip of fs.readdirSync(shardBlobs)) fs.copyFileSync(path.join(shardBlobs, zip), path.join(blobs, zip));
+    }
+    const merge = runSuite(out, { exportJson: true }, [blobs], 'merge-reports');
+
+    expect(merge.status).toBe(0);
+    const json = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+    const { meta } = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+    const [summary] = JSON.parse(fs.readFileSync(path.join(out, 'test-history.json'), 'utf8')).summaries;
+    expect(json.summary.total).toBe(2);
+    expect(json.summary.duration).toBeGreaterThanOrEqual(1000);
+    expect(Math.abs(summary.duration - json.summary.duration)).toBeLessThan(100);
+    expect({ runId: summary.runId, timestamp: summary.timestamp }).toEqual({ runId: `run-${meta.startTime}`, timestamp: new Date(meta.startTime).toISOString() });
+    expect(meta.runId).toBe(summary.runId);
+  });
 });
