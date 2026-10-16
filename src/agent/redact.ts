@@ -52,6 +52,20 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Throws rather than run with a pattern that would leak (invalid) or mark every position (empty match).
+function compilePattern(p: string | RegExp, index: number): RegExp {
+  const label = `redact.patterns[${index}] ${typeof p === 'string' ? JSON.stringify(p) : String(p)}`;
+  let re: RegExp;
+  try {
+    // No flags, so the engine message does not depend on them
+    re = new RegExp(p);
+  } catch (err) {
+    throw new Error(`${label} is not a valid regular expression: ${(err as Error).message.replace(/^Invalid regular expression: /, '')}`);
+  }
+  if (re.test('')) throw new Error(`${label} matches an empty string`);
+  return new RegExp(re, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+}
+
 // A string pattern is a regular expression source. Each pattern masks every match.
 export function createRedactor(env: NodeJS.ProcessEnv = process.env, patterns: ReadonlyArray<string | RegExp> = []): Redactor {
   const envValues = Object.entries(env)
@@ -59,9 +73,7 @@ export function createRedactor(env: NodeJS.ProcessEnv = process.env, patterns: R
     .map(([, value]) => value as string)
     .sort((a, b) => b.length - a.length);
   const envPattern = envValues.length > 0 ? new RegExp(envValues.map(escapeRegExp).join('|'), 'g') : undefined;
-  const userPatterns = patterns.map((p) =>
-    typeof p === 'string' ? new RegExp(p, 'g') : new RegExp(p.source, p.flags.includes('g') ? p.flags : `${p.flags}g`),
-  );
+  const userPatterns = patterns.map(compilePattern);
 
   const string = (value: string): string => {
     let out = envPattern ? value.replace(envPattern, REDACTED) : value;

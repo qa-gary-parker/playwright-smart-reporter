@@ -403,4 +403,13 @@ describe('redact', () => {
   it('with redact.patterns, also masks what the patterns match', () => {
     expect(outputs('redact-patterns', { patterns: ['[\\w.]+@example\\.com'] })).toEqual(everyFile({ token: false, redacted: true, email: false, control: true }));
   });
+
+  it('stops the run before any test when a pattern matches an empty string', () => {
+    const out = path.join(tmp, 'redact-empty-pattern');
+    const run = runSuite(out, { redact: { patterns: [''] } }, ['--grep', 'passes$']);
+
+    expect(run.status).toBe(1);
+    expect(run.output).toContain('redact.patterns[0] "" matches an empty string');
+    expect(fs.existsSync(path.join(out, 'pw.json'))).toBe(false);
+  });
 });

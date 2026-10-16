@@ -1074,6 +1074,8 @@ reporter: [
 
 `redact` uses the same rules as the AI prompts (see [What the provider receives](#what-the-provider-receives)): secret environment values, credential pairs, tokens and `key`/`sig`-style query parameters. Each match of a `patterns` entry also becomes `[REDACTED]`.
 
+The reporter checks each pattern when it starts. A pattern that is not a valid regular expression, or that matches an empty string (for example `''` or `/a*/`), stops the run before any test runs. The error names the pattern, for example `redact.patterns[0] "" matches an empty string`.
+
 The reporter redacts these fields of each test when the test ends:
 
 - The error message and stack of every attempt, and the source snippet.

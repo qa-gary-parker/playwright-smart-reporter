@@ -145,6 +145,18 @@ describe('createRedactor', () => {
     expect(r.string(`mail qa.user@example.com about ORDER-42 and order-7, password=${S.password}, keep this`))
       .toBe('mail [REDACTED] about [REDACTED] and [REDACTED], password=[REDACTED], keep this');
   });
+
+  it('rejects an empty pattern, naming the option and the pattern', () => {
+    expect(() => createRedactor({}, [''])).toThrow(new Error('redact.patterns[0] "" matches an empty string'));
+  });
+
+  it('rejects a pattern that can match an empty string', () => {
+    expect(() => createRedactor({}, ['order-\\d+', /a*/])).toThrow(new Error('redact.patterns[1] /a*/ matches an empty string'));
+  });
+
+  it('rejects a pattern that is not a valid regular expression', () => {
+    expect(() => createRedactor({}, ['order-\\d+', '('])).toThrow(new Error('redact.patterns[1] "(" is not a valid regular expression: /(/: Unterminated group'));
+  });
 });
 
 describe('redactTestResult', () => {
