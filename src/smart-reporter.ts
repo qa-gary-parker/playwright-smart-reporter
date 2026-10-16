@@ -292,10 +292,12 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Tertiary source: extract from test title (e.g., "Login @smoke @critical"), for Playwright before 1.42.
-    // A tag starts a word, so the "@example" in "user@example.com" is not one.
-    for (const [, tag] of test.title.matchAll(/(?:^|\s)(@[\w-]+)/g)) {
-      if (!tags.includes(tag)) tags.push(tag);
+    // Tertiary source: extract from test title (e.g., "Login @smoke @critical"), only for Playwright before 1.42,
+    // which has no test.tags. A tag starts a word, so the "@example" in "user@example.com" is not one.
+    if (!Array.isArray(test.tags)) {
+      for (const [, tag] of test.title.matchAll(/(?:^|\s)(@[\w-]+)/g)) {
+        if (!tags.includes(tag)) tags.push(tag);
+      }
     }
 
     // Extract suite hierarchy from titlePath (last element is test title itself)

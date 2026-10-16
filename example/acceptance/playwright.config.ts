@@ -17,6 +17,8 @@ export default defineConfig({
   retries: 1,
   workers: 1,
   reporter: [
+    // ACCEPTANCE_WITHOUT_TAGS runs the smart reporter as on Playwright before 1.42, with no test.tags.
+    ...(process.env.ACCEPTANCE_WITHOUT_TAGS ? [[path.join(__dirname, 'without-tags.reporter.ts')] as const] : []),
     [path.join(__dirname, '../../dist/smart-reporter.js'), {
       outputFile: path.join(out, 'smart-report.html'),
       historyFile: path.join(out, 'test-history.json'),

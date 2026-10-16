@@ -25,4 +25,6 @@ test('fails when asked', () => {
 
 test.describe('sign in', () => {
   test('login as user@example.com @smoke', () => {});
+
+  test('logs out @smoke.fast', () => {});
 });

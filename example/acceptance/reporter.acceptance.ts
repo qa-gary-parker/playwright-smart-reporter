@@ -214,6 +214,23 @@ describe('tags and suites', () => {
     expect(data.tests.map((t) => t.tags)).toEqual([['@example.com', '@smoke']]);
   });
 
+  it('keeps a dotted title tag as Playwright gives it, without a second, shorter tag', () => {
+    const out = path.join(tmp, 'tags-dotted');
+    runSuite(out, {}, ['--grep', 'logs out']);
+
+    const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+    expect(data.tests.map((t) => t.tags)).toEqual([['@smoke.fast']]);
+  });
+
+  it('reads tags from the title when Playwright gives no test.tags, as before 1.42', () => {
+    const out = path.join(tmp, 'tags-without-test-tags');
+    const run = runSuite(out, {}, ['--grep', 'login as'], 'test', { ACCEPTANCE_WITHOUT_TAGS: '1' });
+
+    expect(run.status).toBe(0);
+    const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+    expect(data.tests.map((t) => t.tags)).toEqual([['@smoke']]);
+  });
+
   it('starts the suite path with the file for an unnamed project, the same as for a named one', () => {
     for (const projects of ['', 'chromium']) {
       const out = path.join(tmp, `suites-${projects || 'unnamed'}`);
