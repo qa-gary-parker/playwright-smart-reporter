@@ -62,7 +62,7 @@ The report is a single-page app. The rail on the left holds the queues and views
 |---|---|
 | Failures | Tests that failed this run, grouped by failure cluster. CI links to a failed run open here. |
 | Flaky | Tests that passed on retry this run, or that history marks as flaky |
-| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than their average or the previous run |
+| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than the median of their passing runs in history, or than the previous run |
 | Quarantined | Tests in the quarantine file |
 | All tests | Every test, grouped by file |
 | Insights | The landing view: run metrics, a Failed card that opens Failures, and summary panels |
@@ -95,7 +95,7 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
 | Console | Console messages from the trace of the failed attempt |
 | Attachments | Screenshots and videos (open in a lightbox), traces (Open or Download), custom attachments (download) |
-| History | Outcome strip for recent runs, pass count, average duration, flakiness, grade, duration sparkline |
+| History | Outcome strip for recent runs, pass count, median duration of passing runs, flakiness, grade, duration sparkline |
 | Accessibility | axe-core violations for this test |
 | Annotations | Each annotation's type and description |
 

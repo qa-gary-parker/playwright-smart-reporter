@@ -16,9 +16,12 @@ function createTestResult(overrides: Partial<TestResultData> = {}): TestResultDa
   };
 }
 
-function createHistoryEntry(duration: number, skipped: boolean = false): TestHistoryEntry {
+function createHistoryEntry(
+  duration: number,
+  { skipped = false, passed = true }: { skipped?: boolean; passed?: boolean } = {}
+): TestHistoryEntry {
   return {
-    passed: true,
+    passed,
     duration,
     timestamp: new Date().toISOString(),
     skipped,
@@ -47,8 +50,8 @@ describe('PerformanceAnalyzer', () => {
       it('marks tests with only skipped history as baseline', () => {
         const test = createTestResult();
         const history = [
-          createHistoryEntry(1000, true),
-          createHistoryEntry(1500, true),
+          createHistoryEntry(1000, { skipped: true }),
+          createHistoryEntry(1500, { skipped: true }),
         ];
 
         analyzer.analyze(test, history);
@@ -100,13 +103,59 @@ describe('PerformanceAnalyzer', () => {
         const test = createTestResult({ duration: 1000 });
         const history = [
           createHistoryEntry(2000), // real
-          createHistoryEntry(5000, true), // skipped - ignored
+          createHistoryEntry(5000, { skipped: true }), // skipped - ignored
         ];
 
         analyzer.analyze(test, history);
 
         expect(test.averageDuration).toBe(2000);
         expect(test.performanceTrend).toBe('↓ 50% faster');
+      });
+
+      it('takes the baseline from passing runs only, so a slow failure does not hide a regression', () => {
+        const test = createTestResult({ duration: 5000 });
+        const history = [
+          createHistoryEntry(2000),
+          createHistoryEntry(2000),
+          createHistoryEntry(30000, { passed: false }),
+        ];
+
+        analyzer.analyze(test, history);
+
+        expect(test.averageDuration).toBe(2000);
+        expect(test.performanceMetrics?.averageDuration).toBe(2000);
+        expect(test.performanceTrend).toBe('↑ 150% slower');
+      });
+
+      it('takes the median of passing runs, so one slow pass does not hide a regression', () => {
+        const test = createTestResult({ duration: 5000 });
+        const history = [
+          createHistoryEntry(2000),
+          createHistoryEntry(2000),
+          createHistoryEntry(2000),
+          createHistoryEntry(30000),
+        ];
+
+        analyzer.analyze(test, history);
+
+        expect(test.averageDuration).toBe(2000);
+        expect(test.performanceTrend).toBe('↑ 150% slower');
+      });
+
+      it('rounds the median of an even number of passing runs to whole ms', () => {
+        const test = createTestResult({ duration: 1000 });
+        analyzer.analyze(test, [1000, 1001, 1002, 5000].map((d) => createHistoryEntry(d)));
+
+        expect(test.averageDuration).toBe(1002);
+      });
+
+      it('marks tests whose history has no passing run as baseline', () => {
+        const test = createTestResult({ duration: 5000 });
+        analyzer.analyze(test, [createHistoryEntry(1000, { passed: false }), createHistoryEntry(1000, { passed: false })]);
+
+        expect(test.performanceTrend).toBe('→ Baseline');
+        expect(test.averageDuration).toBeUndefined();
+        expect(test.performanceMetrics).toBeUndefined();
       });
 
       it('does not count a short test as slower or faster when the change is under 250ms', () => {

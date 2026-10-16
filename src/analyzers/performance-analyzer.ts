@@ -1,4 +1,5 @@
 import type { TestResultData, TestHistoryEntry, PerformanceMetrics } from '../types';
+import { median } from '../utils/stats';
 
 // A change also has to be this many ms, so jitter in short tests is not a trend.
 export const MIN_DURATION_CHANGE_MS = 250;
@@ -27,22 +28,22 @@ export class PerformanceAnalyzer {
       return;
     }
 
-    // Filter out skipped runs for performance calculation
-    const relevantHistory = history.filter(e => !e.skipped);
+    // A failed run times the failure, not the test, so only passing runs form the baseline.
+    const relevantHistory = history.filter(e => e.passed && !e.skipped);
 
     if (relevantHistory.length === 0) {
       test.performanceTrend = '→ Baseline';
       return;
     }
 
-    // Calculate average duration from history (rounded to whole ms)
-    const avgDuration = Math.round(relevantHistory.reduce((sum, e) => sum + e.duration, 0) / relevantHistory.length);
-    // A 0ms average has no percentage change to report.
-    if (avgDuration === 0) {
+    // The median keeps one slow outlier from moving the baseline (rounded to whole ms).
+    const baseline = Math.round(median(relevantHistory.map(e => e.duration)));
+    // A 0ms baseline has no percentage change to report.
+    if (baseline === 0) {
       test.performanceTrend = '→ Baseline';
       return;
     }
-    test.averageDuration = avgDuration;
+    test.averageDuration = baseline;
 
     // A failed run's duration is mostly time spent waiting on the failure, not a speed change.
     if (test.status !== 'passed') {
@@ -51,10 +52,10 @@ export class PerformanceAnalyzer {
     }
 
     // Calculate performance trend
-    test.performanceTrend = this.getPerformanceTrend(test.duration, avgDuration);
+    test.performanceTrend = this.getPerformanceTrend(test.duration, baseline);
 
     // Add detailed performance metrics
-    test.performanceMetrics = this.calculateMetrics(test.duration, avgDuration);
+    test.performanceMetrics = this.calculateMetrics(test.duration, baseline);
   }
 
   /**
