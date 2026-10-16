@@ -1,5 +1,7 @@
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
+import { createServer, type Server } from 'http';
+import type { AddressInfo } from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -114,6 +116,72 @@ describe('analysis switches', () => {
     expect(analysed(path.join(tmp, 'analysis-off'), { enableRetryAnalysis: false, enableFailureClustering: false, enableStabilityScore: false }))
       .toEqual({ clusters: 0, clustered: 0, scored: 0, retryInfo: 0 });
   });
+});
+
+describe('AI analysis', () => {
+  // A stub OpenAI-compatible provider that records the prompt of every request.
+  let server: Server;
+  let baseUrl: string;
+  let prompts: string[];
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk) => { raw += chunk; });
+      req.on('end', () => {
+        prompts.push(JSON.parse(raw).messages[0].content);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ message: { content: 'stub suggestion' } }] }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+  });
+
+  afterAll(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+
+  // The failing test's error carries a credential pair and the value of a *_TOKEN env var.
+  const AI_ENV = {
+    ANTHROPIC_API_KEY: '', GEMINI_API_KEY: '', CLAUDE_CODE_OAUTH_TOKEN: '', OLLAMA_HOST: '', OLLAMA_MODEL: '',
+    OPENAI_API_KEY: 'stub-openai-key',
+    MY_TOKEN: 'tokenvalue-12345678',
+    ACCEPTANCE_FAIL: 'api_key=abcd1234efgh tokenvalue-12345678',
+  };
+
+  // spawnSync would block this process, so the stub could not answer while the suite runs.
+  async function runFailing(out: string, options: object) {
+    prompts = [];
+    const run = spawn(process.execPath, [CLI, 'test', `--config=${CONFIG}`, '--grep', 'fails when asked'], {
+      cwd: ROOT,
+      env: { ...process.env, ACCEPTANCE_OUT: out, ACCEPTANCE_OPTIONS: JSON.stringify(options), ...AI_ENV },
+      stdio: 'ignore',
+    });
+    const status = await new Promise<number | null>((resolve, reject) => {
+      run.on('error', reject);
+      run.on('close', resolve);
+    });
+    return { status, data: reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')) };
+  }
+
+  it('sends nothing to the provider when only a key is set', async () => {
+    const { status, data } = await runFailing(path.join(tmp, 'ai-default'), { ai: { baseUrl } });
+
+    expect(status).toBe(1);
+    expect(prompts).toEqual([]);
+    expect(data.ai).toEqual({ analysisOff: true, summaryOff: true });
+  }, 60_000);
+
+  it('with enableAIRecommendations: true, sends the failure, cluster and suite health prompts with secrets redacted', async () => {
+    const { status, data } = await runFailing(path.join(tmp, 'ai-on'), { enableAIRecommendations: true, ai: { baseUrl } });
+
+    expect(status).toBe(1);
+    expect(prompts.map((p) => p.includes('api_key=[REDACTED] [REDACTED]'))).toEqual([true, true, false]);
+    expect(prompts.filter((p) => /abcd1234efgh|tokenvalue-12345678/.test(p))).toEqual([]);
+    expect(data.ai).toEqual({ suiteHealthSummary: 'stub suggestion', provider: 'openai', model: 'gpt-4o-mini' });
+  }, 60_000);
 });
 
 describe('report write failure', () => {

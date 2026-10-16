@@ -168,8 +168,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     ai: {
       suiteHealthSummary: input.aiSuiteHealthSummary,
       ...aiReportInfo(input),
-      ...(options.enableAIRecommendations === false && { analysisOff: true }),
-      ...((options.enableAIRecommendations === false || options.enableAISuiteHealth === false) && { summaryOff: true }),
+      ...(options.enableAIRecommendations !== true && { analysisOff: true }),
+      ...((options.enableAIRecommendations !== true || options.enableAISuiteHealth === false) && { summaryOff: true }),
     },
     ...(forecast && { forecastSummary: forecast.summary }),
     ownership: summarizeOwnership(tests),

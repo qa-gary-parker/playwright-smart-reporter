@@ -83,14 +83,14 @@ export interface SmartReporterOptions {
   slackWebhook?: string;
   teamsWebhook?: string;
 
-  // NEW: Feature flags (all default to true)
+  // NEW: Feature flags (default to true unless noted)
   enableRetryAnalysis?: boolean;
   enableFailureClustering?: boolean;
   enableStabilityScore?: boolean;
   enableGalleryView?: boolean;
   enableComparison?: boolean;
-  enableAIRecommendations?: boolean;
-  enableAISuiteHealth?: boolean;   // Default: true (AI health summary in Overview tab, uses AI quota)
+  enableAIRecommendations?: boolean; // Default: false (sends failure data to the AI provider)
+  enableAISuiteHealth?: boolean;   // Default: true, needs enableAIRecommendations (AI health summary in Insights, uses AI quota)
   enableTrendsView?: boolean;
   enableTraceViewer?: boolean; // Enable "View trace" links
   enableHistoryDrilldown?: boolean; // Default: false (stores per-run snapshots for dot-click drilldown)

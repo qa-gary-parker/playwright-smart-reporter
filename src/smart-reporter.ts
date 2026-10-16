@@ -106,7 +106,7 @@ class SmartReporter implements Reporter {
   private retryAnalyzer!: RetryAnalyzer;
   private failureClusterer: FailureClusterer;
   private stabilityScorer!: StabilityScorer;
-  private aiAnalyzer: AIAnalyzer;
+  private aiAnalyzer?: AIAnalyzer; // only with enableAIRecommendations: true
 
   // Notifiers
   private slackNotifier!: SlackNotifier;
@@ -148,7 +148,7 @@ class SmartReporter implements Reporter {
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
-    this.aiAnalyzer = new AIAnalyzer(options.ai);
+    if (options.enableAIRecommendations === true) this.aiAnalyzer = new AIAnalyzer(options.ai);
 
     // Initialize live writer (defaults to disabled no-op)
     if (options.live?.enabled) {
@@ -567,7 +567,7 @@ class SmartReporter implements Reporter {
     let aiSuiteHealthSummary: string | undefined;
     // An AI outage must never fail the run (Phase 0.5)
     try {
-      if (options.enableAIRecommendations !== false) {
+      if (this.aiAnalyzer) {
         await this.aiAnalyzer.analyzeFailed(this.results);
         if (failureClusters.length > 0) {
           await this.aiAnalyzer.analyzeClusters(failureClusters);

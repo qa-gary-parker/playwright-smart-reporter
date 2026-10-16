@@ -129,6 +129,10 @@ class TestConvertPytestJson:
         data = convert_pytest_json(sample_report_path)
         assert data["startTime"] == 1700000000000
 
+    def test_ai_analysis_off_by_default(self, sample_report_path):
+        data = convert_pytest_json(sample_report_path)
+        assert data["options"]["enableAIRecommendations"] is False
+
     def test_tags_from_keywords(self, sample_report_path):
         data = convert_pytest_json(sample_report_path)
         assert data["results"][0]["tags"] == ["login", "smoke"]

@@ -89,7 +89,7 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Expected and received | A diff of the expected and received values, when the error has them |
 | Source | Playwright's code frame at the failing line |
 | Timeline | The causal failure timeline (see [Causal Failure Timeline](#causal-failure-timeline)) |
-| AI analysis | The AI suggestion, or a hint to set a provider or use Copy AI prompt |
+| AI analysis | The AI suggestion, or a note that AI is off or has no provider. Copy AI prompt works in both cases. |
 | Attempts | Every attempt with status, duration, and first error line. When an attempt failed and a later one passed, a step-by-step comparison of the two. Rows with a different step, or a duration more than 2x apart, are marked. |
 | Steps | Each step with a duration bar. The failing step is marked. |
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
@@ -253,9 +253,9 @@ The report bundles the Geist Sans and Geist Mono fonts (SIL OFL 1.1). It makes n
 
 ### AI Failure Analysis
 
-Sends each failure's context to an AI provider and shows the suggestion in the test detail. Use your own Anthropic, OpenAI, or Gemini key, the Claude Code CLI, or a local model. See [AI Analysis](#ai-analysis).
+Sends each failure's context to an AI provider and shows the suggestion in the test detail. Use your own Anthropic, OpenAI, or Gemini key, the Claude Code CLI, or a local model. It is off by default: set `enableAIRecommendations: true` to turn it on. See [AI Analysis](#ai-analysis).
 
-Without a provider, every failed test still has **Copy AI prompt**. It copies a prompt with the error, call log, and code frame for use with any AI assistant.
+With AI off or without a provider, every failed test still has **Copy AI prompt**. It copies a prompt with the error, call log, and code frame for use with any AI assistant.
 
 ### Causal Failure Timeline
 
@@ -793,9 +793,9 @@ The title shows in the top bar. `logo` replaces the "Smart Reporter" name with a
 
 ### AI Suite Health Summary
 
-An AI-generated summary of the run is the first panel in Insights. It combines failure clusters, flakiness trends, performance regressions, and historical pass rate data. Enabled by default when an AI provider is set (see [AI Analysis](#ai-analysis)).
+An AI-generated summary of the run is the first panel in Insights. It combines failure clusters, flakiness trends, performance regressions, and historical pass rate data. It runs when AI analysis is on (`enableAIRecommendations: true`) and a provider is set (see [AI Analysis](#ai-analysis)).
 
-To disable (e.g., to save one AI request per run):
+To turn off only the summary (e.g., to save one AI request per run):
 
 ```typescript
 reporter: [
@@ -830,11 +830,11 @@ reporter: [
     enableStabilityScore: true,
     enableGalleryView: true,
     enableComparison: true,
-    enableAIRecommendations: true,
+    enableAIRecommendations: false, // AI analysis; sends failure data to the AI provider
     enableTrendsView: true,
     enableTraceViewer: true,
     enableHistoryDrilldown: false,
-    enableAISuiteHealth: true,      // AI health summary in Insights (uses 1 AI request)
+    enableAISuiteHealth: true,      // AI health summary in Insights; needs enableAIRecommendations (uses 1 AI request)
     enableNetworkLogs: true,
     enableCausalTimeline: true,     // Timeline and first-anomaly suggestion on failed tests
 
@@ -901,7 +901,17 @@ reporter: [
 
 ### AI Analysis
 
-AI failure analysis uses your own API key or a local model. Set one of the following environment variables:
+AI failure analysis uses your own API key or a local model. It is off by default. A key in the environment does not turn it on. To turn it on, set `enableAIRecommendations: true`:
+
+```ts
+reporter: [
+  ['playwright-smart-reporter', {
+    enableAIRecommendations: true,
+  }],
+],
+```
+
+Then set one of the following environment variables:
 
 ```bash
 export ANTHROPIC_API_KEY=your-key    # Claude
@@ -913,7 +923,7 @@ When a test fails, the reporter sends the failure context to your chosen provide
 
 **Claude subscription (no API key)?** Claude Pro/Team plans issue OAuth tokens, not API keys — putting one in `ANTHROPIC_API_KEY` fails with a 401. Instead, install [Claude Code](https://claude.com/claude-code) and set `CLAUDE_CODE_OAUTH_TOKEN`: the reporter then routes analysis through the local `claude` CLI, billed to your subscription. API keys take precedence when both are set.
 
-If no provider is set, AI analysis is skipped and everything else works as normal. Every failed test still gets a **Copy AI prompt** button.
+If AI analysis is off or no provider is set, the reporter sends nothing and everything else works as normal. Every failed test still gets a **Copy AI prompt** button.
 
 #### Local models (Ollama and OpenAI-compatible endpoints)
 
@@ -927,11 +937,12 @@ export OLLAMA_HOST=127.0.0.1:11434   # optional, this is the default
 export OLLAMA_MODEL=llama3.2         # optional, this is the default
 ```
 
-Setting `OLLAMA_HOST` or `OLLAMA_MODEL` turns on local analysis when no cloud key is set. To use Ollama even when a cloud key is set, choose it in the config:
+With `enableAIRecommendations: true`, setting `OLLAMA_HOST` or `OLLAMA_MODEL` selects local analysis when no cloud key is set. To use Ollama even when a cloud key is set, choose it in the config:
 
 ```ts
 reporter: [
   ['playwright-smart-reporter', {
+    enableAIRecommendations: true,
     ai: {
       provider: 'ollama',
       model: 'qwen2.5:7b',
@@ -1354,7 +1365,8 @@ export default defineConfig({
 - `cspSafe: true` now writes `<name>-data.js` as well as `<name>.css` and `<name>.js`.
 - The executive PDF variants are links in the export menu. The PDF files are unchanged.
 - A breached quality gate in the reporter options now fails the Playwright run (exit code `1`). In 2.x it was only logged.
-- New options are opt-in, except three that are on by default: `enableCausalTimeline`, `forecast`, and `ownership` (only when a CODEOWNERS file exists). Opt-in: `ai`, `accessibility`, `exportCtrf`, `exportFailures`, and code coverage (import `test` from `playwright-smart-reporter/coverage`). `assetMode` defaults to `'auto'`.
+- New options are opt-in, except three that are on by default: `enableCausalTimeline`, `forecast`, and `ownership` (only when a CODEOWNERS file exists). Opt-in: `accessibility`, `exportCtrf`, `exportFailures`, and code coverage (import `test` from `playwright-smart-reporter/coverage`). `assetMode` defaults to `'auto'`.
+- From 4.0.0, AI analysis is off by default. A provider key in the environment no longer turns it on. Set `enableAIRecommendations: true` to turn it on. The `ai` options only choose the provider.
 - The history file gains `stepDurations` per test entry and `forecasts` per run.
 - `maxEmbeddedSize` has no effect. Traces are copied to `traces/` next to the report and are never embedded. The option is kept so existing configs still type-check.
 
@@ -1392,7 +1404,7 @@ They use different methodologies — see [Flakiness Detection](#flakiness-detect
 |---|---|---|
 | No history data | History file missing or wrong path | Check `historyFile` path, use CI caching |
 | No network logs | Tracing not enabled | Add `trace: 'retain-on-failure'` to config |
-| No AI suggestions | No AI provider set | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` with Claude Code installed, or `OLLAMA_HOST`/`ai.provider` for a local model |
+| No AI suggestions | AI analysis is off (the default), or no AI provider set | Set `enableAIRecommendations: true`, then set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` with Claude Code installed, or `OLLAMA_HOST`/`ai.provider` for a local model |
 | `Anthropic API error: 401` | Claude subscription OAuth token used as API key | Unset `ANTHROPIC_API_KEY`; set `CLAUDE_CODE_OAUTH_TOKEN` to use the Claude Code CLI |
 | Ollama set but a cloud provider is used | A cloud key is also set and wins | Set `ai: { provider: 'ollama' }` |
 | Page says "report data is missing" | `<name>-data.js` was not kept next to the HTML | Copy or upload the companion files with the HTML |

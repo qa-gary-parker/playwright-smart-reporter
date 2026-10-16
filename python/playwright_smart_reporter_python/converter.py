@@ -123,7 +123,7 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
             "enableGalleryView": False,
             "enableComparison": False,
             "enableHistoryDrilldown": False,
-            "enableAIRecommendations": True,
+            "enableAIRecommendations": False,
             "enableTrendsView": True,
             "enableStabilityScore": True,
             "enableFailureClustering": True,

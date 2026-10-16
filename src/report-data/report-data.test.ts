@@ -76,17 +76,18 @@ describe('buildReportData', () => {
   });
 
   it('records which provider and model produced the AI output', () => {
-    const data = buildReportData(input([{ ...FAILED, aiSuggestion: 'Wait for the selector' }], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
+    const data = buildReportData(input([{ ...FAILED, aiSuggestion: 'Wait for the selector' }], { options: { enableAIRecommendations: true, ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
     expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined, provider: 'ollama', model: 'qwen2.5:7b' });
   });
 
   it('records AI switched off by the options, so the report can say so instead of "not configured"', () => {
+    expect(buildReportData(input([FAILED], { options: {} })).ai).toStrictEqual({ suiteHealthSummary: undefined, analysisOff: true, summaryOff: true });
     expect(buildReportData(input([FAILED], { options: { enableAIRecommendations: false } })).ai).toStrictEqual({ suiteHealthSummary: undefined, analysisOff: true, summaryOff: true });
-    expect(buildReportData(input([FAILED], { options: { enableAISuiteHealth: false } })).ai).toStrictEqual({ suiteHealthSummary: undefined, summaryOff: true });
+    expect(buildReportData(input([FAILED], { options: { enableAIRecommendations: true, enableAISuiteHealth: false } })).ai).toStrictEqual({ suiteHealthSummary: undefined, summaryOff: true });
   });
 
   it('leaves provider and model out when the report has no AI output', () => {
-    const data = buildReportData(input([FAILED], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
+    const data = buildReportData(input([FAILED], { options: { enableAIRecommendations: true, ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
     expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined });
   });
 

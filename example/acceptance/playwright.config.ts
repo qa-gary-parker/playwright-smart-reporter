@@ -17,7 +17,6 @@ export default defineConfig({
     [path.join(__dirname, '../../dist/smart-reporter.js'), {
       outputFile: path.join(out, 'smart-report.html'),
       historyFile: path.join(out, 'test-history.json'),
-      enableAIRecommendations: false,
       ...options,
     }],
     // Playwright's own counts, the oracle the reporter's numbers are checked against.

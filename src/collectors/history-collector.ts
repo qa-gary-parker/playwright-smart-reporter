@@ -42,7 +42,7 @@ export class HistoryCollector {
       enableStabilityScore: options.enableStabilityScore ?? true,
       enableGalleryView: options.enableGalleryView ?? true,
       enableComparison: options.enableComparison ?? true,
-      enableAIRecommendations: options.enableAIRecommendations ?? true,
+      enableAIRecommendations: options.enableAIRecommendations ?? false,
       enableAISuiteHealth: options.enableAISuiteHealth ?? true,
       enableTrendsView: options.enableTrendsView ?? true,
       enableTraceViewer: options.enableTraceViewer ?? true,
