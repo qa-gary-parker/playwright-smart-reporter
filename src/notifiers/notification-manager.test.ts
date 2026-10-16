@@ -259,7 +259,7 @@ describe('NotificationManager', () => {
     it('sets severity from the failure share: >50% critical, >20% error, else warning', async () => {
       const notifier = new PagerDutyNotifier('rk');
 
-      for (const failures of [6, 5, 3, 2]) await notifier.trigger('s', failures, 10);
+      for (const failures of [6, 5, 3, 2]) await notifier.trigger('s', { failed: failures, total: 10, passRate: 100 - failures * 10 });
 
       expect(requests().map(r => [r.body.payload.custom_details.failures, r.body.payload.severity])).toEqual([
         [6, 'critical'], [5, 'error'], [3, 'error'], [2, 'warning'],
@@ -270,8 +270,8 @@ describe('NotificationManager', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       fetchMock.mockResolvedValueOnce(new Response('Invalid routing key', { status: 400 }));
 
-      await new PagerDutyNotifier('').trigger('s', 1, 1);
-      await new PagerDutyNotifier('bad').trigger('s', 1, 1);
+      await new PagerDutyNotifier('').trigger('s', { failed: 1, total: 1, passRate: 0 });
+      await new PagerDutyNotifier('bad').trigger('s', { failed: 1, total: 1, passRate: 0 });
 
       expect(urls()).toEqual(['https://events.pagerduty.com/v2/enqueue']);
       expect(warn.mock.calls).toEqual([['PagerDuty alert failed: 400 Invalid routing key']]);

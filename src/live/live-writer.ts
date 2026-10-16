@@ -6,7 +6,9 @@ import type {
   LiveTestEvent,
   LiveCompleteEvent,
   LiveCounters,
+  TestResultData,
 } from '../types';
+import { computeRunStats } from '../utils/run-stats';
 
 interface LiveTestInput {
   testId: string;
@@ -16,13 +18,11 @@ interface LiveTestInput {
   duration: number;
   retry: number;
   error?: string;
+  // Playwright's outcome so far, test.outcome(); counted as the report counts it.
+  outcome?: TestResultData['outcome'];
 }
 
-interface TrackedTest {
-  status: 'passed' | 'failed' | 'skipped' | 'timedOut' | 'interrupted';
-  retry: number;
-  wasRetried: boolean;
-}
+type TrackedTest = Pick<TestResultData, 'status' | 'outcome'>;
 
 export class LiveWriter {
   private outputFile: string;
@@ -62,21 +62,9 @@ export class LiveWriter {
   writeTestResult(input: LiveTestInput): void {
     if (this.noop) return;
 
-    const existing = this.tracked.get(input.testId);
-
-    if (existing) {
-      this.tracked.set(input.testId, {
-        status: input.status,
-        retry: input.retry,
-        wasRetried: true,
-      });
-    } else {
-      this.tracked.set(input.testId, {
-        status: input.status,
-        retry: input.retry,
-        wasRetried: false,
-      });
-    }
+    // Without an outcome, a test that passed after an earlier attempt passed on retry.
+    const retried = this.tracked.has(input.testId) && input.status === 'passed';
+    this.tracked.set(input.testId, { status: input.status, outcome: input.outcome ?? (retried ? 'flaky' : undefined) });
 
     const counters = this.computeCounters();
 
@@ -121,31 +109,14 @@ export class LiveWriter {
   }
 
   private computeCounters(): LiveCounters {
-    let passed = 0;
-    let failed = 0;
-    let skipped = 0;
-    let flaky = 0;
-
-    for (const [, tracked] of this.tracked) {
-      if (tracked.wasRetried && tracked.status === 'passed') {
-        flaky++;
-      } else if (tracked.status === 'passed') {
-        passed++;
-      } else if (tracked.status === 'failed' || tracked.status === 'timedOut' || tracked.status === 'interrupted') {
-        failed++;
-      } else if (tracked.status === 'skipped') {
-        skipped++;
-      }
-    }
-
-    const completed = this.tracked.size;
-
+    const { passed, failed, skipped, flaky, total } = computeRunStats([...this.tracked.values()]);
+    // The live counters are buckets that add up to completed, so passed leaves out flaky.
     return {
-      passed,
+      passed: passed - flaky,
       failed,
       skipped,
       flaky,
-      completed,
+      completed: total,
       totalExpected: this.totalExpected,
     };
   }

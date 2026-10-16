@@ -27,12 +27,11 @@ export function buildComparison(
     }
 
     // Outcome, not status: a test.fail() test that failed as expected passed, and one that passed failed
-    if (isFailedTest(test) && baselineTest.status === 'passed') {
+    if (isFailedTest(test) && isPassedTest(baselineTest)) {
       changes.newFailures.push(test);
     }
 
-    // Check for fixed tests (including previously timedOut)
-    if (isPassedTest(test) && (baselineTest.status === 'failed' || baselineTest.status === 'timedOut')) {
+    if (isPassedTest(test) && isFailedTest(baselineTest)) {
       changes.fixedTests.push(test);
     }
 

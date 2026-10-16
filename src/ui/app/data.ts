@@ -1,12 +1,12 @@
 import type { ReportData, ReportTest } from '../../report-data/schema';
+import { isFailedTest } from '../../utils/flakiness';
+import { computeRunStats } from '../../utils/run-stats';
 import type { TestStatus } from '../components';
 
 export type { ReportData, ReportTest };
 
 // Playwright's verdict: a test.fail() test that passed is a failure.
-export function isFailing(t: ReportTest): boolean {
-  return t.outcome ? t.outcome === 'unexpected' : t.status === 'failed' || t.status === 'timedOut';
-}
+export const isFailing: (t: ReportTest) => boolean = isFailedTest;
 
 export function displayStatus(t: ReportTest): TestStatus {
   if (t.outcome === 'flaky') return 'flaky';
@@ -70,16 +70,10 @@ export function csvCell(v: unknown): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// Each test lands in exactly one bucket, so the buckets add up to the total.
+// Each test lands in exactly one bucket, so the buckets add up to the total: passed leaves out flaky.
 export function outcomeCounts(tests: ReportTest[]) {
-  const c = { failed: 0, flaky: 0, passed: 0, skipped: 0 };
-  for (const t of tests) {
-    if (isFailing(t)) c.failed++;
-    else if (t.status === 'skipped' || t.status === 'interrupted') c.skipped++;
-    else if (displayStatus(t) === 'flaky') c.flaky++;
-    else c.passed++;
-  }
-  return c;
+  const { failed, flaky, passed, skipped } = computeRunStats(tests);
+  return { failed, flaky, passed: passed - flaky, skipped };
 }
 
 // Three-run moving average, and runs more than two standard deviations from the mean.

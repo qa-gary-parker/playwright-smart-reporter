@@ -508,15 +508,15 @@ describe('executive-pdf', () => {
     expectDrawn(lines, ['No New Failures', 'N/A', '0', '- Skipped', expect.stringMatching(/ All gates passed$/)]);
   });
 
-  it('draws the suite breakdown, worst pass rate first', () => {
+  it('draws the suite breakdown, worst pass rate first, with a flaky test counted as passed', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: twoFileRun() }), tmpDir));
 
-    expectDrawn(lines, ['Breakdown by file', '33%', 'tests/checkout.spec.ts', '50%', 'tests/cart.spec.ts']);
+    expectDrawn(lines, ['Breakdown by file', '33%', 'tests/checkout.spec.ts', '100%', 'tests/cart.spec.ts']);
     expectDrawn(lines, [
       'Suite Breakdown',
       'File', 'Total', 'Passed', 'Failed', 'Flaky', 'Duration', 'Pass Rate',
       'tests/checkout.spec.ts', '3', '1', '1', '0', '3.5s', '33%',
-      'tests/cart.spec.ts', '2', '1', '0', '1', '2.0s', '50%',
+      'tests/cart.spec.ts', '2', '1', '0', '1', '2.0s', '100%',
       'Failure Details',
     ]);
   });

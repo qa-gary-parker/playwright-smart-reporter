@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
-import { isFailedTest, isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
+import { isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
+import { buildRunSummary } from '../utils/run-stats';
 import { stepDurationsOf } from '../analyzers/causal-timeline';
-import { runStabilityGrade } from '../analyzers/stability-scorer';
 
 /**
  * Manages test history persistence and retrieval
@@ -163,30 +163,7 @@ export class HistoryCollector {
       }
     }
 
-    // Add run summary
-    const passed = results.filter(isPassedTest).length;
-    const failed = results.filter(isFailedTest).length;
-    const skipped = results.filter(isSkippedTest).length;
-    const flaky = results.filter(r => r.outcome === 'flaky').length;
-    const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
-    const total = results.length;
-    const duration = Date.now() - this.startTime;
-
-    const summary: RunSummary = {
-      runId: this.currentRun.runId,
-      timestamp: this.currentRun.timestamp,
-      total,
-      passed,
-      failed,
-      skipped,
-      flaky,
-      slow,
-      duration,
-      passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
-      stabilityGrade: runStabilityGrade(results),
-    };
-
-    this.history.summaries!.push(summary);
+    this.history.summaries!.push(buildRunSummary(results, { ...this.currentRun, duration: Date.now() - this.startTime }));
 
     // Keep only last N summaries
     if (this.history.summaries!.length > this.options.maxHistoryRuns) {

@@ -1,3 +1,5 @@
+import type { RunStats } from '../utils/run-stats';
+
 export class PagerDutyNotifier {
   private routingKey: string;
 
@@ -5,7 +7,7 @@ export class PagerDutyNotifier {
     this.routingKey = routingKey;
   }
 
-  async trigger(summary: string, failures: number, total: number): Promise<void> {
+  async trigger(summary: string, { failed: failures, total, passRate }: Pick<RunStats, 'failed' | 'total' | 'passRate'>): Promise<void> {
     if (!this.routingKey || failures === 0) return;
 
     const severity = failures > total * 0.5 ? 'critical' : failures > total * 0.2 ? 'error' : 'warning';
@@ -22,7 +24,7 @@ export class PagerDutyNotifier {
             severity,
             source: 'playwright-smart-reporter',
             component: 'test-suite',
-            custom_details: { failures, total, passRate: Math.round(((total - failures) / total) * 100) },
+            custom_details: { failures, total, passRate },
           },
         }),
       });

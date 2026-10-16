@@ -70,7 +70,8 @@ import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlakyTest } from './utils';
+import { buildRunSummary, computeRunStats } from './utils/run-stats';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
 import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
@@ -514,6 +515,7 @@ class SmartReporter implements Reporter {
       duration: result.duration,
       retry: result.retry,
       error: testData.error,
+      outcome,
     });
 
     // Live: send notification on first failure
@@ -587,14 +589,11 @@ class SmartReporter implements Reporter {
         }
         // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
         if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
-          const passed = this.results.filter(isPassedTest).length;
-          const failed = this.results.filter(isFailedTest).length;
-          const skipped = this.results.filter(isSkippedTest).length;
+          const { total, passed, failed, skipped, passRate } = computeRunStats(this.results);
+          // Flaky here means flaky by history or on retry this run, which is what the AI should look at.
           const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
           const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
           const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
-          const total = this.results.length;
-          const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
           const avgStability = this.results.reduce((sum, r) => sum + (r.stabilityScore?.overall ?? 100), 0) / Math.max(total, 1);
           const suiteStats = {
             total, passed, failed, skipped,
@@ -616,29 +615,7 @@ class SmartReporter implements Reporter {
     if (options.enableComparison !== false) {
       const baselineRun = this.historyCollector.getBaselineRun();
       if (baselineRun) {
-        // Build current run summary with proper outcome-based counting
-        // Issue #17: Use outcome to properly count flaky tests
-        // Issue #16: Tests with expectedStatus='failed' that fail are counted as passed (expected behavior)
-        const passed = this.results.filter(isPassedTest).length;
-        const failed = this.results.filter(isFailedTest).length;
-        const skipped = this.results.filter(isSkippedTest).length;
-        // Flaky: tests that passed on retry (outcome === 'flaky')
-        const flaky = this.results.filter(r => r.outcome === 'flaky').length;
-        const slow = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
-        const duration = Date.now() - this.startTime;
-
-        const currentSummary = {
-          runId: this.historyCollector.getCurrentRun().runId,
-          timestamp: this.historyCollector.getCurrentRun().timestamp,
-          total: this.results.length,
-          passed,
-          failed,
-          skipped,
-          flaky,
-          slow,
-          duration,
-          passRate: this.results.length > 0 ? Math.round((passed / this.results.length) * 100) : 0,
-        };
+        const currentSummary = buildRunSummary(this.results, { ...this.historyCollector.getCurrentRun(), duration: Date.now() - this.startTime });
 
         // Build baseline tests map from history
         const baselineTests = new Map<string, TestResultData>();
@@ -655,6 +632,8 @@ class SmartReporter implements Reporter {
             baselineTests.set(testId, {
               ...matchingTest,
               status: entry.skipped ? 'skipped' : entry.passed ? 'passed' : 'failed',
+              // History saved the baseline's verdict; the outcome spread above is this run's.
+              outcome: entry.skipped ? 'skipped' : entry.passed ? 'expected' : 'unexpected',
               duration: entry.duration,
             });
           }
@@ -921,8 +900,8 @@ class SmartReporter implements Reporter {
       console.error('⚠️  Could not save test history:', err instanceof Error ? err.message : err);
     }
 
-    // Send webhook notifications if enabled - use outcome-based counting
-    const failed = this.results.filter(isFailedTest).length;
+    // Send webhook notifications if enabled
+    const { failed } = computeRunStats(this.results);
 
     // Advanced notification manager takes precedence
     if (this.notificationManager) {

@@ -46,6 +46,13 @@ function counts(s: { total: number; passed: number; failed: number; skipped: num
   return { total: s.total, passed: s.passed, failed: s.failed, skipped: s.skipped, flaky: s.flaky };
 }
 
+// The live file's final counters, in the same terms. Its passed bucket leaves out flaky tests.
+const live = (out: string) => ({ live: { enabled: true, outputFile: path.join(out, 'live.jsonl') } });
+function liveCounts(out: string) {
+  const { counters: c } = JSON.parse(fs.readFileSync(path.join(out, 'live.jsonl'), 'utf8').trim().split('\n').at(-1)!);
+  return { total: c.completed, passed: c.passed + c.flaky, failed: c.failed, skipped: c.skipped, flaky: c.flaky };
+}
+
 const id = (title: string) => `${FILE}::${title}`;
 
 // What CI tools key test history and counts on: each testsuite with its counts and its testcases' identity.
@@ -122,13 +129,14 @@ describe('test ids', () => {
 describe('test.fail()', () => {
   it('counts a test.fail() test that passed as a failure everywhere', () => {
     const out = path.join(tmp, 'unexpected-pass');
-    const options = { qualityGates: { maxFailures: 0, minPassRate: 100 } };
+    const options = { qualityGates: { maxFailures: 0, minPassRate: 100 }, ...live(out) };
     runSuite(out, options, ['--grep', 'expected failure that passes']);
 
     const data = reportData(out);
     const pw = playwright(out);
     expect(pw).toEqual({ total: 1, passed: 0, failed: 1, skipped: 0, flaky: 0 });
     expect(counts(data.summary)).toEqual(pw);
+    expect(liveCounts(out)).toEqual(pw);
     expect(counts(history(out).summaries!.at(-1)!)).toEqual(pw);
     expect(history(out).tests[id('expected failure that passes')].map((e) => e.passed)).toEqual([false]);
     expect(data.gates?.rules.map((r) => [r.rule, r.actual])).toEqual([['maxFailures', '1'], ['minPassRate', '0%']]);
@@ -172,12 +180,13 @@ describe('comparison', () => {
 describe('interrupted and not-run tests', () => {
   it('counts an interrupted test as not run, not as a failure', () => {
     const out = path.join(tmp, 'interrupted');
-    runSuite(out, {}, ['--grep', 'three seconds|fails after a second', '--retries=0', '--workers=2', '--fully-parallel', '--max-failures=1']);
+    runSuite(out, live(out), ['--grep', 'three seconds|fails after a second', '--retries=0', '--workers=2', '--fully-parallel', '--max-failures=1']);
 
     const data = reportData(out);
     expect(data.tests.map((t) => [t.testId, t.status]).sort()).toEqual([[id('fails after a second'), 'failed'], [id('runs for three seconds'), 'interrupted']]);
     expect(playwright(out)).toEqual({ total: 2, passed: 0, failed: 1, skipped: 1, flaky: 0 });
     expect(counts(data.summary)).toEqual(playwright(out));
+    expect(liveCounts(out)).toEqual(playwright(out));
     expect(counts(history(out).summaries!.at(-1)!)).toEqual(playwright(out));
     expect(history(out).tests[id('runs for three seconds')].map((e) => [e.passed, e.skipped])).toEqual([[false, true]]);
 

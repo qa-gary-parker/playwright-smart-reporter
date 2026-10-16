@@ -15,7 +15,8 @@ import type {
   TestResultData,
 } from '../types';
 import { summarizeA11y } from '../analyzers/a11y-analyzer';
-import { isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
+import { isFlakyTest } from '../utils/flakiness';
+import { buildRunSummary, computeRunStats } from '../utils/run-stats';
 import {
   SCHEMA_VERSION,
   type ComparisonKey,
@@ -52,35 +53,32 @@ export interface ReportInput {
 const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements'];
 
 export function summarize(results: TestResultData[], duration: number): ReportSummary {
-  // Outcome-based counting (issues #16, #17): flaky and expected failures count as passed.
-  const passed = results.filter(isPassedTest).length;
-  const failed = results.filter(isFailedTest).length;
+  // The per-test 'flaky' signal also reads history; the run's flaky count is passed on retry only.
+  const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
   for (const r of results) {
     if (r.stabilityScore) grades[r.stabilityScore.grade]++;
   }
   return {
-    total: results.length,
+    total,
     passed,
     failed,
-    skipped: results.filter(isSkippedTest).length,
-    // Passed on retry this run, as history and the comparison count it; the per-test 'flaky' signal also reads history.
-    flaky: results.filter((r) => r.outcome === 'flaky').length,
+    skipped,
+    flaky,
     slow: results.filter((r) => r.performanceTrend?.startsWith('↑')).length,
     newTests: results.filter((r) => r.flakinessIndicator?.includes('New')).length,
-    passRate: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
+    passRate,
     duration,
     grades,
   };
 }
 
 // History is updated after the report is written, so add this run's summary here.
-function withCurrentRun(input: ReportInput, summary: ReportSummary): RunSummary[] {
+function withCurrentRun(input: ReportInput, duration: number): RunSummary[] {
   const past = input.history.summaries ?? [];
   const runId = runIdOf(input);
   if (past.some((r) => r.runId === runId)) return past;
-  const { total, passed, failed, skipped, flaky, slow, duration, passRate } = summary;
-  return [...past, { runId, timestamp: new Date(input.startTime).toISOString(), total, passed, failed, skipped, flaky, slow, duration, passRate }];
+  return [...past, buildRunSummary(input.results, { runId, timestamp: new Date(input.startTime).toISOString(), duration })];
 }
 
 function runIdOf(input: ReportInput): string {
@@ -156,7 +154,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     summary,
     tests,
     clusters,
-    trends: withCurrentRun(input, summary),
+    trends: withCurrentRun(input, summary.duration),
     comparison: comparison && {
       baselineRun: comparison.baselineRun,
       currentRun: comparison.currentRun,

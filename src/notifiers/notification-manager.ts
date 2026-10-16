@@ -4,7 +4,8 @@ import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
 import { EmailNotifier } from './email-notifier';
 import { CustomWebhookNotifier } from './custom-webhook-notifier';
-import { runStabilityGrade } from '../analyzers/stability-scorer';
+import { isFailedTest } from '../utils/flakiness';
+import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
 
 interface NotificationContext {
   total: number;
@@ -19,22 +20,18 @@ interface NotificationContext {
 }
 
 function buildContext(results: TestResultData[], startTime: number): NotificationContext {
-  const passed = results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-  const failed = results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
-  const flaky = results.filter(r => r.outcome === 'flaky').length;
+  const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   const duration = Date.now() - startTime;
-  const passRate = results.length > 0 ? Math.round((passed / results.length) * 100) : 0;
 
   const grade = runStabilityGrade(results) ?? 'N/A';
 
   const failedTests = results
-    .filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))
+    .filter(isFailedTest)
     .slice(0, 10)
     .map(t => t.title)
     .join(', ');
 
-  return { total: results.length, passed, failed, skipped, flaky, passRate, duration, grade, failedTests };
+  return { total, passed, failed, skipped, flaky, passRate, duration, grade, failedTests };
 }
 
 function evaluateConditions(conditions: NotificationCondition, ctx: NotificationContext, results: TestResultData[], comparison?: RunComparison): boolean {
@@ -42,11 +39,7 @@ function evaluateConditions(conditions: NotificationCondition, ctx: Notification
   if (conditions.minFailures !== undefined && ctx.failed < conditions.minFailures) return false;
   if (conditions.maxPassRate !== undefined && ctx.passRate > conditions.maxPassRate) return false;
   if (conditions.tags && conditions.tags.length > 0) {
-    const hasTagFailure = results.some(r =>
-      r.outcome === 'unexpected' &&
-      (r.status === 'failed' || r.status === 'timedOut') &&
-      r.tags?.some(t => conditions.tags!.includes(t))
-    );
+    const hasTagFailure = results.some(r => isFailedTest(r) && r.tags?.some(t => conditions.tags!.includes(t)));
     if (!hasTagFailure) return false;
   }
   if (conditions.stabilityGradeDrop) {
@@ -87,7 +80,7 @@ export class NotificationManager {
         // Owner routing: scope counts, conditions and the failure list to tests these owners own
         const owners = config.owners?.length ? new Set(config.owners.map(o => o.toLowerCase())) : undefined;
         const scoped = owners ? results.filter(r => r.owners?.some(o => owners.has(o.toLowerCase()))) : results;
-        if (owners && !scoped.some(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))) {
+        if (owners && !scoped.some(isFailedTest)) {
           continue;
         }
         const ctx = owners ? buildContext(scoped, startTime) : runCtx;
@@ -117,7 +110,7 @@ export class NotificationManager {
           }
           case 'pagerduty': {
             const notifier = new PagerDutyNotifier(config.config.routingKey);
-            await notifier.trigger(message, ctx.failed, ctx.total);
+            await notifier.trigger(message, ctx);
             break;
           }
           case 'email': {

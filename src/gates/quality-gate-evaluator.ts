@@ -7,10 +7,9 @@ import type {
   A11yImpact,
 } from '../types';
 import type { CoverageSummary } from '../report-data/schema';
-import { isFailedTest, isPassedTest } from '../utils/flakiness';
+import { computeRunStats, runStabilityGrade, type RunStats } from '../utils/run-stats';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
 
 // Sign of (count/total*100 - threshold), in integers so boundaries are exact.
 // The threshold is scaled by its own decimal places, so 99.4 compares as 994/10.
@@ -33,17 +32,18 @@ export class QualityGateEvaluator {
     coverage?: CoverageSummary,
   ): QualityGateResult {
     const rules: QualityGateRuleResult[] = [];
+    const stats = computeRunStats(results);
 
     if (config.maxFailures !== undefined) {
-      rules.push(this.evaluateMaxFailures(config.maxFailures, results));
+      rules.push(this.evaluateMaxFailures(config.maxFailures, stats));
     }
 
     if (config.minPassRate !== undefined) {
-      rules.push(this.evaluateMinPassRate(config.minPassRate, results));
+      rules.push(this.evaluateMinPassRate(config.minPassRate, stats));
     }
 
     if (config.maxFlakyRate !== undefined) {
-      rules.push(this.evaluateMaxFlakyRate(config.maxFlakyRate, results));
+      rules.push(this.evaluateMaxFlakyRate(config.maxFlakyRate, stats));
     }
 
     if (config.minStabilityGrade !== undefined) {
@@ -72,20 +72,17 @@ export class QualityGateEvaluator {
     return { passed, rules };
   }
 
-  private evaluateMaxFailures(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const failures = results.filter(isFailedTest).length;
-
+  private evaluateMaxFailures(threshold: number, { failed }: RunStats): QualityGateRuleResult {
     return {
       rule: 'maxFailures',
-      passed: failures <= threshold,
-      actual: String(failures),
+      passed: failed <= threshold,
+      actual: String(failed),
       threshold: `≤ ${threshold}`,
     };
   }
 
-  private evaluateMinPassRate(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const total = results.length;
-    if (total === 0) {
+  private evaluateMinPassRate(threshold: number, { passed, rated }: RunStats): QualityGateRuleResult {
+    if (rated === 0) {
       return {
         rule: 'minPassRate',
         passed: true,
@@ -95,18 +92,15 @@ export class QualityGateEvaluator {
       };
     }
 
-    const passed = results.filter(isPassedTest).length;
-
     return {
       rule: 'minPassRate',
-      passed: compareRate(passed, total, threshold) >= 0,
-      actual: formatRate(passed, total, Math.floor),
+      passed: compareRate(passed, rated, threshold) >= 0,
+      actual: formatRate(passed, rated, Math.floor),
       threshold: `≥ ${threshold}%`,
     };
   }
 
-  private evaluateMaxFlakyRate(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const total = results.length;
+  private evaluateMaxFlakyRate(threshold: number, { flaky, total }: RunStats): QualityGateRuleResult {
     if (total === 0) {
       return {
         rule: 'maxFlakyRate',
@@ -115,8 +109,6 @@ export class QualityGateEvaluator {
         threshold: `≤ ${threshold}%`,
       };
     }
-
-    const flaky = results.filter(r => r.outcome === 'flaky').length;
 
     return {
       rule: 'maxFlakyRate',
@@ -130,9 +122,9 @@ export class QualityGateEvaluator {
     threshold: 'A' | 'B' | 'C' | 'D',
     results: TestResultData[],
   ): QualityGateRuleResult {
-    const gradedTests = results.filter(r => r.stabilityScore?.grade);
+    const avgGrade = runStabilityGrade(results);
 
-    if (gradedTests.length === 0) {
+    if (!avgGrade) {
       return {
         rule: 'minStabilityGrade',
         passed: true,
@@ -142,19 +134,9 @@ export class QualityGateEvaluator {
       };
     }
 
-    const sum = gradedTests.reduce(
-      (acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0),
-      0,
-    );
-    const avgNumeric = Math.round(sum / gradedTests.length);
-    const avgGrade = reverseGradeMap[avgNumeric] || 'F';
-
-    const thresholdNumeric = gradeMap[threshold];
-    const actualNumeric = gradeMap[avgGrade] || 0;
-
     return {
       rule: 'minStabilityGrade',
-      passed: actualNumeric >= thresholdNumeric,
+      passed: gradeMap[avgGrade] >= gradeMap[threshold],
       actual: avgGrade,
       threshold: `≥ ${threshold}`,
     };

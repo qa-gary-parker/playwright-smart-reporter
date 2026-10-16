@@ -60,7 +60,7 @@ export const runTests = computed<ReportTest[]>(() => {
   if (!snapshot) return data.value.tests;
   return Object.values(snapshot.tests).map((s) => ({
     ...s,
-    outcome: s.status === 'failed' || s.status === 'timedOut' ? ('unexpected' as const) : ('expected' as const),
+    outcome: s.status === 'failed' || s.status === 'timedOut' ? ('unexpected' as const) : s.status === 'skipped' || s.status === 'interrupted' ? ('skipped' as const) : ('expected' as const),
     history: [],
     signals: [],
   }));

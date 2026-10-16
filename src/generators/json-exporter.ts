@@ -11,7 +11,7 @@ import type {
   QualityGateResult,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
-import { isFailedTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
+import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
 
 export function getReporterVersion(): string {
   try {
@@ -119,21 +119,8 @@ export function exportJsonData(
   const filename = `${basename ?? 'smart-report'}-data.json`;
   const outputPath = path.resolve(baseDir, filename);
 
-  const passed = results.filter(isPassedTest).length;
-  const failed = results.filter(isFailedTest).length;
-  const skipped = results.filter(isSkippedTest).length;
-  const flaky = results.filter(r => r.outcome === 'flaky').length;
+  const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   const duration = Date.now() - startTime;
-
-  // Calculate average stability grade
-  const gradedTests = results.filter(r => r.stabilityScore?.grade);
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
-  let avgGrade: string | undefined;
-  if (gradedTests.length > 0) {
-    const sum = gradedTests.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-    avgGrade = reverseGradeMap[Math.round(sum / gradedTests.length)] || 'C';
-  }
 
   const tests: JsonTestEntry[] = results.map(r => ({
     testId: r.testId,
@@ -180,14 +167,14 @@ export function exportJsonData(
       rootDir,
     },
     summary: {
-      total: results.length,
+      total,
       passed,
       failed,
       skipped,
       flaky,
       duration,
-      passRate: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
-      stabilityGrade: avgGrade,
+      passRate,
+      stabilityGrade: runStabilityGrade(results),
     },
     tests,
     failureClusters: clusters,

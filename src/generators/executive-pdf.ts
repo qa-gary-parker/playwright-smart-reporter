@@ -12,6 +12,8 @@ import type {
   QuarantineEntry,
   PdfFontConfig,
 } from '../types';
+import { isFailedTest } from '../utils/flakiness';
+import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
 
 export type { PdfFontConfig };
 
@@ -187,27 +189,16 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
-function computeStats(results: TestResultData[]) {
-  const total = results.length;
-  const passed = results.filter(
-    r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky',
-  ).length;
-  const failed = results.filter(
-    r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'),
-  ).length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
-  const flaky = results.filter(r => r.outcome === 'flaky').length;
-  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-  return { total, passed, failed, skipped, flaky, passRate };
-}
-
-function computeAverageGrade(results: TestResultData[]): string | undefined {
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const reverseMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
-  const graded = results.filter(r => r.stabilityScore?.grade);
-  if (graded.length === 0) return undefined;
-  const sum = graded.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-  return reverseMap[Math.round(sum / graded.length)] || 'C';
+// Run stats per file, worst pass rate first.
+function statsByFile(results: TestResultData[]) {
+  const byFile = new Map<string, TestResultData[]>();
+  for (const r of results) {
+    if (!byFile.has(r.file)) byFile.set(r.file, []);
+    byFile.get(r.file)!.push(r);
+  }
+  return [...byFile]
+    .map(([file, tests]) => ({ file, ...computeRunStats(tests), duration: tests.reduce((sum, t) => sum + t.duration, 0) }))
+    .sort((a, b) => a.passRatio - b.passRatio);
 }
 
 // ---------------------------------------------------------------------------
@@ -471,7 +462,7 @@ function drawTitleBlock(doc: PDFKit.PDFDocument, data: ExecutivePdfData, version
 // ---------------------------------------------------------------------------
 function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: PdfColorScheme): number {
   let y = 108;
-  const stats = computeStats(data.results);
+  const stats = computeRunStats(data.results);
   const duration = Date.now() - data.startTime;
   const bannerH = 52;
 
@@ -524,9 +515,9 @@ function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sche
 // ---------------------------------------------------------------------------
 function drawKpiCards(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: PdfColorScheme): number {
   const y = 178;
-  const stats = computeStats(data.results);
+  const stats = computeRunStats(data.results);
   const duration = Date.now() - data.startTime;
-  const grade = computeAverageGrade(data.results);
+  const grade = runStabilityGrade(data.results);
   const gc = gradeColors(scheme);
 
   const cardGap = 12;
@@ -584,7 +575,7 @@ function drawKpiCards(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: P
 // ---------------------------------------------------------------------------
 function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData, startY: number, scheme: PdfColorScheme): number {
   let y = startY;
-  const stats = computeStats(data.results);
+  const stats = computeRunStats(data.results);
   const sectionH = 160;
 
   // Section title
@@ -659,18 +650,9 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
   }
 
   // File breakdown mini-table
-  const suiteMap = new Map<string, { total: number; passed: number; failed: number; flaky: number }>();
-  for (const r of data.results) {
-    const key = r.file;
-    if (!suiteMap.has(key)) suiteMap.set(key, { total: 0, passed: 0, failed: 0, flaky: 0 });
-    const s = suiteMap.get(key)!;
-    s.total++;
-    if (r.outcome === 'flaky') s.flaky++;
-    else if (r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')) s.failed++;
-    else if (r.status === 'passed' || r.outcome === 'expected') s.passed++;
-  }
+  const files = statsByFile(data.results);
 
-  if (suiteMap.size > 1) {
+  if (files.length > 1) {
     const tableY = ly + 56;
     doc.save();
     doc.font(FONT_BOLD).fontSize(8).fillColor(scheme.bodyText);
@@ -678,14 +660,7 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
     doc.restore();
 
     let ty = tableY + 14;
-    const entries = [...suiteMap.entries()].sort((a, b) => {
-      const rateA = a[1].total > 0 ? a[1].passed / a[1].total : 1;
-      const rateB = b[1].total > 0 ? b[1].passed / b[1].total : 1;
-      return rateA - rateB; // worst first
-    }).slice(0, 5);
-
-    for (const [file, s] of entries) {
-      const pct = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
+    for (const { file, passRate: pct } of files.slice(0, 5)) {
       doc.save();
       // Mini bar
       const miniBarW = 60;
@@ -863,7 +838,7 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
 // ---------------------------------------------------------------------------
 function drawFailuresSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData, startY: number, version: string, scheme: PdfColorScheme, footerText?: string): number {
   const failures = data.results
-    .filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))
+    .filter(isFailedTest)
     .slice(0, 15);
 
   if (failures.length === 0) return startY;
@@ -1053,19 +1028,9 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
 // Section: Suite breakdown table (full page)
 // ---------------------------------------------------------------------------
 function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, startY: number, version: string, scheme: PdfColorScheme, footerText?: string): number {
-  const suiteMap = new Map<string, { total: number; passed: number; failed: number; flaky: number; skipped: number; duration: number }>();
-  for (const r of data.results) {
-    if (!suiteMap.has(r.file)) suiteMap.set(r.file, { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0, duration: 0 });
-    const s = suiteMap.get(r.file)!;
-    s.total++;
-    s.duration += r.duration;
-    if (r.outcome === 'flaky') s.flaky++;
-    else if (r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')) s.failed++;
-    else if (r.status === 'skipped') s.skipped++;
-    else s.passed++;
-  }
+  const entries = statsByFile(data.results);
 
-  if (suiteMap.size <= 1) return startY;
+  if (entries.length <= 1) return startY;
 
   let y = ensureSpace(doc, startY, 80, version, scheme, footerText);
 
@@ -1090,16 +1055,10 @@ function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sta
   doc.restore();
   y += rowH;
 
-  const entries = [...suiteMap.entries()].sort((a, b) => {
-    const rateA = a[1].total > 0 ? a[1].passed / a[1].total : 1;
-    const rateB = b[1].total > 0 ? b[1].passed / b[1].total : 1;
-    return rateA - rateB;
-  });
-
   for (let i = 0; i < entries.length; i++) {
     y = ensureSpace(doc, y, rowH, version, scheme, footerText);
-    const [file, s] = entries[i];
-    const pct = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
+    const s = entries[i];
+    const { file, passRate: pct } = s;
 
     if (i % 2 === 0) {
       doc.save();
@@ -1114,7 +1073,8 @@ function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sta
     rx += colWidths[0];
     doc.text(String(s.total), rx, y + 5, { width: colWidths[1] - 8 });
     rx += colWidths[1];
-    doc.fillColor(scheme.accentGreenDark).text(String(s.passed), rx, y + 5, { width: colWidths[2] - 8 });
+    // The Passed and Flaky columns split the passes, so Passed leaves out flaky.
+    doc.fillColor(scheme.accentGreenDark).text(String(s.passed - s.flaky), rx, y + 5, { width: colWidths[2] - 8 });
     rx += colWidths[2];
     doc.fillColor(s.failed > 0 ? scheme.accentRedDark : scheme.mutedText).text(String(s.failed), rx, y + 5, { width: colWidths[3] - 8 });
     rx += colWidths[3];
@@ -1185,7 +1145,7 @@ export function generateExecutivePdf(data: ExecutivePdfData, outputDir: string, 
   const summaries = data.history.summaries || [];
   const hasHistory = summaries.length >= 2;
   const hasSuites = new Set(data.results.map(r => r.file)).size > 1;
-  const hasFailures = data.results.some(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'));
+  const hasFailures = data.results.some(isFailedTest);
   const hasClusters = (data.failureClusters?.length ?? 0) > 0;
   const hasQuarantine = (data.quarantineEntries?.length ?? 0) > 0;
 
