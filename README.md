@@ -263,15 +263,15 @@ Failures with the same fingerprint form one cluster. The Failures queue groups b
 
 The fingerprint has four parts:
 - The error class, or the Playwright matcher, such as `toBeVisible`.
-- The error message without the call log. Digits, UUIDs, hex ids, quoted values, and URLs are masked.
-- The failing location: Playwright's error location (file and line), else the line of the test file in the stack, else the test file.
+- The error message without the call log. Digits, UUIDs, hex ids, quoted values, and URLs are masked. Absolute paths keep only their file name.
+- The failing file: the file of Playwright's error location, else the test file. The line is not part of the fingerprint.
 - The first locator in the error, such as `getByRole('button', { name: 'Save' })`.
 
 So two timeouts on different locators give two clusters, and one assertion that fails with different numbers gives one cluster.
 
-The cluster label is the matcher or the masked first message line, then the locator and the location. For example: `toBeVisible on getByRole('button', { name: 'Save' }) at pages/checkout.page.ts:42`.
+The cluster label is the matcher or the masked first message line, then the locator and the location of the first test in the cluster. The location is Playwright's error location, else the line of the test file in the stack, else the test file. For example: `toBeVisible on getByRole('button', { name: 'Save' }) at pages/checkout.page.ts:42`.
 
-The cluster id is the first 16 hex characters of a SHA-256 of the fingerprint. The same failure gets the same id in every run. The id changes when the failing line moves, for example when lines are added above it.
+The cluster id is the first 16 hex characters of a SHA-256 of the fingerprint. The same failure gets the same id in every run and on every machine. Adding lines above a failure does not change its id.
 
 ### Causal Failure Timeline
 

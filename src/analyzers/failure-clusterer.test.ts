@@ -240,24 +240,45 @@ describe('FailureClusterer', () => {
       expect(summary(clusters)).toEqual([['order <n> for user <uuid> session <hex> got <str> from <url> at tests/cart.spec.ts:30', ['a', 'b']]]);
     });
 
+    it('masks the machine part of absolute paths, so another checkout gives the same id', () => {
+      const missing = (path: string) => fingerprintFailure({ file: 'tests/cart.spec.ts', error: `Error: ENOENT: no such file or directory, open ${path}` });
+      const mac = missing('/Users/a/proj/fixtures/cart.json');
+
+      expect(missing('/home/runner/work/proj/proj/fixtures/cart.json')).toEqual(mac);
+      expect(missing('C:\\Users\\a\\proj\\fixtures\\cart.json')).toEqual(mac);
+      expect(mac.label).toBe('ENOENT: no such file or directory, open <path>/cart.json at tests/cart.spec.ts');
+    });
+
+    it('leaves relative paths, HTML tags, dates, word pairs and comments alone', () => {
+      const clusters = clusterer.clusterFailures([failed('a', 'Error: got <b>Cart</b> from fixtures/cart.json due 16/10/2026 and/or later // see docs')]);
+
+      expect(summary(clusters)).toEqual([['got <b>Cart</b> from fixtures/cart.json due <n>/<n>/<n> and/or later // see docs at tests/cart.spec.ts', ['a']]]);
+    });
+
     it("keeps apostrophes in words as text, so they do not swallow the message", () => {
       const clusters = clusterer.clusterFailures([failed('a', "Error: can't save draft 12, isn't signed in")]);
 
       expect(summary(clusters)).toEqual([["can't save draft <n>, isn't signed in at tests/cart.spec.ts", ['a']]]);
     });
 
-    it('locates a failure by errorLocation, then a stack frame in the test file, then the test file', () => {
+    it('labels the location from errorLocation, then a stack frame in the test file, then the test file, and ids by file only', () => {
+      const location = fingerprintFailure({ file: 'tests/cart.spec.ts', error: `Error: boom${at('tests/cart.spec.ts', 9)}`, errorLocation: { file: 'tests\\helpers.ts', line: 4, column: 1 } });
+      const frame = fingerprintFailure({ file: 'tests/cart.spec.ts', error: `Error: boom\n    at helper (${ROOT}/node_modules/lib/index.js:1:1)${at('tests/cart.spec.ts', 9)}` });
+      const file = fingerprintFailure({ file: 'tests/cart.spec.ts', error: 'Error: boom' });
+
+      expect([location.label, frame.label, file.label]).toEqual(['boom at tests/helpers.ts:4', 'boom at tests/cart.spec.ts:9', 'boom at tests/cart.spec.ts']);
+      expect(frame.id).toBe(file.id);
+      expect(new Set([location.id, frame.id, file.id]).size).toBe(2);
+    });
+
+    it('labels a cluster with the location of its first test', () => {
+      const location = (line: number) => ({ errorLocation: { file: 'tests/cart.spec.ts', line, column: 36 } });
       const clusters = clusterer.clusterFailures([
-        failed('location', `Error: boom${at('tests/cart.spec.ts', 9)}`, { errorLocation: { file: 'tests\\helpers.ts', line: 4, column: 1 } }),
-        failed('frame', `Error: boom\n    at helper (${ROOT}/node_modules/lib/index.js:1:1)${at('tests/cart.spec.ts', 9)}`),
-        failed('file', 'Error: boom'),
+        failed('first', toHaveText('Total 12', 3), location(15)),
+        failed('moved', toHaveText('Total 12', 3), location(40)),
       ]);
 
-      expect(summary(clusters)).toEqual([
-        ['boom at tests/helpers.ts:4', ['location']],
-        ['boom at tests/cart.spec.ts:9', ['frame']],
-        ['boom at tests/cart.spec.ts', ['file']],
-      ]);
+      expect(summary(clusters)).toEqual([["toHaveText on locator('h1') at tests/cart.spec.ts:15", ['first', 'moved']]]);
     });
 
     it('ignores escape sequences that the SGR strip leaves behind', () => {
@@ -269,12 +290,13 @@ describe('FailureClusterer', () => {
     });
 
     // Ids are stored in history, so these values must not drift between runs or releases.
-    it('gives a fixed 16-character hex id that follows the failing line, not the column', () => {
-      const error = clickTimeout("locator('#save')");
+    it('gives a fixed 16-character hex id that keeps when lines move, and follows the locator', () => {
+      const save = clickTimeout("locator('#save')");
+      const cancel = clickTimeout("locator('#cancel')");
 
-      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error, errorLocation: cartPage }).id).toBe('78aef7acc7c76ad4');
-      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error, errorLocation: { ...cartPage, column: 99 } }).id).toBe('78aef7acc7c76ad4');
-      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error, errorLocation: { ...cartPage, line: 13 } }).id).toBe('6c2515953fa38794');
+      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error: save, errorLocation: cartPage }).id).toBe('184053c42bd73a9d');
+      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error: save, errorLocation: { ...cartPage, line: 13, column: 99 } }).id).toBe('184053c42bd73a9d');
+      expect(fingerprintFailure({ file: 'tests/cart.spec.ts', error: cancel, errorLocation: cartPage }).id).toBe('f4901281ded5673e');
     });
   });
 
@@ -302,20 +324,23 @@ describe('FailureClusterer', () => {
       expect(results[0].failureCluster?.tests).toEqual([]); // Empty to avoid circular refs
     });
 
-    it('handles clusters without tests property', () => {
+    it('skips a cluster without a tests array and still assigns the clusters after it', () => {
       const results = [
         createTestResult({ testId: 'test-1', status: 'failed' }),
+        createTestResult({ testId: 'test-2', status: 'failed' }),
       ];
 
-      const clusters: FailureCluster[] = [{
-        id: 'cluster-1',
-        errorType: 'Error',
-        count: 1,
-        tests: undefined as any, // Simulate malformed cluster
-      }];
+      const clusters: FailureCluster[] = [
+        { id: 'cluster-1', errorType: 'Error', count: 1, tests: undefined as any }, // Simulate malformed cluster
+        { id: 'cluster-2', errorType: 'Boom', count: 1, tests: [results[1]] },
+      ];
 
-      // Should not throw
-      expect(() => clusterer.assignClusters(results, clusters)).not.toThrow();
+      clusterer.assignClusters(results, clusters);
+
+      expect(results.map(r => r.failureCluster)).toEqual([
+        undefined,
+        { id: 'cluster-2', errorType: 'Boom', count: 1, tests: [], aiSuggestion: undefined },
+      ]);
     });
 
     it('preserves AI suggestions on clusters', () => {

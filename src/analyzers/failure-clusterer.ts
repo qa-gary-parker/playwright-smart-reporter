@@ -4,9 +4,12 @@ import { parseError, type StackFrame } from '../utils/error-stack';
 import { truncate } from '../utils/sanitizers';
 
 export interface FailureFingerprint {
-  /** First 16 hex characters of a SHA-256 over the fingerprint parts. The same failure gets the same id in every run. */
+  /**
+   * First 16 hex characters of a SHA-256 over the type, masked message, failing file and locator. The line is left
+   * out, so the same failure keeps its id in every run, on every machine, and when lines move.
+   */
   id: string;
-  /** Matcher or masked first message line, then the locator and the failing location. */
+  /** Matcher or masked first message line, then the locator and the failing file:line. */
   label: string;
 }
 
@@ -20,6 +23,8 @@ const LOCATOR = /\b(?:locator|frameLocator|getBy[A-Z][A-Za-z]*)\((?:[^()]|\([^()
 const URL_PATTERN = /\b[a-z][a-z\d+.-]*:\/\/[^\s'"`<>()]+/gi;
 // A quote that touches a word character is an apostrophe ("can't"), not a delimiter.
 const QUOTED = /(?<!\w)(?:"[^"\n]*"|'[^'\n]*'|`[^`\n]*`)(?!\w)/g;
+// Two or more segments after "/" or a drive letter. The lookbehind skips relative paths, dates and "and/or".
+const ABSOLUTE_PATH = /(?<![\w<>/\\.-])(?:[A-Za-z]:[\\/]|\/)(?:[\w.@+-]+[\\/])+[\w.@+-]+/g;
 const UUID = /(?<![\da-z])[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}(?![\da-z])/gi;
 // 0x literals, or 8+ hex characters with at least one digit and one letter; plain numbers fall to DIGITS.
 const HEX_ID = /(?<![\da-z])(?:0x[\da-f]+|(?=[a-f]*\d)(?=\d*[a-f])[\da-f]{8,})(?![\da-z])/gi;
@@ -33,19 +38,23 @@ function maskIds(text: string): string {
 }
 
 function maskMessage(line: string): string {
-  return maskIds(line.replace(URL_PATTERN, '<url>').replace(QUOTED, '<str>')).replace(DIGITS, '<n>');
+  const masked = line
+    .replace(URL_PATTERN, '<url>')
+    .replace(QUOTED, '<str>')
+    .replace(ABSOLUTE_PATH, (p) => `<path>/${p.split(/[\\/]/).pop()}`);
+  return maskIds(masked).replace(DIGITS, '<n>');
 }
 
 // errorLocation and test.file are relative to the Playwright rootDir; stack frames are absolute, so only their line is used.
-function failureLocation(test: Pick<TestResultData, 'errorLocation' | 'file'>, frames: StackFrame[]): string {
-  if (test.errorLocation) return `${toPosix(test.errorLocation.file)}:${test.errorLocation.line}`;
+function failureLocation(test: Pick<TestResultData, 'errorLocation' | 'file'>, frames: StackFrame[]): { file: string; line?: number } {
+  if (test.errorLocation) return { file: toPosix(test.errorLocation.file), line: test.errorLocation.line };
   const file = toPosix(test.file);
   const spec = file.replace(/^(\.\.?\/)+/, '');
   const frame = frames.find((f) => {
     const frameFile = toPosix(f.file);
     return frameFile === spec || frameFile.endsWith(`/${spec}`);
   });
-  return frame ? `${file}:${frame.line}` : file;
+  return { file, line: frame?.line };
 }
 
 /**
@@ -70,8 +79,9 @@ export function fingerprintFailure(test: Pick<TestResultData, 'error' | 'errorLo
   const location = failureLocation(test, frames);
 
   const what = assertion || truncate((masked[0] ?? '').replace(/^Error\b:?\s*/, '') || 'Unknown Error', LABEL_MAX);
-  const label = `${what}${locator ? ` on ${locator}` : ''}${location ? ` at ${location}` : ''}`;
-  const id = crypto.createHash('sha256').update([type, masked.join('\n'), location, locator].join('\0')).digest('hex').slice(0, 16);
+  const at = location.line === undefined ? location.file : `${location.file}:${location.line}`;
+  const label = `${what}${locator ? ` on ${locator}` : ''}${at ? ` at ${at}` : ''}`;
+  const id = crypto.createHash('sha256').update([type, masked.join('\n'), location.file, locator].join('\0')).digest('hex').slice(0, 16);
   return { id, label };
 }
 
