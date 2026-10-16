@@ -488,6 +488,13 @@ function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sche
     const passedRules = data.qualityGateResult.rules.filter(r => r.passed).length;
     const totalRules = data.qualityGateResult.rules.length;
     subtitleText = `${passedRules}/${totalRules} rules passed  \u00B7  ${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
+  } else if (stats.rated === 0) {
+    // Every test was skipped, or there were none: nothing passed, so the verdict is neutral.
+    verdictText = 'NO TESTS RAN';
+    bgColor = scheme.cardBg;
+    textColor = scheme.accentGray;
+    accentColor = scheme.accentGray;
+    subtitleText = `${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   } else if (stats.failed === 0) {
     verdictText = 'ALL TESTS PASSED';
     bgColor = scheme.accentGreenBg;

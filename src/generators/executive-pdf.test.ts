@@ -50,14 +50,14 @@ function rectFill(content: string, rect: string): string | undefined {
 }
 
 // Fill colour of each drawn text equal to `text`: the last colour set before it.
+// Kerning can split one text into several hex strings, so match whole BT…ET blocks as pdfLines reads them.
 function textColors(content: string, text: string): string[] {
-  const hex = `<${Buffer.from(text, 'latin1').toString('hex')}>`;
-  const colors: string[] = [];
-  for (let at = content.indexOf(hex); at >= 0; at = content.indexOf(hex, at + 1)) {
-    const rgb = [...content.slice(0, at).matchAll(/([\d.]+ [\d.]+ [\d.]+) scn/g)].at(-1)![1];
-    colors.push('#' + rgb.split(' ').map(v => Math.round(Number(v) * 255).toString(16).padStart(2, '0')).join(''));
-  }
-  return colors;
+  return [...content.matchAll(/\bBT\b[\s\S]*?\bET\b/g)]
+    .filter(([block]) => [...block.matchAll(/<([0-9a-f]+)>/gi)].map(([, hex]) => winAnsi(Buffer.from(hex, 'hex'))).join('') === text)
+    .map(({ index }) => {
+      const rgb = [...content.slice(0, index).matchAll(/([\d.]+ [\d.]+ [\d.]+) scn/g)].at(-1)![1];
+      return '#' + rgb.split(' ').map(v => Math.round(Number(v) * 255).toString(16).padStart(2, '0')).join('');
+    });
 }
 
 // Segment count of each stroked polyline with 2+ segments: the trend sparklines.
@@ -297,6 +297,24 @@ describe('executive-pdf', () => {
     expectDrawn(lines, ['2 tests  ·  n/a pass rate  ·  5.0s', '2', 'Total Tests', 'n/a', 'Pass Rate', '0', 'Failed']);
     expectDrawn(lines, ['Test Distribution', 'n/a', 'pass rate']);
     expect(textColors(contentStreams(file)[0], 'n/a')).toEqual(['#9ca3af', '#9ca3af']);
+  });
+
+  it('shows a neutral NO TESTS RAN verdict in grey, not ALL TESTS PASSED, when no test ran', () => {
+    const skipped = [
+      createTestResult({ testId: '1', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: '2', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const verdicts = [[], skipped].map((results) => {
+      const file = generateExecutivePdf(createBasicData({ results }), tmpDir);
+      const [page1] = contentStreams(file);
+      const lines = pdfLines(file);
+      // The banner's verdict and subtitle, its text colour, and its accent bar
+      return [lines.slice(0, lines.indexOf('Total Tests') - 1).slice(-2), textColors(page1, 'NO TESTS RAN'), rectFill(page1, '40 108 4 52')];
+    });
+    expect(verdicts).toEqual([
+      [['NO TESTS RAN', '0 tests  ·  n/a pass rate  ·  5.0s'], ['#9ca3af'], '#9ca3af'],
+      [['NO TESTS RAN', '2 tests  ·  n/a pass rate  ·  5.0s'], ['#9ca3af'], '#9ca3af'],
+    ]);
   });
 
   it('lists a file whose tests were all skipped last in the file breakdown, as n/a', () => {
