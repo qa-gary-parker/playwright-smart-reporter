@@ -48,6 +48,16 @@ function counts(s: { total: number; passed: number; failed: number; skipped: num
 
 const id = (title: string) => `${FILE}::${title}`;
 
+// What CI tools key test history and counts on: each testsuite with its counts and its testcases' identity.
+function junit(file: string) {
+  const attrs = (tag: string) => Object.fromEntries([...tag.matchAll(/(\w+)="([^"]*)"/g)].map(([, key, value]) => [key, value]));
+  return fs.readFileSync(file, 'utf8').split(/<testsuite\s/).slice(1).map((suite) => {
+    const { name, hostname, tests, failures, skipped } = attrs(suite.slice(0, suite.indexOf('>')));
+    const testcases = [...suite.matchAll(/<testcase\s([^>]*)>/g)].map(([, tag]) => attrs(tag)).map(({ classname, name }) => ({ classname, name }));
+    return { name, hostname, tests, failures, skipped, testcases };
+  });
+}
+
 beforeAll(() => {
   if (!fs.existsSync(path.join(ROOT, 'dist/smart-reporter.js'))) throw new Error('dist/ is missing: run `npm run build` first');
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-run-data-'));
@@ -272,5 +282,62 @@ describe('flaky', () => {
     const [test] = reportData(out).tests;
     expect([test.flakinessScore, test.flakinessIndicator]).toEqual([0.99, '🔴 Flaky']);
     expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual([id('passes on retry')]);
+  }, TIMEOUT);
+});
+
+describe('JUnit export', () => {
+  const junitFile = (out: string) => path.join(out, 'smart-report-junit.xml');
+
+  // Playwright 1.57's junit reporter (includeProjectInTestName: true) on this file, with ACCEPTANCE_SKIP set.
+  const golden = (project: string) => ({
+    name: FILE, hostname: project, tests: '8', failures: '2', skipped: '1',
+    testcases: [
+      'passes', 'first block › same title', 'second block › same title', 'expected failure that fails',
+      'expected failure that passes', 'passes on retry', 'fails when asked', 'skipped when asked',
+    ].map((title) => ({ classname: FILE, name: project ? `[${project}] ${title}` : title })),
+  });
+
+  it('groups, names and counts testcases the same as Playwright\'s JUnit reporter', () => {
+    for (const projects of ['', 'alpha,beta']) {
+      const out = path.join(tmp, `junit-${projects || 'unnamed'}`);
+      runSuite(out, { exportJunit: true }, ['--grep-invert', 'three seconds|fails after a second'], { ACCEPTANCE_SKIP: '1', ACCEPTANCE_PROJECTS: projects });
+
+      const expected = (projects ? projects.split(',') : ['']).map(golden);
+      expect(junit(path.join(out, 'pw-junit.xml'))).toEqual(expected);
+      expect(junit(junitFile(out))).toEqual(expected);
+    }
+  }, TIMEOUT);
+
+  it('gives the same title in two projects and two describe blocks four distinct testcases', () => {
+    const out = path.join(tmp, 'junit-identity');
+    runSuite(out, { exportJunit: true }, ['--grep', 'same title', '--retries=0'], { ACCEPTANCE_PROJECTS: 'alpha,beta' });
+
+    expect(junit(junitFile(out)).flatMap((s) => s.testcases.map((t) => [t.classname, t.name]))).toEqual([
+      [FILE, '[alpha] first block › same title'],
+      [FILE, '[alpha] second block › same title'],
+      [FILE, '[beta] first block › same title'],
+      [FILE, '[beta] second block › same title'],
+    ]);
+  }, TIMEOUT);
+
+  it('reports a test.fail() test that passed as a failure, as Playwright\'s exit code does', () => {
+    const out = path.join(tmp, 'junit-unexpected-pass');
+    const run = runSuite(out, { exportJunit: true }, ['--grep', 'expected failure that passes', '--retries=0']);
+
+    const xml = fs.readFileSync(junitFile(out), 'utf8');
+    expect(run.status).toBe(1);
+    expect(xml).toContain('<testsuites name="Smart Reporter" tests="1" failures="1" errors="0" skipped="0" ');
+    expect(xml.match(/<failure [^>]*>/g)).toEqual(['<failure type="AssertionError" message="Expected to fail, but passed">']);
+  }, TIMEOUT);
+
+  it('adds a flakyFailure for the failed attempt of a test that passed on retry, and does not count it as a failure', () => {
+    const out = path.join(tmp, 'junit-flaky');
+    const run = runSuite(out, { exportJunit: true }, ['--grep', 'passes on retry']);
+
+    const xml = fs.readFileSync(junitFile(out), 'utf8');
+    expect(run.status).toBe(0);
+    expect(xml).toContain('<testsuites name="Smart Reporter" tests="1" failures="0" errors="0" skipped="0" ');
+    expect(xml.match(/<(failure|flakyFailure) [^>]*>/g)).toEqual(['<flakyFailure type="AssertionError" message="Error: expect(received).toBe(expected) // Object.is equality">']);
+    expect(xml).toMatch(/<flakyFailure [^>]*><stackTrace>Error: expect\(received\)\.toBe\(expected\) \/\/ Object\.is equality\n\nExpected: 1\nReceived: 0\n {4}at [^<]*run-data\.fixtures\.ts:\d+:\d+<\/stackTrace><\/flakyFailure>\n/);
   }, TIMEOUT);
 });

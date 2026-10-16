@@ -24,5 +24,7 @@ export default defineConfig({
     }],
     // Playwright's own counts, the oracle the reporter's numbers are checked against.
     ['json', { outputFile: path.join(out, 'pw.json') }],
+    // Playwright's own JUnit file, the oracle for the JUnit export's grouping and names.
+    ['junit', { outputFile: path.join(out, 'pw-junit.xml'), includeProjectInTestName: true }],
   ],
 });

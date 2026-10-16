@@ -301,7 +301,7 @@ describe('junit-exporter', () => {
 
       const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
       expect(xml).toContain(
-        '    <testcase name="bell nul vt ff esc nonchar lone kept\té \u{1F600}" classname="tests.example" time="1.000">\n' +
+        '    <testcase name="bell nul vt ff esc nonchar lone kept\té \u{1F600}" classname="tests/example.spec.ts" time="1.000">\n' +
         '      <properties>\n' +
         '      </properties>\n' +
         '      <failure type="AssertionError" message="Expected &quot;a&quot;">Expected &quot;a&quot;\nat line 2</failure>\n' +
@@ -326,13 +326,120 @@ describe('junit-exporter', () => {
       expect(outputPath).toBe(path.resolve(process.cwd(), 'smart-report-junit.xml'));
     });
 
-    it('testcase classname replaces slashes with dots and strips spec extension', () => {
+    it('testcase classname is the file path, as in Playwright\'s JUnit reporter', () => {
       const results = [createTestResult({ file: 'tests/auth/login.spec.ts' })];
 
       exportJunitXml(results, {});
 
       const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
-      expect(xml).toContain('classname="tests.auth.login"');
+      expect(xml).toContain('<testcase name="Test One" classname="tests/auth/login.spec.ts" time="1.000">');
+    });
+
+    it('names a testcase by its describe path and title, after the project when it has a name', () => {
+      const results = [
+        createTestResult({ testId: '1', suites: ['tests/example.spec.ts', 'outer', 'inner'], project: 'chromium' }),
+        createTestResult({ testId: '2', suites: ['tests/example.spec.ts', 'outer', 'inner'] }),
+        createTestResult({ testId: '3', title: 'top level', suites: ['tests/example.spec.ts'] }),
+      ];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml.match(/<testcase [^>]*>/g)).toEqual([
+        '<testcase name="[chromium] outer › inner › Test One" classname="tests/example.spec.ts" time="1.000">',
+        '<testcase name="outer › inner › Test One" classname="tests/example.spec.ts" time="1.000">',
+        '<testcase name="top level" classname="tests/example.spec.ts" time="1.000">',
+      ]);
+    });
+
+    it('groups testcases into one testsuite per project and file, with the project as hostname', () => {
+      const results = [
+        createTestResult({ testId: '1', project: 'alpha' }),
+        createTestResult({ testId: '2', project: 'beta', status: 'failed', outcome: 'unexpected' }),
+        createTestResult({ testId: '3', project: 'alpha', file: 'tests/other.spec.ts' }),
+        createTestResult({ testId: '4', project: 'alpha', title: 'Test Two' }),
+      ];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml.match(/<testsuite [^>]*tests="\d+" failures="\d+"/g)).toEqual([
+        '<testsuite name="tests/example.spec.ts" hostname="alpha" tests="2" failures="0"',
+        '<testsuite name="tests/example.spec.ts" hostname="beta" tests="1" failures="1"',
+        '<testsuite name="tests/other.spec.ts" hostname="alpha" tests="1" failures="0"',
+      ]);
+    });
+
+    it('reports a test.fail() test that passed as a failure', () => {
+      const results = [createTestResult({ status: 'passed', outcome: 'unexpected', expectedStatus: 'failed' })];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml).toMatch(/<testsuites [^>]*tests="1" failures="1" errors="0" skipped="0" /);
+      expect(xml).toMatch(/<testsuite [^>]*tests="1" failures="1" errors="0" skipped="0" /);
+      expect(xml.match(/<(failure|error|skipped)\b[^>]*>/g)).toEqual(['<failure type="AssertionError" message="Expected to fail, but passed">']);
+      expect(xml).toContain('      <failure type="AssertionError" message="Expected to fail, but passed"></failure>\n    </testcase>\n');
+    });
+
+    it('counts a test interrupted on its retry after a failure once, as a failure', () => {
+      const results = [createTestResult({ status: 'interrupted', outcome: 'unexpected', retry: 1 })];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml).toMatch(/<testsuites [^>]*tests="1" failures="1" errors="0" skipped="0" /);
+      expect(xml.match(/<(failure|error) [^>]*>/g)).toEqual(['<failure type="AssertionError" message="Test failed">']);
+    });
+
+    it('adds a flakyFailure for each failed attempt of a flaky test, without counting a failure', () => {
+      const results = [
+        createTestResult({
+          status: 'passed',
+          outcome: 'flaky',
+          retry: 2,
+          attempts: [
+            { retry: 0, status: 'failed', duration: 10, error: 'Error: first <try>\n  at a.spec.ts:1:1', steps: [] },
+            { retry: 1, status: 'timedOut', duration: 20, error: 'Test timeout of 30000ms exceeded.', steps: [] },
+            { retry: 2, status: 'passed', duration: 30, steps: [] },
+          ],
+        }),
+      ];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml).toMatch(/<testsuites [^>]*tests="1" failures="0" errors="0" skipped="0" /);
+      expect(xml.match(/<(failure|error|skipped|flakyFailure)\b[^>]*>/g)).toEqual([
+        '<flakyFailure type="AssertionError" message="Error: first &lt;try&gt;">',
+        '<flakyFailure type="Timeout" message="Test timeout of 30000ms exceeded.">',
+      ]);
+      expect(xml).toContain(
+        '      </properties>\n' +
+        '      <flakyFailure type="AssertionError" message="Error: first &lt;try&gt;"><stackTrace>Error: first &lt;try&gt;\n  at a.spec.ts:1:1</stackTrace></flakyFailure>\n' +
+        '      <flakyFailure type="Timeout" message="Test timeout of 30000ms exceeded."><stackTrace>Test timeout of 30000ms exceeded.</stackTrace></flakyFailure>\n' +
+        '    </testcase>\n',
+      );
+    });
+
+    it('adds no flakyFailure to a test that failed on every attempt', () => {
+      const results = [
+        createTestResult({
+          status: 'failed',
+          outcome: 'unexpected',
+          retry: 1,
+          error: 'Error: boom',
+          attempts: [
+            { retry: 0, status: 'failed', duration: 10, error: 'Error: boom', steps: [] },
+            { retry: 1, status: 'failed', duration: 10, error: 'Error: boom', steps: [] },
+          ],
+        }),
+      ];
+
+      exportJunitXml(results, {});
+
+      const xml = mockFs.writeFileSync.mock.calls[0][1] as string;
+      expect(xml.match(/<(failure|flakyFailure) [^>]*>/g)).toEqual(['<failure type="AssertionError" message="Error: boom">']);
     });
 
     it('handles empty results array without crashing', () => {
@@ -413,7 +520,7 @@ describe('junit-exporter', () => {
       expect(xml).toMatch(/<testsuite [^>]*tests="4" failures="1" /);
       expect(xml.match(/<failure /g)).toHaveLength(1);
       expect(xml).toContain(
-        '    <testcase name="expected to fail" classname="tests.example" time="1.000">\n' +
+        '    <testcase name="expected to fail" classname="tests/example.spec.ts" time="1.000">\n' +
         '      <properties>\n' +
         '        <property name="outcome" value="expected" />\n' +
         '      </properties>\n' +

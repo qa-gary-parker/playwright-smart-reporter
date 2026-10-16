@@ -773,6 +773,15 @@ reporter: [
 ]
 ```
 
+`exportJunit` names and groups tests the same way as Playwright's own `junit` reporter with `includeProjectInTestName: true`:
+
+- There is one `<testsuite>` for each project and file. Its `name` is the file and its `hostname` is the project name.
+- A testcase `classname` is the file path, relative to the Playwright `rootDir`.
+- A testcase `name` is the describe blocks and the test title, joined with ` › `. When the project has a name, `[project] ` comes first, for example `[chromium] checkout › pays by card`.
+- A test is a `<failure>` when Playwright reports it as failed. So a `test.fail()` test that passes is a failure with the message `Expected to fail, but passed`, and a `test.fail()` test that fails is a pass.
+- A test that passed on a retry gets one `<flakyFailure>` for each failed attempt. A `<flakyFailure>` is not counted as a failure.
+- An interrupted test is an `<error>`.
+
 `exportCtrf` writes a [Common Test Report Format](https://github.com/ctrf-io/ctrf) document (`specVersion` 0.1.0) next to the HTML report, so any CTRF tool can read your results.
 
 | Playwright result | CTRF `status` | Notes |
