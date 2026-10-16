@@ -2,6 +2,7 @@ import type { FullConfig, TestCase, TestError, TestResult } from '@playwright/te
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TimelineAnomaly } from '../types';
+import { stripAnsiCodes } from '../utils/sanitizers';
 
 // Mirrors Playwright HTML reporter "Copy prompt" structure (see playwright-core HTML report bundle).
 const PLAYWRIGHT_COPY_PROMPT_INSTRUCTIONS = `
@@ -20,10 +21,6 @@ function safeRelativePath(rootDir: string, filePath: string): string {
 
 function chunkToString(chunk: string | Buffer): string {
   return typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
-}
-
-function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
 function readTextAttachment(
@@ -147,12 +144,12 @@ export function buildPlaywrightStyleAiPrompt(params: {
   const lines: string[] = [PLAYWRIGHT_COPY_PROMPT_INSTRUCTIONS, '# Test info', '', testInfo];
 
   const stdout = resultStdoutText(config, result);
-  if (stdout) lines.push('', '# Stdout', '', '```', stripAnsi(stdout), '```');
+  if (stdout) lines.push('', '# Stdout', '', '```', stripAnsiCodes(stdout), '```');
   const stderr = resultStderrText(config, result);
-  if (stderr) lines.push('', '# Stderr', '', '```', stripAnsi(stderr), '```');
+  if (stderr) lines.push('', '# Stderr', '', '```', stripAnsiCodes(stderr), '```');
 
   lines.push('', '# Error details');
-  for (const errorText of errorsForPrompt) lines.push('', '```', stripAnsi(errorText), '```');
+  for (const errorText of errorsForPrompt) lines.push('', '```', stripAnsiCodes(errorText), '```');
 
   if (firstAnomaly) {
     lines.push(

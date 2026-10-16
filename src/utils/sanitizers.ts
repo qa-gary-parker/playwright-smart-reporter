@@ -67,14 +67,17 @@ export function truncate(str: string, maxLength: number): string {
   return str.substring(0, maxLength - 3) + '...';
 }
 
+// Pattern from ansi-regex 6.2.2 (MIT, Copyright (c) Sindre Sorhus, https://github.com/chalk/ansi-regex).
+const ANSI_PATTERN = /(?:\u001B\][\s\S]*?(?:\u0007|\u001B\\|\u009C))|[\u001B\u009B][[\]()#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]/g;
+
 /**
- * Strip ANSI escape codes from a string
+ * Strip ANSI escape codes from a string: CSI sequences with any final byte,
+ * and OSC sequences (such as hyperlinks) ended by BEL or ST
  * @param str - String containing ANSI codes
  * @returns String with ANSI codes removed
  */
 export function stripAnsiCodes(str: string): string {
-  // Remove ANSI escape sequences (e.g., \x1b[31m, \x1b[0m, etc.)
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return str.replace(ANSI_PATTERN, '');
 }
 
 /**

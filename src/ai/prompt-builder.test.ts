@@ -209,6 +209,26 @@ describe('buildPlaywrightStyleAiPrompt', () => {
     expect(result).not.toContain('\x1b[31m');
   });
 
+  it('strips non-SGR CSI and OSC 8 hyperlinks from error, stdout and stderr', () => {
+    const ansi = '\x1b[2Kerr\x1b]8;;https://x\x07link\x1b]8;;\x07';
+    const result = buildPlaywrightStyleAiPrompt({
+      config: makeConfig(),
+      test: makeTestCase(),
+      result: makeTestResult({
+        errors: [makeError({
+          message: `Error: ${ansi}`,
+          stack: `Error: ${ansi}\n  at test.ts:1:1`,
+        })],
+        stdout: [`out ${ansi}\n`],
+        stderr: [`warn ${ansi.replace(/\x07/g, '\x1b\\')}\n`],
+      }),
+    });
+
+    expect(result).toContain('# Error details\n\n```\nError: errlink\nError: errlink\n  at test.ts:1:1\n```');
+    expect(result).toContain('# Stdout\n\n```\nout errlink\n\n```');
+    expect(result).toContain('# Stderr\n\n```\nwarn errlink\n\n```');
+  });
+
   it('includes error location in formatted error', () => {
     const error = makeError({
       message: 'Timeout',
