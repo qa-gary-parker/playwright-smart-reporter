@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import type { TestResultData, FailureCluster } from '../types';
 import { parseError, type StackFrame } from '../utils/error-stack';
-import { truncate } from '../utils/sanitizers';
+import { stripAnsiCodes, truncate } from '../utils/sanitizers';
 
 export interface FailureFingerprint {
   /**
@@ -13,8 +13,6 @@ export interface FailureFingerprint {
   label: string;
 }
 
-// The reporter strips only SGR codes; OSC hyperlinks (BEL or ST ended) and other CSI sequences can remain.
-const ESCAPES = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]/g;
 // Retries, waits and element states in Playwright's call log change from run to run.
 const CALL_LOG = /^\s*Call log:/m;
 const MATCHER = /expect(?:\.\w+)?\(.*?\)\s*\.\s*(not\s*\.\s*)?(\w+)/;
@@ -62,7 +60,7 @@ function failureLocation(test: Pick<TestResultData, 'errorLocation' | 'file'>, f
  * cause share an id while different elements or code paths do not.
  */
 export function fingerprintFailure(test: Pick<TestResultData, 'error' | 'errorLocation' | 'file'>): FailureFingerprint {
-  const { message, frames } = parseError((test.error ?? '').replace(ESCAPES, ''));
+  const { message, frames } = parseError(stripAnsiCodes(test.error ?? ''));
   const lines = message
     .split(CALL_LOG)[0]
     .split(/\r?\n/)
