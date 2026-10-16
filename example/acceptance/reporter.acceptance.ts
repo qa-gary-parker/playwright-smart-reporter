@@ -204,6 +204,30 @@ describe('failure clustering', () => {
   });
 });
 
+describe('tags and suites', () => {
+  it('reads tags from the title without taking the domain of an email address as a tag', () => {
+    const out = path.join(tmp, 'tags');
+    runSuite(out, {}, ['--grep', 'login as']);
+
+    const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+    // Playwright's own test.tags gives '@example.com'.
+    expect(data.tests.map((t) => t.tags)).toEqual([['@example.com', '@smoke']]);
+  });
+
+  it('starts the suite path with the file for an unnamed project, the same as for a named one', () => {
+    for (const projects of ['', 'chromium']) {
+      const out = path.join(tmp, `suites-${projects || 'unnamed'}`);
+      runSuite(out, {}, ['--grep', 'login as|passes$'], 'test', { ACCEPTANCE_PROJECTS: projects });
+
+      const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+      expect(data.tests.map((t) => [t.project, t.title, t.suites, t.suite])).toEqual([
+        [projects || undefined, 'passes', ['suite.fixtures.ts'], 'suite.fixtures.ts'],
+        [projects || undefined, 'login as user@example.com @smoke', ['suite.fixtures.ts', 'sign in'], 'sign in'],
+      ]);
+    }
+  });
+});
+
 describe('report write failure', () => {
   it('says the report could not be written, and does not print its path as if it was', () => {
     const out = path.join(tmp, 'blocked');

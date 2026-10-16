@@ -292,19 +292,19 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Tertiary source: extract from test title (e.g., "Login @smoke @critical")
-    const titleTagMatches = test.title.match(/@[\w-]+/g);
-    if (titleTagMatches) {
-      for (const tag of titleTagMatches) {
-        if (!tags.includes(tag)) tags.push(tag);
-      }
+    // Tertiary source: extract from test title (e.g., "Login @smoke @critical"), for Playwright before 1.42.
+    // A tag starts a word, so the "@example" in "user@example.com" is not one.
+    for (const [, tag] of test.title.matchAll(/(?:^|\s)(@[\w-]+)/g)) {
+      if (!tags.includes(tag)) tags.push(tag);
     }
 
     // Extract suite hierarchy from titlePath (last element is test title itself)
     const titlePath = test.titlePath();
     // Filter out empty strings from titlePath (some Playwright versions include empty root)
     const filteredPath = titlePath.filter(p => p && p.length > 0);
-    const suites = filteredPath.slice(1, -1); // Remove project name (first) and test title (last)
+    // Drop the project name and the test title. An unnamed project's '' is already filtered out,
+    // so named and unnamed projects both get [file, ...describes].
+    const suites = filteredPath.slice(test.parent?.project?.()?.name ? 1 : 0, -1);
     const suite = suites.length > 0 ? suites[suites.length - 1] : undefined;
 
     // Extract browser name and project name from project configuration (if available)

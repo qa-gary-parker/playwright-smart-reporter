@@ -118,6 +118,7 @@ The filter bar above the list takes free text and filter tokens. The command pal
 
 - Tokens with the same key match any value (OR). Tokens with different keys must all match (AND).
 - Free text matches every word against the title, file, suites, and project.
+- A test's suite path is its file, then each `describe` block. It has this shape for named and unnamed projects.
 - Quote values that contain spaces: `suite:"saved cards"`.
 - Matching is not case-sensitive.
 
@@ -1116,6 +1117,8 @@ use: {
 ## Annotations
 
 Playwright annotations show in the **Annotations** section of the test detail, with type and description. Tags show in the detail header; click one to add a `tag:` filter.
+
+Tags come from Playwright's `test.tags`, from `tag` annotations, and, for Playwright before 1.42, from `@` words in the title. A title word is a tag only when it starts with `@`, so `user@example.com` does not add an `@example` tag.
 
 ```typescript
 test('payment flow', async ({ page }) => {

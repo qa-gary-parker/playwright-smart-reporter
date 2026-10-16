@@ -22,3 +22,7 @@ test('takes a second', async () => {
 test('fails when asked', () => {
   expect(process.env.ACCEPTANCE_FAIL).toBeUndefined();
 });
+
+test.describe('sign in', () => {
+  test('login as user@example.com @smoke', () => {});
+});
