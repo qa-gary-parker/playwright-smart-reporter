@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { JsonExportData } from '../generators/json-exporter';
 import { SCHEMA_VERSION, type ReportData, type ReportTest, type Signal } from '../report-data/schema';
-import type { CIInfo, NetworkLogEntry } from '../types';
+import type { AttemptData, CIInfo, NetworkLogEntry } from '../types';
+import { divergenceSummary } from '../analyzers/attempt-compare';
 import { createRedactor } from './redact';
 
 export const FAILURE_BUNDLE_FORMAT = 'playwright-smart-reporter/failures';
@@ -103,6 +104,7 @@ export interface AgentFailure {
   callLog: string[];
   failingStep?: { title: string; category: string; start: number; end: number };
   attempts: AgentAttempt[];
+  divergence?: string;
   network?: { totalRequests: number; failed: AgentNetworkEntry[] };
   console?: AgentConsoleEntry[];
   anomaly?: TimelineData['firstAnomaly'];
@@ -210,10 +212,11 @@ function toFailure(t: SourceTest, rootDir: string): AgentFailure {
   const history = t.history ?? [];
   const outcomeOf = (h: (typeof history)[number]) => (h.skipped ? 'skipped' : h.passed ? 'passed' : 'failed');
   const recent = history.slice(-RECENT_RUNS).map(outcomeOf);
-  const attempts = t.attempts?.length
+  const attempts: AttemptData[] = t.attempts?.length
     ? t.attempts
-    : [{ retry: t.retry, status: t.status, duration: t.duration, error: t.error }];
+    : [{ retry: t.retry, status: t.status, duration: t.duration, error: t.error, steps: [] }];
   const step = failingStep(t);
+  const divergence = divergenceSummary(attempts);
 
   return {
     id: t.testId,
@@ -241,6 +244,7 @@ function toFailure(t: SourceTest, rootDir: string): AgentFailure {
       duration: a.duration,
       ...(a.error && { error: parseError(a.error).message }),
     })),
+    ...(divergence && { divergence }),
     ...(t.networkLogs && {
       network: { totalRequests: t.networkLogs.totalRequests, failed: entries.filter((e) => e.status >= 400 || e.status <= 0) },
     }),
@@ -396,6 +400,7 @@ export function formatFailureText(f: AgentFailure): string {
   }
   if (f.console && f.console.length > 0) out.push('  Console:', ...f.console.map((c) => `    ${c.level} at ${c.at}ms: ${c.text}`));
   if (f.attempts.length > 1) out.push(`  Attempts: ${f.attempts.map((a) => `${a.status} in ${a.duration}ms`).join(', ')}`);
+  if (f.divergence) out.push(`    ${f.divergence}`);
   const signals = f.history.signals.length > 0 ? ` · signals: ${f.history.signals.join(', ')}` : '';
   out.push(f.history.recent.length > 0 ? `  History (last ${f.history.recent.length} runs): ${f.history.recent.join(', ')}${signals}` : `  History: no earlier runs${signals}`);
   return out.join('\n');

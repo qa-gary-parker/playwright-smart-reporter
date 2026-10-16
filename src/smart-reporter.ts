@@ -474,6 +474,10 @@ class SmartReporter implements Reporter {
       }
     }
 
+    const existingResult = this.resultsMap.get(testId);
+    const attempt: AttemptData = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
+    testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
+
     // Build Playwright-style prompt for AI analysis and Copy AI prompt (no binaries)
     if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
       try {
@@ -482,6 +486,7 @@ class SmartReporter implements Reporter {
           test,
           result,
           firstAnomaly: testData.timeline?.firstAnomaly,
+          attempts: testData.attempts,
         });
       } catch (err) {
         // Prompt building should never fail the reporter
@@ -500,9 +505,6 @@ class SmartReporter implements Reporter {
 
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
-    const existingResult = this.resultsMap.get(testId);
-    const attempt: AttemptData = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
-    testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
     if (!existingResult || result.retry > existingResult.retry) {
       // This is a newer attempt - replace the previous one
       if (existingResult) keepAttemptEvidence(existingResult, testData.attempts.find((a) => a.retry === existingResult.retry)!);

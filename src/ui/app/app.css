@@ -916,6 +916,13 @@ a.lines__label {
   gap: var(--space-3);
 }
 
+.attempts__summary {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--flaky-fg);
+  border-radius: var(--radius-sm);
+}
+
 .attempts__list {
   display: grid;
   gap: var(--space-1);

@@ -158,6 +158,20 @@ describe('buildFailureBundle', () => {
     ]);
   });
 
+  it('adds a one-line summary of where the attempts failed, and prints it under the attempts', () => {
+    const data = loadFixture();
+    const steps = [
+      { title: 'Sign in', duration: 5900, category: 'test.step', failed: true },
+      { title: 'Expect "toBeVisible"', duration: 5050, category: 'expect', failed: true, parent: 0, depth: 1 },
+    ];
+    for (const a of data.tests[0].attempts!) a.steps = steps;
+
+    const [f] = buildFailureBundle(data, OPTS).failures;
+
+    expect(f.divergence).toBe(`Every attempt failed at step 'Sign in › Expect "toBeVisible"'`);
+    expect(formatFailureText(f)).toContain(`  Attempts: failed in 6100ms, failed in 6200ms\n    Every attempt failed at step 'Sign in › Expect "toBeVisible"'\n`);
+  });
+
   it('redacts secrets seeded into every text field the bundle copies', () => {
     const t = (...parts: string[]) => parts.join('');
     const secrets = {

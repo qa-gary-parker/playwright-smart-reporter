@@ -1,0 +1,120 @@
+import { describe, expect, it } from 'vitest';
+import type { AttemptData, StepData } from '../types';
+import { alignSteps, divergenceSummary, stepPath } from './attempt-compare';
+
+const step = (title: string, duration: number, over: Partial<StepData> = {}): StepData => ({ title, duration, category: 'test.step', ...over });
+const attempt = (retry: number, status: AttemptData['status'], duration: number, steps: StepData[]): AttemptData => ({ retry, status, duration, steps });
+
+// checkout > pay fails after 3.2s in the first attempt
+const FAILED_STEPS = [
+  step('open shop', 500),
+  step('log in', 800),
+  step('checkout', 3300, { failed: true }),
+  step('pay', 3200, { parent: 2, depth: 1, failed: true }),
+];
+// the passing attempt has one more step, before log in
+const PASSED_STEPS = [
+  step('open shop', 500),
+  step('accept cookies', 100),
+  step('log in', 800),
+  step('checkout', 450),
+  step('pay', 400, { parent: 3, depth: 1 }),
+];
+
+describe('stepPath', () => {
+  it('lists the titles from the top-level step down to the step', () => {
+    expect(stepPath(FAILED_STEPS, 3)).toEqual(['checkout', 'pay']);
+    expect(stepPath(FAILED_STEPS, 1)).toEqual(['log in']);
+  });
+});
+
+describe('alignSteps', () => {
+  it('pairs steps by title path, so a step inserted in the passing attempt marks only that step', () => {
+    const same = FAILED_STEPS.map((s) => ({ ...s, failed: undefined }));
+    const inserted = [same[0], step('accept cookies', 100), same[1], { ...same[2], parent: undefined }, { ...same[3], parent: 3 }];
+
+    expect(alignSteps(same, inserted)).toEqual([
+      { a: 0, b: 0, differs: false },
+      { b: 1, differs: true },
+      { a: 1, b: 2, differs: false },
+      { a: 2, b: 3, differs: false },
+      { a: 3, b: 4, differs: false },
+    ]);
+  });
+
+  it('marks a step that failed in one attempt only, and one more than twice as slow', () => {
+    expect(alignSteps(FAILED_STEPS, PASSED_STEPS).map((r) => r.differs)).toEqual([false, true, false, true, true]);
+  });
+
+  it('does not pair steps that share a title under different parents', () => {
+    const a = [step('setup', 10), step('click', 5, { parent: 0, depth: 1 })];
+    const b = [step('teardown', 10), step('click', 5, { parent: 0, depth: 1 })];
+
+    expect(alignSteps(a, b)).toEqual([
+      { a: 0, differs: true },
+      { a: 1, differs: true },
+      { b: 0, differs: true },
+      { b: 1, differs: true },
+    ]);
+  });
+
+  it('pairs repeated steps in order and leaves the extra one unpaired', () => {
+    const a = [step('poll', 10), step('poll', 10), step('done', 10)];
+    const b = [step('poll', 10), step('poll', 10), step('poll', 10), step('done', 10)];
+
+    expect(alignSteps(a, b)).toEqual([
+      { a: 0, b: 0, differs: false },
+      { a: 1, b: 1, differs: false },
+      { b: 2, differs: true },
+      { a: 2, b: 3, differs: false },
+    ]);
+  });
+
+  it('pairs by position past a million comparisons, marking the pairs whose title paths differ', () => {
+    const common = Array.from({ length: 1000 }, (_, i) => step(`step ${i}`, 10));
+    const rows = alignSteps([step('a first', 10), ...common, step('a last', 10)], [step('b first', 10), ...common, step('b last', 10)]);
+
+    expect(rows.length).toBe(1002);
+    expect(rows.filter((r) => r.differs)).toEqual([
+      { a: 0, b: 0, differs: true },
+      { a: 1001, b: 1001, differs: true },
+    ]);
+  });
+});
+
+describe('divergenceSummary', () => {
+  it('names the step the failed attempt failed at and how long the passing attempt took for it', () => {
+    expect(divergenceSummary([attempt(0, 'failed', 4800, FAILED_STEPS), attempt(1, 'passed', 2300, PASSED_STEPS)])).toBe(
+      "Attempt 1 failed at step 'checkout › pay' after 3.2s; attempt 2 passed it in 400ms",
+    );
+  });
+
+  it('says the passing attempt passed without the step when it has no such step', () => {
+    expect(divergenceSummary([attempt(0, 'timedOut', 30000, FAILED_STEPS), attempt(1, 'passed', 1300, PASSED_STEPS.slice(0, 3))])).toBe(
+      "Attempt 1 timed out at step 'checkout › pay' after 3.2s; attempt 2 passed without it",
+    );
+  });
+
+  it('compares the whole attempts when no step is marked as failed', () => {
+    const steps = FAILED_STEPS.map((s) => ({ ...s, failed: undefined }));
+    expect(divergenceSummary([attempt(0, 'timedOut', 30000, steps), attempt(1, 'failed', 900, []), attempt(2, 'passed', 1200, PASSED_STEPS)])).toBe(
+      'Attempt 1 timed out after 30.0s; attempt 3 passed in 1.2s',
+    );
+  });
+
+  it('says every attempt failed at the same step when no attempt passed', () => {
+    expect(divergenceSummary([0, 1, 2].map((r) => attempt(r, 'failed', 4800, FAILED_STEPS)))).toBe("Every attempt failed at step 'checkout › pay'");
+  });
+
+  it('lists where each attempt failed when no attempt passed and they failed at different steps', () => {
+    const atLogin = [step('open shop', 500), step('log in', 1000, { failed: true })];
+    expect(divergenceSummary([attempt(0, 'failed', 4800, FAILED_STEPS), attempt(1, 'failed', 1500, atLogin), attempt(2, 'timedOut', 30000, [])])).toBe(
+      "Attempt 1 failed at step 'checkout › pay' after 3.2s; attempt 2 failed at step 'log in' after 1.0s; attempt 3 timed out after 30.0s",
+    );
+  });
+
+  it('has no summary for one attempt, or for failed attempts without any failed step', () => {
+    expect(divergenceSummary([attempt(0, 'failed', 4800, FAILED_STEPS)])).toBeUndefined();
+    expect(divergenceSummary([attempt(0, 'failed', 6100, []), attempt(1, 'failed', 6200, [])])).toBeUndefined();
+  });
+});

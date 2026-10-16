@@ -46,8 +46,8 @@ export class StepCollector {
     const showExpect = this.options.showExpectSteps;
     const attemptStart = result.startTime.getTime();
 
-    // Recursively extract steps from the result
-    const processStep = (step: TestResult['steps'][0]) => {
+    // Recursively extract steps from the result. parent is the index of the nearest kept ancestor.
+    const processStep = (step: TestResult['steps'][0], parent: number | undefined, depth: number) => {
       // Only include meaningful steps (skip internal hooks)
       // Issue #22: Optionally filter out pw:api steps
       const isTestStep = step.category === 'test.step';
@@ -62,19 +62,22 @@ export class StepCollector {
           category: step.category,
           startTime: step.startTime.getTime() - attemptStart,
           ...(step.error ? { failed: true } : {}),
+          ...(parent !== undefined ? { parent, depth } : {}),
         });
+        parent = steps.length - 1;
+        depth++;
       }
 
       // Process nested steps
       if (step.steps) {
         for (const nested of step.steps) {
-          processStep(nested);
+          processStep(nested, parent, depth);
         }
       }
     };
 
     for (const step of result.steps) {
-      processStep(step);
+      processStep(step, undefined, 0);
     }
 
     // Mark the slowest step if we have any

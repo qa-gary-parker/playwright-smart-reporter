@@ -5,6 +5,7 @@ import type { AddressInfo } from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { divergenceSummary } from '../../src/analyzers/attempt-compare';
 import type { ReportData } from '../../src/report-data/schema';
 
 // Runs example/acceptance through the built reporter (dist/) with the options under test.
@@ -182,6 +183,14 @@ describe('AI analysis', () => {
     expect(prompts.filter((p) => /abcd1234efgh|tokenvalue-12345678/.test(p))).toEqual([]);
     expect(data.ai).toEqual({ suiteHealthSummary: 'stub suggestion', provider: 'openai', model: 'gpt-4o-mini' });
   }, 60_000);
+
+  it('lists every attempt of the failure in its prompt, with the step they failed at', async () => {
+    await runFailing(path.join(tmp, 'ai-attempts'), { enableAIRecommendations: true, ai: { baseUrl } });
+
+    expect(prompts[0]).toMatch(
+      /\n# Attempts\n\n- Attempt 1 \(failed, \d+ms\): Error: expect\(received\)\.toBeUndefined\(\)\n- Attempt 2 \(failed, \d+ms\): Error: expect\(received\)\.toBeUndefined\(\)\n\nEvery attempt failed at step 'Expect "toBeUndefined"'\n/,
+    );
+  }, 60_000);
 });
 
 describe('failure clustering', () => {
@@ -298,6 +307,17 @@ describe('failed attempts', () => {
 
     expect(files.filter((f) => !linked.includes(f))).toEqual(['pw-junit.xml', 'pw.json', 'smart-report-data.js', 'smart-report.css', 'smart-report.html', 'smart-report.js', 'test-history.json']);
     expect(files.filter((f) => linked.includes(f))).toEqual(['smart-report-screenshot-1.png', `traces/${TRACE}`]);
+  });
+
+  it('records the parent and depth of nested steps, so a retry that ran one more step still lines up', () => {
+    const out = run('attempts-steps', {}, 'second try');
+    const [test] = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).tests;
+
+    expect(test.attempts?.map((a) => a.steps.map((s) => [s.title, s.parent, s.depth, s.failed]))).toEqual([
+      [['checkout', undefined, undefined, true], ['pay', 0, 1, true]],
+      [['checkout', undefined, undefined, undefined], ['accept cookies', 0, 1, undefined], ['pay', 0, 1, undefined]],
+    ]);
+    expect(divergenceSummary(test.attempts!)).toMatch(/^Attempt 1 failed at step 'checkout › pay' after \d+ms; attempt 2 passed it in \d+ms$/);
   });
 
   it('keeps no evidence on earlier attempts of a test that failed every time, and writes no files for them', () => {

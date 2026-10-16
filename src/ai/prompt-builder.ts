@@ -1,7 +1,9 @@
 import type { FullConfig, TestCase, TestError, TestResult } from '@playwright/test/reporter';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TimelineAnomaly } from '../types';
+import type { AttemptData, TimelineAnomaly } from '../types';
+import { divergenceSummary } from '../analyzers/attempt-compare';
+import { formatDuration } from '../utils/formatters';
 import { stripAnsiCodes } from '../utils/sanitizers';
 
 // Mirrors Playwright HTML reporter "Copy prompt" structure (see playwright-core HTML report bundle).
@@ -128,8 +130,9 @@ export function buildPlaywrightStyleAiPrompt(params: {
   test: TestCase;
   result: TestResult;
   firstAnomaly?: TimelineAnomaly;
+  attempts?: AttemptData[];
 }): string {
-  const { config, test, result, firstAnomaly } = params;
+  const { config, test, result, firstAnomaly, attempts = [] } = params;
 
   const testFile = safeRelativePath(config.rootDir, test.location.file);
   const testInfo = [
@@ -162,6 +165,16 @@ export function buildPlaywrightStyleAiPrompt(params: {
       `- At: ${firstAnomaly.at}ms after the test started`,
       `- Detail: ${firstAnomaly.summary}`,
     );
+  }
+
+  if (attempts.length > 1) {
+    lines.push('', '# Attempts', '');
+    for (const a of attempts) {
+      const error = a.error?.split('\n')[0];
+      lines.push(`- Attempt ${a.retry + 1} (${a.status}, ${formatDuration(a.duration)})${error ? `: ${error}` : ''}`);
+    }
+    const divergence = divergenceSummary(attempts);
+    if (divergence) lines.push('', divergence);
   }
 
   // This is where Playwright includes the page snapshot for AI ("aria snapshot") as markdown:

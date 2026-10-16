@@ -288,6 +288,10 @@ export interface StepData {
   // Phase 4: Causal failure timeline
   startTime?: number;  // ms offset from the attempt's start
   failed?: boolean;
+
+  // Steps are in pre-order. Both are absent on a top-level step.
+  parent?: number;     // index in the same list of the nearest enclosing step that is kept
+  depth?: number;      // number of kept steps that enclose this one
 }
 
 // Test annotation (beyond tags) - captures @slow, @fixme, custom annotations

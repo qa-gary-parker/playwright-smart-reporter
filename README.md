@@ -90,7 +90,7 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Source | Playwright's code frame at the failing line |
 | Timeline | The causal failure timeline (see [Causal Failure Timeline](#causal-failure-timeline)) |
 | AI analysis | The AI suggestion, or a note that AI is off or has no provider. Copy AI prompt works in both cases. |
-| Attempts | Every attempt with status, duration, and first error line. For a flaky test, each attempt before the last also shows its own screenshots, videos and traces; the last attempt's are under Attachments. When an attempt failed and a later one passed, a step-by-step comparison of the two. Rows with a different step, or a duration more than 2x apart, are marked. |
+| Attempts | Every attempt with status, duration, and first error line. Above them, one line says where the attempts went different ways, for example `Attempt 1 failed at step 'checkout › pay' after 3.2s; attempt 2 passed it in 400ms`. For a flaky test, each attempt before the last also shows its own screenshots, videos and traces; the last attempt's are under Attachments. When an attempt failed and a later one passed, a step-by-step comparison of the two. Steps are paired by title path (the step's title and the titles of the steps around it), so a step that only one attempt ran marks only its own row. Rows are marked when the step is in one attempt only, failed in one attempt only, or took more than 2x as long in one attempt. Nested steps are indented. |
 | Steps | Each step with a duration bar. The failing step is marked. |
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
 | Console | Console messages from the trace of the failed attempt |
@@ -543,6 +543,7 @@ The bundle has `format: "playwright-smart-reporter/failures"` and `schemaVersion
 | `callLog` | The `Call log:` lines from the error |
 | `failingStep` | The innermost failed step, from the failure timeline |
 | `attempts` | Status, duration and error message of every retry |
+| `divergence` | With more than one attempt, one line on the step where each attempt failed, for example `Every attempt failed at step 'checkout › pay'`. Absent when no attempt has a failed step. |
 | `network` | Total request count and every failed request (status ≥ 400 or no response) |
 | `console` | Console errors and warnings, from the failure timeline |
 | `anomaly` | The suspected first anomaly, from the failure timeline |
@@ -1023,7 +1024,7 @@ A cloud key wins over `OLLAMA_*`. When that happens, the reporter prints a warni
 
 #### What the provider receives
 
-- One prompt per failed test: the test name and location, the error message and stack, stdout and stderr, the possible first anomaly, the page snapshot from `error-context.md`, and the test source around the failure. The prompt is capped at 200,000 characters.
+- One prompt per failed test: the test name and location, the error message and stack, stdout and stderr, the possible first anomaly, each attempt's status, duration and first error line with the step where they failed (when the test ran more than once), the page snapshot from `error-context.md`, and the test source around the failure. The prompt is capped at 200,000 characters.
 - One prompt per failure cluster: the cluster's error type, up to five test titles, and the first test's error.
 - One prompt for the suite health summary: run counts, the pass rate trend, cluster error types, and titles of flaky and slow tests.
 

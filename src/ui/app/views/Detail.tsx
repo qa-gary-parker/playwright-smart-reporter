@@ -18,6 +18,7 @@ import {
 import { displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
 import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
+import { alignSteps, divergenceSummary } from '../../../analyzers/attempt-compare';
 import { Lightbox, type MediaItem } from './Lightbox';
 import { Violations } from './Accessibility';
 import { Markdown } from './Markdown';
@@ -93,9 +94,11 @@ function Attempts({ t }: { t: ReportTest }) {
   const failedAttempt = attempts.find((a) => a.status === 'failed' || a.status === 'timedOut');
   const passedAttempt = [...attempts].reverse().find((a) => a.status === 'passed');
   const compare = failedAttempt && passedAttempt ? [failedAttempt, passedAttempt] : undefined;
-  const rows = compare ? Math.max(compare[0].steps.length, compare[1].steps.length) : 0;
+  const rows = useMemo(() => (compare ? alignSteps(compare[0].steps, compare[1].steps) : []), [t]);
+  const summary = useMemo(() => divergenceSummary(attempts), [t]);
   return (
     <div class="attempts">
+      {summary && <p class="attempts__summary">{summary}</p>}
       <ol class="attempts__list">
         {attempts.map((a) => (
           <li class="attempts__item">
@@ -118,25 +121,21 @@ function Attempts({ t }: { t: ReportTest }) {
             <span role="columnheader">Attempt {compare[0].retry + 1} ({statusLabel(compare[0].status as TestStatus)})</span>
             <span role="columnheader">Attempt {compare[1].retry + 1} ({statusLabel(compare[1].status as TestStatus)})</span>
           </div>
-          {Array.from({ length: rows }, (_, i) => {
-            const [a, b] = [compare[0].steps[i], compare[1].steps[i]];
-            const differs = !a || !b || a.title !== b.title || Math.max(a.duration, b.duration) > 2 * Math.max(1, Math.min(a.duration, b.duration));
-            return (
-              <div class="retry-diff__row" role="row" data-differs={differs ? '' : undefined}>
-                {[a, b].map((s) => (
-                  <span role="cell" class="mono">
-                    {s ? (
-                      <>
-                        {s.title} <span class="faint">{formatDuration(s.duration)}</span>
-                      </>
-                    ) : (
-                      <span class="faint">(no step)</span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            );
-          })}
+          {rows.map((r) => (
+            <div class="retry-diff__row" role="row" data-differs={r.differs ? '' : undefined}>
+              {[r.a === undefined ? undefined : compare[0].steps[r.a], r.b === undefined ? undefined : compare[1].steps[r.b]].map((s) => (
+                <span role="cell" class="mono" style={s?.depth ? { paddingLeft: `calc(${s.depth + 1} * var(--space-3))` } : undefined}>
+                  {s ? (
+                    <>
+                      {s.title} <span class="faint">{formatDuration(s.duration)}</span>
+                    </>
+                  ) : (
+                    <span class="faint">(no step)</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>

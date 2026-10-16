@@ -231,6 +231,37 @@ test('the retry comparison appears for a test that failed and then passed, and n
   await expect(page.getByRole('table', { name: 'Steps by attempt' })).toHaveCount(0);
 });
 
+test('the retry comparison pairs steps by title path, so a step only the passing attempt ran marks only that row', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; attempts?: Array<{ duration: number; steps: unknown[] }> }> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        const step = (title: string, duration: number, parent?: number) => ({ title, duration, category: 'test.step', ...(parent !== undefined && { parent, depth: 1 }) });
+        Object.assign(flaky.attempts![0], { duration: 4800, steps: [step('open shop', 500), step('log in', 800), step('checkout', 450), step('pay', 400, 2)] });
+        Object.assign(flaky.attempts![1], { duration: 2300, steps: [step('open shop', 500), step('accept cookies', 100), step('log in', 800), step('checkout', 450), step('pay', 400, 3)] });
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  const rows = page.getByRole('table', { name: 'Steps by attempt' }).getByRole('row').filter({ has: page.getByRole('cell') });
+  const marked = await rows.evaluateAll((rs) => rs.map((r) => [[...r.querySelectorAll('[role=cell]')].map((c) => c.textContent), r.hasAttribute('data-differs')]));
+  expect(marked).toEqual([
+    [['open shop 500ms', 'open shop 500ms'], false],
+    [['(no step)', 'accept cookies 100ms'], true],
+    [['log in 800ms', 'log in 800ms'], false],
+    [['checkout 450ms', 'checkout 450ms'], false],
+    [['pay 400ms', 'pay 400ms'], false],
+  ]);
+  const indents = await rows.evaluateAll((rs) => rs.map((r) => getComputedStyle(r.querySelector('[role=cell]:last-child')!).paddingLeft));
+  expect(indents).toEqual(['12px', '12px', '12px', '12px', '24px']);
+  await expect(page.getByRole('article', { name: 'Test detail' }).locator('.attempts__summary')).toHaveText('Attempt 1 failed after 4.8s; attempt 2 passed in 2.3s');
+});
+
 test('a failed attempt shows its own screenshot and trace in the Attempts section', async ({ page }) => {
   await page.addInitScript(() => {
     let value: unknown;
