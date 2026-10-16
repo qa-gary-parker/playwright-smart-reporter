@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import type {
   SmartReporterOptions,
   TestResultData,
+  AttemptData,
   TestHistory,
   RunComparison,
   StepData,
@@ -263,7 +264,9 @@ class SmartReporter implements Reporter {
 
     // Collect test components
     const steps = this.stepCollector.extractSteps(result);
-    const attachments = this.attachmentCollector.collectAttachments(result);
+    // An attempt Playwright may retry keeps cspSafe screenshots in memory; settleAttemptEvidence writes them if they are kept
+    const mayRetry = result.retry < test.retries && result.status !== test.expectedStatus && result.status !== 'skipped';
+    const attachments = this.attachmentCollector.collectAttachments(result, mayRetry);
     const history = this.historyCollector.getTestHistory(testId);
 
     // Issue #15: Improved tag extraction
@@ -488,14 +491,17 @@ class SmartReporter implements Reporter {
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
     const existingResult = this.resultsMap.get(testId);
-    const attempt = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
+    const attempt: AttemptData = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
     testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
     if (!existingResult || result.retry > existingResult.retry) {
       // This is a newer attempt - replace the previous one
+      if (existingResult) keepAttemptEvidence(existingResult, testData.attempts.find((a) => a.retry === existingResult.retry)!);
       this.resultsMap.set(testId, testData);
     } else {
+      keepAttemptEvidence(testData, attempt);
       existingResult.attempts = testData.attempts;
     }
+    if (!mayRetry) this.settleAttemptEvidence(this.resultsMap.get(testId)!);
 
     // Write live result for real-time dashboard
     this.liveWriter.writeTestResult({
@@ -548,6 +554,9 @@ class SmartReporter implements Reporter {
     // Convert resultsMap to array - this ensures we only have the final attempt for each test
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());
+
+    // A run that stopped before a retry leaves attempts unsettled
+    for (const r of this.results) this.settleAttemptEvidence(r);
 
     // Durations below are Date.now() - startTime. merge-reports calls onBegin at merge time,
     // so start the clock from the run's own duration instead.
@@ -661,30 +670,27 @@ class SmartReporter implements Reporter {
 
     // Copy trace files to traces subdirectory for browser download BEFORE HTML generation
     const tracesDir = path.join(path.dirname(outputPath), 'traces');
-    const traceResults = this.results.filter(r => r.attachments?.traces && r.attachments.traces.length > 0);
-
-    if (traceResults.length > 0) {
-      fs.mkdirSync(tracesDir, { recursive: true });
-
-      for (const result of traceResults) {
-        if (result.attachments && result.attachments.traces) {
-          for (let i = 0; i < result.attachments.traces.length; i++) {
-            const tracePath = result.attachments.traces[i];
-            if (fs.existsSync(tracePath)) {
-              // Sanitize testId to prevent path separator issues
-              const safeTestId = sanitizeFilename(result.testId);
-              const traceFileName = `${safeTestId}-trace-${i}.zip`;
-              const destPath = path.join(tracesDir, traceFileName);
-              try {
-                fs.copyFileSync(tracePath, destPath);
-                // Update the path to relative for HTML
-                result.attachments.traces[i] = `./traces/${traceFileName}`;
-              } catch (err) {
-                console.warn(`⚠️  Could not copy trace ${tracePath}:`, err);
-              }
-            }
-          }
+    const copyTraces = (traces: string[], prefix: string) => {
+      for (let i = 0; i < traces.length; i++) {
+        const tracePath = traces[i];
+        if (!fs.existsSync(tracePath)) continue;
+        const traceFileName = `${prefix}-trace-${i}.zip`;
+        try {
+          fs.mkdirSync(tracesDir, { recursive: true });
+          fs.copyFileSync(tracePath, path.join(tracesDir, traceFileName));
+          // Update the path to relative for HTML
+          traces[i] = `./traces/${traceFileName}`;
+        } catch (err) {
+          console.warn(`⚠️  Could not copy trace ${tracePath}:`, err);
         }
+      }
+    };
+    for (const result of this.results) {
+      // Sanitize testId to prevent path separator issues
+      const safeTestId = sanitizeFilename(result.testId);
+      copyTraces(result.attachments?.traces ?? [], safeTestId);
+      for (const attempt of result.attempts ?? []) {
+        copyTraces(attempt.attachments?.traces ?? [], `${safeTestId}-attempt-${attempt.retry + 1}`);
       }
     }
 
@@ -951,6 +957,23 @@ class SmartReporter implements Reporter {
   // Helper Methods
   // ============================================================================
 
+  // Earlier attempts keep their evidence only when a later attempt passed. A test that failed
+  // every time has the same evidence on its final attempt. Safe to call more than once.
+  private settleAttemptEvidence(r: TestResultData): void {
+    for (const attempt of r.attempts ?? []) {
+      if (r.outcome !== 'flaky') {
+        delete attempt.attachments;
+        delete attempt.tracePath;
+      } else if (attempt.attachments) {
+        this.attachmentCollector.saveInlineScreenshots(attempt.attachments.screenshots);
+      }
+    }
+    if (r.attachments) {
+      this.attachmentCollector.saveInlineScreenshots(r.attachments.screenshots);
+      if (r.screenshot) r.screenshot = r.attachments.screenshots[0];
+    }
+  }
+
   /**
    * Create a unique test ID from test file, title, and project name
    * Issue #26: Include project name for parameterized projects
@@ -984,6 +1007,13 @@ class SmartReporter implements Reporter {
     return legacyIds;
   }
 
+}
+
+// A retried attempt keeps its screenshots, videos and traces; the rest of its result is dropped.
+function keepAttemptEvidence(from: TestResultData, attempt: AttemptData): void {
+  const { screenshots = [], videos = [], traces = [] } = from.attachments ?? {};
+  if (screenshots.length + videos.length + traces.length > 0) attempt.attachments = { screenshots, videos, traces };
+  if (from.tracePath) attempt.tracePath = from.tracePath;
 }
 
 // The describe blocks around a test: its suites below root > project > file.

@@ -104,6 +104,11 @@ function Attempts({ t }: { t: ReportTest }) {
             <span class="faint">{statusLabel(a.status as TestStatus)}</span>
             <span class="mono faint">{formatDuration(a.duration)}</span>
             {a.error && <span class="attempts__error mono">{a.error.split('\n')[0]}</span>}
+            {a.attachments && (
+              <div class="attempts__evidence" role="group" aria-label={`Attempt ${a.retry + 1} attachments`}>
+                <Attachments att={a.attachments} />
+              </div>
+            )}
           </li>
         ))}
       </ol>
@@ -175,15 +180,14 @@ function History({ t }: { t: ReportTest }) {
   );
 }
 
-function Attachments({ t }: { t: ReportTest }) {
-  const att = t.attachments;
+function Attachments({ att }: { att?: Partial<NonNullable<ReportTest['attachments']>> }) {
   const [index, setIndex] = useState<number | null>(null);
   const media: MediaItem[] = useMemo(
     () => [
       ...(att?.screenshots ?? []).map((src, i) => ({ kind: 'image' as const, src: fileHref(src), caption: `Screenshot ${i + 1}` })),
       ...(att?.videos ?? []).map((src, i) => ({ kind: 'video' as const, src: fileHref(src), caption: `Video ${i + 1}` })),
     ],
-    [t.testId],
+    [att],
   );
   const traceViewer = data.value.config.features.traceViewer;
   return (
@@ -383,7 +387,7 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
       )}
       {attachmentCount(t) > 0 && (
         <S title="Attachments" meta={plural(attachmentCount(t), 'file')}>
-          <Attachments t={t} />
+          <Attachments att={t.attachments} />
         </S>
       )}
       {t.history.length > 0 && (

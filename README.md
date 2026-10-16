@@ -90,7 +90,7 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Source | Playwright's code frame at the failing line |
 | Timeline | The causal failure timeline (see [Causal Failure Timeline](#causal-failure-timeline)) |
 | AI analysis | The AI suggestion, or a note that AI is off or has no provider. Copy AI prompt works in both cases. |
-| Attempts | Every attempt with status, duration, and first error line. When an attempt failed and a later one passed, a step-by-step comparison of the two. Rows with a different step, or a duration more than 2x apart, are marked. |
+| Attempts | Every attempt with status, duration, and first error line. For a flaky test, each attempt before the last also shows its own screenshots, videos and traces; the last attempt's are under Attachments. When an attempt failed and a later one passed, a step-by-step comparison of the two. Rows with a different step, or a duration more than 2x apart, are marked. |
 | Steps | Each step with a duration bar. The failing step is marked. |
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
 | Console | Console messages from the trace of the failed attempt |
@@ -1088,6 +1088,8 @@ reporter: [
 ### Inline Viewer
 Click **Open trace** in the test detail header, **Open** on a trace attachment, or a trace tile in the Gallery. The built-in viewer has a film strip, actions panel, before/after screenshots, network waterfall, console messages, and errors.
 
+The reporter copies traces to `traces/` next to the report: `<test id>-trace-<i>.zip` for the last attempt, and, for a flaky test, `<test id>-attempt-<n>-trace-<i>.zip` for each attempt before it (`n` is the attempt number, from 1). In the test id, `/`, `\` and `:` become `__`.
+
 Browsers block the viewer from reading trace files over `file://`. There, the viewer offers **Load from file** and **Copy CLI command** (`npx playwright show-trace`). To open traces with one click, serve the report.
 
 ### Local Server
@@ -1412,6 +1414,7 @@ They use different methodologies — see [Flakiness Detection](#flakiness-detect
 - With `assetMode: 'auto'` (default), data above 32 MB goes to `<name>-data.js`, so the browser does not parse one very large HTML document. See [Report Size and Asset Mode](#report-size-and-asset-mode).
 - The test list renders through a virtual list. The UI tests scroll 10,000 rows.
 - Screenshots are embedded as data URIs. `cspSafe: true` saves them as files instead.
+- Only flaky tests (a later attempt passed) keep the screenshots, videos and traces of their earlier attempts. A test that fails every attempt keeps only its final attempt's evidence.
 - Reduce `maxHistoryRuns` to keep less history in the report.
 
 ## Troubleshooting

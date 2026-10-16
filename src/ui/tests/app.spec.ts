@@ -231,6 +231,27 @@ test('the retry comparison appears for a test that failed and then passed, and n
   await expect(page.getByRole('table', { name: 'Steps by attempt' })).toHaveCount(0);
 });
 
+test('a failed attempt shows its own screenshot and trace in the Attempts section', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; attempts?: Array<{ attachments?: object }> }> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        flaky.attempts![0].attachments = { screenshots: ['data:image/png;base64,iVBORw0KGgo='], videos: [], traces: ['./traces/flaky-attempt-1-trace-0.zip'] };
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  const evidence = page.getByRole('group', { name: 'Attempt 1 attachments' });
+  await expect(evidence.getByRole('button', { name: 'Open Screenshot 1' })).toBeVisible();
+  expect(await evidence.getByRole('link', { name: 'Download' }).getAttribute('href')).toBe('./traces/flaky-attempt-1-trace-0.zip');
+  await expect(page.getByRole('group', { name: /^Attempt \d+ attachments$/ })).toHaveCount(1);
+});
+
 test('views and tabs for features that are off cannot be opened by URL or shortcut', async ({ page }) => {
   await page.goto(url('screen=insights&mode=light&off=gallery,trends,comparison', '#/gallery'));
   await expect(page).toHaveURL(/#\/insights$/);

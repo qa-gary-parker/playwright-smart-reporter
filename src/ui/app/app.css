@@ -940,6 +940,11 @@ a.lines__label {
   white-space: nowrap;
 }
 
+.attempts__evidence {
+  flex-basis: 100%;
+  padding-left: calc(14px + var(--space-3));
+}
+
 .retry-diff {
   overflow: hidden;
   border: 1px solid var(--border);

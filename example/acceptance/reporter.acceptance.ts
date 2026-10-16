@@ -217,6 +217,68 @@ describe('report write failure', () => {
   });
 });
 
+describe('failed attempts', () => {
+  const TRACE = 'attempts.fixtures.ts____fails once with a screenshot-attempt-1-trace-0.zip';
+  const run = (name: string, options: object, grep: string) => {
+    const out = path.join(tmp, name);
+    runSuite(out, options, ['--grep', grep], 'test', { ACCEPTANCE_MATCH: 'attempts.fixtures.ts' });
+    return out;
+  };
+  const cspSafeData = (out: string): ReportData => {
+    const js = fs.readFileSync(path.join(out, 'smart-report-data.js'), 'utf8');
+    return JSON.parse(js.slice('window.__SMART_DATA__='.length, js.lastIndexOf(';')));
+  };
+  const outputFiles = (out: string) =>
+    (fs.readdirSync(out, { recursive: true }) as string[])
+      .filter((f) => !f.startsWith('test-results') && fs.statSync(path.join(out, f)).isFile())
+      .map((f) => f.split(path.sep).join('/'))
+      .sort();
+
+  it('keeps the screenshot and trace of an attempt that failed before the retry passed', () => {
+    const out = run('attempts', {}, 'fails once');
+    const [test] = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).tests;
+
+    expect(test.attempts?.map((a) => a.attachments)).toEqual([
+      { screenshots: ['data:image/png;base64,iVBORw0KGgo='], videos: [], traces: [`./traces/${TRACE}`] },
+      undefined,
+    ]);
+    expect(test.attempts?.[0].tracePath).toBe(path.join(out, 'test-results/attempts.fixtures.ts-fails-once-with-a-screenshot/trace.zip'));
+    expect(test.attachments).toEqual({ screenshots: [], videos: [], traces: [], custom: [] });
+    expect(fs.readdirSync(path.join(out, 'traces'))).toEqual([TRACE]);
+  });
+
+  it('with cspSafe, leaves no screenshot file in the output folder that the report does not link to', () => {
+    const out = run('attempts-csp', { cspSafe: true }, 'fails once');
+    const linked = cspSafeData(out).tests
+      .flatMap((t) => [t.attachments, ...(t.attempts ?? []).map((a) => a.attachments)])
+      .flatMap((a) => (a ? [...a.screenshots, ...a.videos, ...a.traces] : []))
+      .map((p) => path.posix.normalize(p));
+    const files = outputFiles(out);
+
+    expect(files.filter((f) => !linked.includes(f))).toEqual(['pw.json', 'smart-report-data.js', 'smart-report.css', 'smart-report.html', 'smart-report.js', 'test-history.json']);
+    expect(files.filter((f) => linked.includes(f))).toEqual(['smart-report-screenshot-1.png', `traces/${TRACE}`]);
+  });
+
+  it('keeps no evidence on earlier attempts of a test that failed every time, and writes no files for them', () => {
+    const out = run('attempts-all-failed', { cspSafe: true }, 'fails every time');
+    const [test] = cspSafeData(out).tests;
+
+    expect(test.attempts?.map((a) => a.attachments)).toEqual([undefined, undefined]);
+    expect(test.attempts?.map((a) => a.tracePath)).toEqual([undefined, undefined]);
+    expect(test.attachments?.screenshots).toEqual(['smart-report-screenshot-1.png']);
+    expect(outputFiles(out)).toEqual([
+      'pw.json',
+      'smart-report-data.js',
+      'smart-report-screenshot-1.png',
+      'smart-report.css',
+      'smart-report.html',
+      'smart-report.js',
+      'test-history.json',
+      'traces/attempts.fixtures.ts____fails every time with a screenshot-trace-0.zip',
+    ]);
+  });
+});
+
 describe('merge-reports', () => {
   it('reports the duration of the tests, not of the merge', () => {
     const blobs = path.join(tmp, 'blobs');

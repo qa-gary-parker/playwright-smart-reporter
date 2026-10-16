@@ -56,9 +56,10 @@ export class AttachmentCollector {
   /**
    * Collect all attachments from a test result
    * @param result - Playwright TestResult
+   * @param inline - Keep screenshots as data URIs even with cspSafe; saveInlineScreenshots writes them later
    * @returns Attachment data with base64 screenshots (or file paths if cspSafe) and file paths
    */
-  collectAttachments(result: TestResult): AttachmentData {
+  collectAttachments(result: TestResult, inline = false): AttachmentData {
     const attachments: AttachmentData = {
       screenshots: [],
       videos: [],
@@ -77,7 +78,7 @@ export class AttachmentCollector {
 
     for (const screenshot of screenshots) {
       if (screenshot.body) {
-        if (this.options.cspSafe) {
+        if (this.options.cspSafe && !inline) {
           // Save to file instead of base64
           const relativePath = this.saveScreenshotToFile(screenshot.body, screenshot.contentType);
           attachments.screenshots.push(relativePath);
@@ -88,7 +89,7 @@ export class AttachmentCollector {
       } else if (screenshot.path) {
         try {
           const imgBuffer = fs.readFileSync(screenshot.path);
-          if (this.options.cspSafe) {
+          if (this.options.cspSafe && !inline) {
             // Save to file instead of base64
             const relativePath = this.saveScreenshotToFile(imgBuffer, screenshot.contentType);
             attachments.screenshots.push(relativePath);
@@ -146,6 +147,18 @@ export class AttachmentCollector {
     }
 
     return attachments;
+  }
+
+  /**
+   * With cspSafe, write screenshots collected with `inline` to files, in place
+   * @param screenshots - Screenshot list from collectAttachments
+   */
+  saveInlineScreenshots(screenshots: string[]): void {
+    if (!this.options.cspSafe) return;
+    for (let i = 0; i < screenshots.length; i++) {
+      const dataUri = /^data:([^;,]+);base64,(.*)$/.exec(screenshots[i]);
+      if (dataUri) screenshots[i] = this.saveScreenshotToFile(Buffer.from(dataUri[2], 'base64'), dataUri[1]);
+    }
   }
 
   // The report links files relative to itself, so they still resolve when it is served or moved with them.

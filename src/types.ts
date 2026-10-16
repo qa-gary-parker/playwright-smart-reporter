@@ -299,6 +299,9 @@ export interface AttemptData {
   duration: number;
   error?: string;
   steps: StepData[];
+  // Set on attempts before the final one of a flaky test; the final attempt's evidence is on the test itself.
+  attachments?: Pick<AttachmentData, 'screenshots' | 'videos' | 'traces'>;
+  tracePath?: string;
 }
 
 export interface TestResultData {
