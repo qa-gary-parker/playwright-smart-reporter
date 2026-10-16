@@ -111,6 +111,15 @@ describe('grouping', () => {
       expect(groupTests([failed, flaky, passed], by, data).reduce((n, g) => n + g.tests.length, 0)).toBe(3);
     }
   });
+
+  it('groups by suite on the describe blocks, without the file that starts the suite path', () => {
+    const inBlock = t({ testId: 'b', file: 'suite.fixtures.ts', suites: ['suite.fixtures.ts', 'sign in'] });
+    const topLevel = t({ testId: 'l', file: 'suite.fixtures.ts', suites: ['suite.fixtures.ts'] });
+    expect(groupTests([inBlock, topLevel], 'suite', data).map((g) => [g.label, g.tests.map((x) => x.testId)])).toEqual([
+      ['(none)', ['l']],
+      ['sign in', ['b']],
+    ]);
+  });
 });
 
 describe('queues', () => {

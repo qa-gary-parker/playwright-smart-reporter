@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Dialog, FilterToken, Icon, Kbd, StatusGlyph } from '../../components';
-import { displayStatus, isFailing, location, titlePath, type ReportTest } from '../data';
+import { displayStatus, isFailing, location, suiteNames, titlePath, type ReportTest } from '../data';
 import { QUEUES, QUEUE_IDS } from '../queues';
 import type { Route } from '../router';
 import { applyTheme, data, keymapOpen, multiProject, navigate, paletteOpen, route, runTests, summaryOpen, theme } from '../store';
@@ -72,7 +72,7 @@ function buildCommands(query: string): Command[] {
     ['tag', new Set(tests.flatMap((t) => t.tags ?? []))],
     ['project', new Set(tests.map((t) => t.project).filter((p): p is string => !!p))],
     ['file', new Set(tests.map((t) => t.file))],
-    ['suite', new Set(tests.flatMap((t) => t.suites ?? []).filter((x) => !x.includes('.spec.') && !x.includes('.test.')))],
+    ['suite', new Set(tests.flatMap(suiteNames))],
     ['owner', new Set(tests.flatMap((t) => t.owners ?? []))],
     ['grade', new Set(tests.map((t) => t.stabilityScore?.grade).filter((g): g is 'A' | 'B' | 'C' | 'D' | 'F' => !!g))],
     ['signal', new Set(tests.flatMap((t) => t.signals))],

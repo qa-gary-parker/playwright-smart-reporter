@@ -20,10 +20,13 @@ export function isFlaky(t: ReportTest): boolean {
   return displayStatus(t) === 'flaky' || t.signals.includes('flaky');
 }
 
-// Playwright's suite path starts with the file; the row already shows it as file:line.
+// Playwright's suite path starts with the file, which is not a suite name; the row already shows it as file:line.
+export function suiteNames(t: ReportTest): string[] {
+  return (t.suites ?? []).filter((s, i) => !(i === 0 && (s === t.file || t.file.endsWith(s))));
+}
+
 export function titlePath(t: ReportTest, multiProject: boolean): string[] {
-  const suites = (t.suites ?? []).filter((s, i) => !(i === 0 && (s === t.file || t.file.endsWith(s))));
-  return [...(multiProject && t.project ? [t.project] : []), ...suites, t.title];
+  return [...(multiProject && t.project ? [t.project] : []), ...suiteNames(t), t.title];
 }
 
 export function location(t: ReportTest): string {

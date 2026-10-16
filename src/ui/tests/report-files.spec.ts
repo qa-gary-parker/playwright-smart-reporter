@@ -106,3 +106,16 @@ test('the Live view sends its run filter to the server as files and a grep', asy
   // Every condition must hold, in any order: Playwright matches the title with the tags after it.
   await expect.poll(() => bodies).toEqual([{ files: ['checkout.spec.ts'], grep: '^(?=.*(?:@smoke|@critical))(?=.*saved)(?=.*card)' }]);
 });
+
+test('the palette suggests describe blocks as suite filters, not the file that starts each suite path', async ({ page }) => {
+  // Test files that a custom testMatch picks up, named without .spec. or .test.
+  const rename = (s: string) => s.replace('.spec.ts', '.e2e.ts');
+  const data = fixture as unknown as ReportData;
+  const tests = data.tests.map((t) => ({ ...t, file: rename(t.file), suites: t.suites?.map(rename) }));
+  const { outputPath } = await write('suite-names', { assetMode: 'inline' }, { ...data, tests });
+  await page.goto(pathToFileURL(outputPath).href);
+  await expect(page.getByRole('heading', { level: 1, name: 'Insights' })).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+k');
+  await page.getByRole('combobox', { name: 'Search tests, views, filters, and actions' }).fill('suite:');
+  await expect(page.getByRole('option').filter({ hasText: /^suite:/ })).toHaveText(['suite:Search functionality', 'suite:API Documentation']);
+});

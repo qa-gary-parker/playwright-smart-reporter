@@ -122,7 +122,7 @@ The filter bar above the list takes free text and filter tokens. The command pal
 - Quote values that contain spaces: `suite:"saved cards"`.
 - Matching is not case-sensitive.
 
-The **Group** menu groups the list by cluster, file, project, suite, tag, status, grade, owner, or none. Failures groups by cluster by default. The other queues group by file. A test with several tags appears under each tag, and a test with several owners appears under each owner. Keyboard navigation visits each test once.
+The **Group** menu groups the list by cluster, file, project, suite, tag, status, grade, owner, or none. Group by suite uses the `describe` blocks without the file, and tests outside a `describe` block go under `(none)`. Failures groups by cluster by default. The other queues group by file. A test with several tags appears under each tag, and a test with several owners appears under each owner. Keyboard navigation visits each test once.
 
 Every view, filter, grouping, and selected test is in the URL hash, so you can share a link to it:
 
