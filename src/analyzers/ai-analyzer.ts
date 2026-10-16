@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import type { AIConfig, AIProviderName, TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
 import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
 import { createRedactor } from '../agent/redact';
+import { formatPassRate } from '../utils/run-stats';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_TOTAL_MS = 300_000;
@@ -278,8 +279,8 @@ export class AIAnalyzer {
     // Build pass-rate trend from recent history
     const recentRuns = historySummaries.slice(-5);
     const trendLine = recentRuns.length > 0
-      ? recentRuns.map(s => `${s.passRate}%`).join(' → ') + ` → ${stats.passRate}% (current)`
-      : `${stats.passRate}% (no prior history)`;
+      ? recentRuns.map(s => formatPassRate(s.passRate)).join(' → ') + ` → ${formatPassRate(stats.passRate)} (current)`
+      : `${formatPassRate(stats.passRate)} (no prior history)`;
 
     const prompt = this.buildSuiteHealthPrompt(stats, failureClusters, flakyTests, slowTests, retryTests, trendLine);
 
@@ -354,7 +355,7 @@ export class AIAnalyzer {
     }
 
     // Suite health recommendations
-    if (stats.passRate < 90) {
+    if (stats.passRate !== null && stats.passRate < 90) {
       recommendations.push({
         type: 'suite',
         priority: 95,
@@ -596,7 +597,7 @@ Suite Stats:
 - Total: ${stats.total} tests
 - Passed: ${stats.passed}, Failed: ${stats.failed}, Skipped: ${stats.skipped}
 - Flaky: ${stats.flaky}, Slow: ${stats.slow}
-- Pass Rate: ${stats.passRate}%
+- Pass Rate: ${formatPassRate(stats.passRate)}
 - Average Stability: ${stats.averageStability}/100
 
 Pass Rate Trend: ${trendLine}

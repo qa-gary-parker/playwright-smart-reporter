@@ -5,7 +5,7 @@ import { PagerDutyNotifier } from './pagerduty-notifier';
 import { EmailNotifier } from './email-notifier';
 import { CustomWebhookNotifier } from './custom-webhook-notifier';
 import { isFailedTest } from '../utils/flakiness';
-import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
+import { computeRunStats, formatPassRate, runStabilityGrade } from '../utils/run-stats';
 
 interface NotificationContext {
   total: number;
@@ -13,7 +13,7 @@ interface NotificationContext {
   failed: number;
   skipped: number;
   flaky: number;
-  passRate: number;
+  passRate: number | null;
   duration: number;
   grade: string;
   failedTests: string;
@@ -37,7 +37,8 @@ function buildContext(results: TestResultData[], startTime: number): Notificatio
 function evaluateConditions(conditions: NotificationCondition, ctx: NotificationContext, results: TestResultData[], comparison?: RunComparison): boolean {
   if (results.length === 0) return false;
   if (conditions.minFailures !== undefined && ctx.failed < conditions.minFailures) return false;
-  if (conditions.maxPassRate !== undefined && ctx.passRate > conditions.maxPassRate) return false;
+  // A run where every test was skipped has no pass rate, so it cannot be at or below maxPassRate.
+  if (conditions.maxPassRate !== undefined && (ctx.passRate === null || ctx.passRate > conditions.maxPassRate)) return false;
   if (conditions.tags && conditions.tags.length > 0) {
     const hasTagFailure = results.some(r => isFailedTest(r) && r.tags?.some(t => conditions.tags!.includes(t)));
     if (!hasTagFailure) return false;
@@ -59,7 +60,7 @@ function renderTemplate(template: string, ctx: NotificationContext, escape: (val
     .replace(/\{\{failed\}\}/g, String(ctx.failed))
     .replace(/\{\{skipped\}\}/g, String(ctx.skipped))
     .replace(/\{\{flaky\}\}/g, String(ctx.flaky))
-    .replace(/\{\{passRate\}\}/g, String(ctx.passRate))
+    .replace(/\{\{passRate\}\}/g, String(ctx.passRate ?? 'n/a'))
     .replace(/\{\{duration\}\}/g, String(Math.round(ctx.duration / 1000)))
     .replace(/\{\{grade\}\}/g, () => escape(ctx.grade))
     .replace(/\{\{failedTests\}\}/g, () => escape(ctx.failedTests));
@@ -93,7 +94,7 @@ export class NotificationManager {
         // Render message
         const message = config.template
           ? renderTemplate(config.template, ctx)
-          : `Test Run: ${ctx.passed}/${ctx.total} passed (${ctx.passRate}%) — ${ctx.failed} failures` +
+          : `Test Run: ${ctx.passed}/${ctx.total} passed (${formatPassRate(ctx.passRate)}) — ${ctx.failed} failures` +
             (owners ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
 
         // Dispatch to channel

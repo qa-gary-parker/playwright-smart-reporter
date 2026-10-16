@@ -133,6 +133,15 @@ describe('gate CLI (src/bin/gate.ts) flags', () => {
     expect(stdout).toContain('✓ Max flaky rate       0% ≤ 0%');
   });
 
+  it('shows --min-pass-rate as skipped, not passed, when every test was skipped', () => {
+    const skipped = ['s1', 's2'].map((testId): TestResultData => ({ testId, title: testId, file: 'a.spec.ts', status: 'skipped', outcome: 'skipped', duration: 0, retry: 0, steps: [], history: [] }));
+    exportJsonData(skipped, { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'all-skipped');
+
+    const { status, stdout } = runGate(['--input', 'all-skipped-data.json', '--min-pass-rate', '90']);
+    expect(status).toBe(0);
+    expect(stdout).toContain('○ Min pass rate        (skipped — no test ran)');
+  });
+
   it('rejects a flag with a missing or invalid value with a message instead of a crash or a silent pass', () => {
     expect(runGate(['--input'])).toMatchObject({ status: 1, stderr: 'Error: --input needs a value.' });
     expect(runGate(['--input', 'scanned-data.json', '--min-pass-rate', 'abc'])).toMatchObject({ status: 1, stderr: 'Error: --min-pass-rate needs a number (got "abc").' });

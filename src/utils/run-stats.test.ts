@@ -15,7 +15,7 @@ import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
 import { LiveWriter } from '../live/live-writer';
 import { summarizeOwnership } from '../analyzers/ownership';
 
-interface Stats { passed: number; failed: number; skipped: number; flaky: number; passRate: number }
+interface Stats { passed: number; failed: number; skipped: number; flaky: number; passRate: number | null }
 type Field = keyof Stats;
 
 const NOW = 1_700_000_000_000;
@@ -29,9 +29,10 @@ const skip = (id: string) => test({ testId: id, title: id, status: 'skipped', ou
 
 const scenarios: Array<{ name: string; results: TestResultData[]; expected: Stats }> = [
   {
+    // Skipped tests did not run, so they are left out of the pass rate.
     name: '5 passed and 5 skipped',
     results: [...[1, 2, 3, 4, 5].map((i) => pass(`p${i}`)), ...[1, 2, 3, 4, 5].map((i) => skip(`s${i}`))],
-    expected: { passed: 5, failed: 0, skipped: 5, flaky: 0, passRate: 50 },
+    expected: { passed: 5, failed: 0, skipped: 5, flaky: 0, passRate: 100 },
   },
   {
     name: 'a test.fail() test that passed',
@@ -41,7 +42,7 @@ const scenarios: Array<{ name: string; results: TestResultData[]; expected: Stat
   {
     name: 'an interrupted test',
     results: [pass('p'), test({ testId: 'i', title: 'i', status: 'interrupted', outcome: 'skipped' })],
-    expected: { passed: 1, failed: 0, skipped: 1, flaky: 0, passRate: 50 },
+    expected: { passed: 1, failed: 0, skipped: 1, flaky: 0, passRate: 100 },
   },
   {
     // Per-run flaky is "passed on retry"; a flaky history score alone does not count.
@@ -55,7 +56,13 @@ const scenarios: Array<{ name: string; results: TestResultData[]; expected: Stat
   {
     name: 'a failure among passed and skipped tests',
     results: [pass('p1'), pass('p2'), test({ testId: 'f', title: 'f', status: 'failed', outcome: 'unexpected' }), skip('s')],
-    expected: { passed: 2, failed: 1, skipped: 1, flaky: 0, passRate: 50 },
+    expected: { passed: 2, failed: 1, skipped: 1, flaky: 0, passRate: 67 },
+  },
+  {
+    // Nothing ran, so there is no pass rate.
+    name: 'every test skipped',
+    results: [skip('s1'), skip('s2'), skip('s3')],
+    expected: { passed: 0, failed: 0, skipped: 3, flaky: 0, passRate: null },
   },
 ];
 
@@ -96,7 +103,8 @@ const consumers: Record<string, [fields: (e: Stats) => Field[], read: (results: 
   }],
   'quality gates': [() => ['failed', 'passRate'], (results) => {
     const [maxFailures, minPassRate] = new QualityGateEvaluator().evaluate({ maxFailures: 0, minPassRate: 0 }, results).rules;
-    return { failed: Number(maxFailures.actual), passRate: parseFloat(minPassRate.actual) };
+    // A run with no pass rate skips minPassRate. The gate shows 1 decimal place rounded down; the others store whole percents.
+    return { failed: Number(maxFailures.actual), passRate: minPassRate.skipped ? null : Math.round(parseFloat(minPassRate.actual)) };
   }],
   'notification payload': [() => ALL, async (results) => {
     await new NotificationManager([{ channel: 'webhook', config: { url: 'https://hooks.example.com/run' } }]).notify(results, NOW);
@@ -119,12 +127,13 @@ const consumers: Record<string, [fields: (e: Stats) => Field[], read: (results: 
     const lines = pdfLines(generateExecutivePdf({ results, history: emptyHistory(), startTime: NOW }, dir, 'stats'));
     const distribution = lines.indexOf('Test Distribution');
     const flaky = Number(valueBefore(lines, 'Flaky'));
+    const passRate = valueBefore(lines, 'Pass Rate');
     return {
       passed: Number(valueBefore(lines, 'Passed', distribution)) + flaky,
       failed: Number(valueBefore(lines, 'Failed')),
       skipped: Number(valueBefore(lines, 'Skipped', distribution)),
       flaky,
-      passRate: parseFloat(valueBefore(lines, 'Pass Rate')),
+      passRate: passRate === 'n/a' ? null : parseFloat(passRate),
     };
   }],
   'live counters': [() => ['passed', 'failed', 'skipped', 'flaky'], (results) => {

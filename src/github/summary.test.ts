@@ -122,11 +122,18 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('shows the pass rate as n/a when every test was skipped', () => {
+    const skipped = data.tests.filter((t) => t.status === 'skipped');
+    const summary = { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: null };
+    const out = renderSummary({ ...data, tests: skipped, summary, comparison: undefined, qualityGates: undefined }, { workspace: WORKSPACE });
+    expect(out).toContain('| n/a | 0 | 0 | 0 | 1 | 0ms |');
+  });
+
   it('headlines a run where nothing passed or failed by what happened, not as passed', () => {
     const headline = (tests: JsonExportData['tests'], summary: JsonExportData['summary']) =>
       renderSummary({ ...data, tests, summary, comparison: undefined, qualityGates: undefined }, { workspace: WORKSPACE }).split('\n')[2];
     const skipped = data.tests.filter((t) => t.status === 'skipped');
-    expect(headline(skipped, { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: 0 })).toBe('**Skipped:** all 1 tests were skipped.');
+    expect(headline(skipped, { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: null })).toBe('**Skipped:** all 1 tests were skipped.');
     expect(headline([], { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, duration: 0, passRate: 0 })).toBe('**No tests ran.**');
   });
 });

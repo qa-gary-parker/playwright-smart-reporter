@@ -49,7 +49,9 @@ export class HealthDigest {
       };
     }
 
-    const passRateTrend = this.calculatePassRateTrend(inPeriod);
+    // Runs where every test was skipped have no pass rate to trend.
+    const rated = inPeriod.filter((s): s is RunSummary & { passRate: number } => s.passRate !== null);
+    const passRateTrend = rated.length > 0 ? this.calculatePassRateTrend(rated) : null;
     const newFlakyTests = this.findNewFlakyTests(history.tests, periodStart);
     const recoveredTests = this.findRecoveredTests(history.tests, periodStart);
     const performanceTrends = this.findPerformanceTrends(history.tests, periodStart);
@@ -185,7 +187,7 @@ export class HealthDigest {
   }
 
   private calculatePassRateTrend(
-    summaries: RunSummary[],
+    summaries: Array<RunSummary & { passRate: number }>,
   ): { direction: 'up' | 'down' | 'stable'; from: number; to: number } {
     const first = summaries[0];
     const last = summaries[summaries.length - 1];

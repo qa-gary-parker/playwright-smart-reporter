@@ -38,7 +38,8 @@ export interface JsonExportData {
     skipped: number;
     flaky: number;
     duration: number;
-    passRate: number;
+    // Passed out of the tests that ran; null when every test was skipped.
+    passRate: number | null;
     stabilityGrade?: string;
   };
   tests: JsonTestEntry[];

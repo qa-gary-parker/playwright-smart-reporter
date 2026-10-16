@@ -220,6 +220,33 @@ describe('interrupted and not-run tests', () => {
   }, TIMEOUT);
 });
 
+describe('pass rate', () => {
+  const passRates = (out: string) => [
+    reportData(out).summary.passRate,
+    history(out).summaries!.at(-1)!.passRate,
+    JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8')).summary.passRate,
+  ];
+
+  it('leaves skipped tests out of the pass rate in the report, history and JSON', () => {
+    const out = path.join(tmp, 'pass-rate-skipped');
+    runSuite(out, { exportJson: true }, ['--grep', 'first block|skipped when asked'], { ACCEPTANCE_SKIP: '1' });
+
+    expect(playwright(out)).toEqual({ total: 2, passed: 1, failed: 0, skipped: 1, flaky: 0 });
+    expect(passRates(out)).toEqual([100, 100, 100]);
+  }, TIMEOUT);
+
+  it('has no pass rate when every test was skipped, and skips minPassRate instead of failing it', () => {
+    const out = path.join(tmp, 'pass-rate-all-skipped');
+    const run = runSuite(out, { exportJson: true, qualityGates: { minPassRate: 90 } }, ['--grep', 'skipped when asked'], { ACCEPTANCE_SKIP: '1' });
+
+    expect(playwright(out)).toEqual({ total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0 });
+    expect(passRates(out)).toEqual([null, null, null]);
+    expect(reportData(out).gates?.rules).toEqual([{ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true }]);
+    expect(run.output).toContain('○ Min pass rate        (skipped — no test ran)');
+    expect(run.status).toBe(0);
+  }, TIMEOUT);
+});
+
 describe('history', () => {
   it('does not save a run with no tests, so it never becomes the baseline', () => {
     const out = path.join(tmp, 'empty-run');

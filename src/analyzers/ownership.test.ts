@@ -281,7 +281,8 @@ describe('summarizeOwnership', () => {
     expect(summarizeOwnership(tests)).toEqual({
       owners: [
         { owner: '@a', total: 3, failed: 2, flaky: 0, passRate: 33 },
-        { owner: '@b', total: 3, failed: 1, flaky: 1, passRate: 33 },
+        // The skipped test is left out of the pass rate: 1 of 2
+        { owner: '@b', total: 3, failed: 1, flaky: 1, passRate: 50 },
         { owner: '@d', total: 1, failed: 0, flaky: 1, passRate: 100 },
         { owner: '@c', total: 2, failed: 0, flaky: 0, passRate: 100 },
       ],

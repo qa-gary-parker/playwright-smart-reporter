@@ -124,7 +124,7 @@ describe('json-exporter', () => {
       expect(written.summary.failed).toBe(2);
       expect(written.summary.skipped).toBe(1);
       expect(written.summary.flaky).toBe(1);
-      expect(written.summary.passRate).toBe(40); // 2/5 * 100
+      expect(written.summary.passRate).toBe(50); // 2 of the 4 that ran; #3 was skipped
       expect(written.summary.duration).toBeGreaterThanOrEqual(0);
     });
 
@@ -327,7 +327,7 @@ describe('json-exporter', () => {
       expect(written.summary.failed).toBe(0);
       expect(written.summary.skipped).toBe(0);
       expect(written.summary.flaky).toBe(0);
-      expect(written.summary.passRate).toBe(0);
+      expect(written.summary.passRate).toBe(null);
       expect(written.tests).toEqual([]);
     });
 

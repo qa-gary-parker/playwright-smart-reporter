@@ -38,7 +38,8 @@ export interface ReportSummary {
   flaky: number;
   slow: number;
   newTests: number;
-  passRate: number;
+  // Passed out of the tests that ran; null when every test was skipped.
+  passRate: number | null;
   duration: number;
   grades: Record<'A' | 'B' | 'C' | 'D' | 'F', number>;
 }
@@ -100,7 +101,7 @@ export interface ReportData {
   // Phase 7: Flake forecasting
   forecastSummary?: ForecastSummary;
   // Phase 9: Ownership and routing (per-test owners/ownerSource come from TestResultData)
-  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
+  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number | null }> };
   // Phase 10: Accessibility (per-test results ride on ReportTest.a11y)
   a11y?: A11ySummary;
   // Phase 6: Code coverage

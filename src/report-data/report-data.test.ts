@@ -31,7 +31,8 @@ const SKIPPED = result({ testId: 's1', status: 'skipped', outcome: 'skipped' });
 describe('buildReportData', () => {
   it('counts outcomes the way the 2.x report did', () => {
     const data = buildReportData(input([FAILED, FLAKY, EXPECTED_FAIL, SKIPPED, result({ testId: 'p1' })]), 6_000);
-    expect(data.summary).toMatchObject({ total: 5, passed: 3, failed: 1, skipped: 1, flaky: 1, passRate: 60, duration: 5_000 });
+    // The skipped test is left out of the pass rate: 3 of 4.
+    expect(data.summary).toMatchObject({ total: 5, passed: 3, failed: 1, skipped: 1, flaky: 1, passRate: 75, duration: 5_000 });
     expect(data.meta.duration).toBe(5_000);
     expect(data.schemaVersion).toBe(3);
   });

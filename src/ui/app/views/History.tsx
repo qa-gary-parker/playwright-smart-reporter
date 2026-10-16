@@ -1,13 +1,15 @@
 import { GroupHeader, ListRow, Tabs, type TestStatus } from '../../components';
-import { displayStatus, formatDate, formatDuration, location, plural, titlePath, trendStats, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, formatPassRate, location, plural, titlePath, trendStats, type ReportTest } from '../data';
 import type { ComparisonKey } from '../../../report-data/schema';
 import { formatRoute, type HistoryTab } from '../router';
 import { data, multiProject, navigate, testsById } from '../store';
 
-function TrendChart({ title, values, dates, format, tone, onPick }: { title: string; values: number[]; dates: string[]; format: (v: number) => string; tone?: string; onPick?: (i: number) => void }) {
+// A null value (a run with no pass rate) draws no bar and reads "n/a".
+function TrendChart({ title, values, dates, format, tone, onPick }: { title: string; values: Array<number | null>; dates: string[]; format: (v: number) => string; tone?: string; onPick?: (i: number) => void }) {
   const w = 320;
   const h = 96;
-  const max = Math.max(...values, 1);
+  const max = Math.max(...values.map((v) => v ?? 0), 1);
+  const show = (v: number | null) => (v === null ? 'n/a' : format(v));
   const bw = w / Math.max(values.length, 1);
   const y = (v: number) => h - (v / max) * (h - 8);
   const { average, anomalies } = trendStats(values);
@@ -17,11 +19,11 @@ function TrendChart({ title, values, dates, format, tone, onPick }: { title: str
     <figure class="trend">
       <figcaption class="trend__head">
         <span class="trend__title">{title}</span>
-        <span class="trend__value">{values.length ? format(values[values.length - 1]) : '—'}</span>
+        <span class="trend__value">{values.length ? show(values[values.length - 1]) : '—'}</span>
       </figcaption>
-      <svg viewBox={`0 0 ${w} ${h}`} class="trend__svg" role="img" aria-label={`${title}: ${values.map(format).join(', ')}${outliers ? `; ${plural(outliers, 'unusual run')}` : ''}`}>
+      <svg viewBox={`0 0 ${w} ${h}`} class="trend__svg" role="img" aria-label={`${title}: ${values.map(show).join(', ')}${outliers ? `; ${plural(outliers, 'unusual run')}` : ''}`}>
         <line x1="0" x2={w} y1={h - 0.5} y2={h - 0.5} class="trend__axis" />
-        {values.map((v, i) => (
+        {values.map((v, i) => v === null ? null : (
           <rect
             x={i * bw + 2}
             width={Math.max(1, bw - 4)}
@@ -36,7 +38,7 @@ function TrendChart({ title, values, dates, format, tone, onPick }: { title: str
           </rect>
         ))}
         {avgPoints.length > 1 && <polyline class="trend__avg" points={avgPoints.join(' ')} fill="none" />}
-        {anomalies.map((a, i) => (a ? <circle class="trend__anomaly" cx={i * bw + bw / 2} cy={Math.max(4, y(values[i]) - 6)} r="3" /> : null))}
+        {anomalies.map((a, i) => (a ? <circle class="trend__anomaly" cx={i * bw + bw / 2} cy={Math.max(4, y(values[i]!) - 6)} r="3" /> : null))}
       </svg>
       <div class="trend__dates" aria-hidden="true">
         <span>{dates[0]}</span>
@@ -120,8 +122,8 @@ function Compare() {
       <div class="stats">
         <div class="stat">
           <span class="stat__label">Pass rate</span>
-          <span class="stat__value">{cur.passRate}%</span>
-          <span class="stat__sub">{delta(cur.passRate, base.passRate, ' pts')} vs baseline</span>
+          <span class="stat__value">{formatPassRate(cur.passRate)}</span>
+          <span class="stat__sub">{cur.passRate === null || base.passRate === null ? 'n/a' : delta(cur.passRate, base.passRate, ' pts')} vs baseline</span>
         </div>
         <div class="stat">
           <span class="stat__label">Duration</span>

@@ -104,6 +104,35 @@ describe('HealthDigest', () => {
       expect(result.passRateTrend!.to).toBe(96);
     });
 
+    it('trends the pass rate over the runs that have one, leaving out a run where every test was skipped', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {},
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6), passRate: 85 }),
+          createSummary({ runId: 'r2', timestamp: timestamp(3), passRate: 96 }),
+          createSummary({ runId: 'r3', timestamp: timestamp(1), passed: 0, failed: 0, skipped: 10, passRate: null }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.passRateTrend).toEqual({ direction: 'up', from: 85, to: 96 });
+      expect(result.summary).toBe('3 runs analyzed. Pass rate trending up (85% -> 96%).');
+    });
+
+    it('has no pass rate trend when every run in the period skipped every test', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {},
+        summaries: [createSummary({ runId: 'r1', timestamp: timestamp(1), passed: 0, failed: 0, skipped: 10, passRate: null })],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect([result.passRateTrend, result.summary]).toEqual([null, '1 runs analyzed. No pass rate data.']);
+    });
+
     it('detects pass rate trending down', () => {
       const history: TestHistory = {
         runs: [],

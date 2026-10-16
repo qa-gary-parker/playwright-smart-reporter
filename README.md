@@ -184,6 +184,7 @@ Insights is the landing view and holds the run metrics:
 
 - A stats row: failed (with the number of new failures; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
 - An outcome bar: passed, failed, flaky, skipped.
+- The pass rate is the passed tests out of the tests that ran. Skipped tests are left out, so a run with no failures shows 100%. When every test was skipped, the pass rate is `n/a` (`null` in the JSON export and history) and there is no health grade. The report, history, JSON export, PDF, gates and notifications use this same pass rate.
 - Panels: AI summary, Quality gate, Failure clusters, At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
 
 ### History
@@ -696,6 +697,8 @@ reporter: [
 ```
 
 The result shows in the top bar and in the Quality gate panel in Insights, and is logged at the end of the run. A breached gate fails the Playwright run (exit code `1`), even when every test passed.
+
+`minPassRate` uses the pass rate described under [Insights](#insights). When every test was skipped, the rule is skipped, not passed. A notification `maxPassRate` condition does not fire for such a run.
 
 The CLI gate checks a finished run again, for example in a later CI step. It reads the JSON export (`exportJson: true`) and a JSON file with the same rules:
 

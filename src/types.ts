@@ -223,7 +223,8 @@ export interface RunSummary {
   flaky: number;
   slow: number;
   duration: number;
-  passRate: number;
+  // Passed out of the tests that ran; null when every test was skipped.
+  passRate: number | null;
   ciInfo?: CIInfo;  // NEW: CI metadata
   stabilityGrade?: StabilityScore['grade'];
 }
@@ -505,7 +506,7 @@ export interface SuiteStats {
   flaky: number;
   slow: number;
   needsRetry: number;
-  passRate: number;
+  passRate: number | null;
   averageStability: number;
 }
 

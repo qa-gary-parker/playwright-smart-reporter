@@ -1,6 +1,7 @@
 import type { JsonExportData } from '../generators/json-exporter';
 import { ruleLabels } from '../gates/quality-gate-reporter';
 import { formatDuration } from '../utils/formatters';
+import { formatPassRate } from '../utils/run-stats';
 import { failureLocation, isFailure, testLabel } from './annotations';
 
 const LIST_LIMIT = 10;
@@ -44,7 +45,7 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
   out.push('');
   out.push(...table(
     ['Pass rate', 'Passed', 'Failed', 'Flaky', 'Skipped', 'Duration'],
-    [[`${summary.passRate}%`, String(summary.passed), String(summary.failed), String(summary.flaky), String(summary.skipped), formatDuration(summary.duration)]],
+    [[formatPassRate(summary.passRate), String(summary.passed), String(summary.failed), String(summary.flaky), String(summary.skipped), formatDuration(summary.duration)]],
   ));
 
   const gates = data.qualityGates;

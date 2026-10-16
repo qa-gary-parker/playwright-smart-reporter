@@ -652,6 +652,20 @@ describe('QualityGateEvaluator', () => {
       });
     });
 
+    it('leaves skipped tests out of minPassRate: 5 passed and 5 skipped is 100%', () => {
+      const results = [...run(5, 0), ...Array.from({ length: 5 }, () => createTestResult({ status: 'skipped', outcome: 'skipped' }))];
+      expect(rule({ minPassRate: 100 }, results)).toEqual({
+        rule: 'minPassRate', passed: true, actual: '100%', threshold: '≥ 100%',
+      });
+    });
+
+    it('skips minPassRate when every test was skipped, instead of passing it', () => {
+      const results = Array.from({ length: 3 }, () => createTestResult({ status: 'skipped', outcome: 'skipped' }));
+      expect(rule({ minPassRate: 90 }, results)).toEqual({
+        rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true,
+      });
+    });
+
     it('passes minPassRate 29 at exactly 29 of 100', () => {
       expect(rule({ minPassRate: 29 }, run(100, 71))).toEqual({
         rule: 'minPassRate', passed: true, actual: '29%', threshold: '≥ 29%',

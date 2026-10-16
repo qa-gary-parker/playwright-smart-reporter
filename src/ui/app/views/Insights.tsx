@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
+import { displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
@@ -64,8 +64,8 @@ export function Insights() {
         </a>
         <div class="stat">
           <span class="stat__label">Pass rate</span>
-          <span class="stat__value">{s.passRate}%</span>
-          <Sparkline label="Pass rate, recent runs" values={trends.map((r) => r.passRate)} width={88} />
+          <span class="stat__value">{formatPassRate(s.passRate)}</span>
+          <Sparkline label="Pass rate, recent runs" values={trends.flatMap((r) => r.passRate ?? [])} width={88} />
         </div>
         <div class="stat">
           <span class="stat__label">Duration</span>
@@ -86,7 +86,7 @@ export function Insights() {
           <span class="stat__label">Health</span>
           <span class="stat__value">{health.grade}</span>
           <span class="stat__sub">
-            {health.score} · pass {health.pass} · stability {health.stability} · perf {health.perf}
+            {health.score ?? 'n/a'} · pass {health.pass ?? 'n/a'} · stability {health.stability} · perf {health.perf}
           </span>
         </div>
       </div>
@@ -219,7 +219,7 @@ export function Insights() {
                     {o.owner}
                   </a>
                   <span class="lines__value">
-                    {o.failed > 0 && <Count status="failed" value={o.failed} label="" />} {o.passRate}% of {o.total}
+                    {o.failed > 0 && <Count status="failed" value={o.failed} label="" />} {formatPassRate(o.passRate)} of {o.total}
                   </span>
                 </li>
               ))}

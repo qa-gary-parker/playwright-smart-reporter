@@ -97,6 +97,20 @@ describe('NotificationManager', () => {
       expect(urls()).toEqual(['https://hooks.slack.com/50']);
     });
 
+    it('maxPassRate: does not notify when every test was skipped, since there is no pass rate', async () => {
+      const skipped = (testId: string) => createTestResult({ testId, status: 'skipped', outcome: 'skipped' });
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/max-50' }, conditions: { maxPassRate: 50 } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/all' } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/template' }, template: 'pass rate {{passRate}}' },
+      ]).notify([skipped('1'), skipped('2')], NOW);
+
+      expect(requests()).toEqual([
+        slackPost('https://hooks.slack.com/all', 'Test Run: 0/2 passed (n/a) — 0 failures'),
+        slackPost('https://hooks.slack.com/template', 'pass rate n/a'),
+      ]);
+    });
+
     it('tags: only notifies when tagged tests fail', async () => {
       await new NotificationManager([
         { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' }, conditions: { tags: ['@critical'] } },
@@ -180,7 +194,7 @@ describe('NotificationManager', () => {
 
       expect(requests()).toEqual([slackPost(
         'https://hooks.slack.com/test',
-        '4 tests, 2 passed, 1 failed, 1 skipped, 1 flaky, 50% pass rate, 4s, grade B, failures: Failing Test',
+        '4 tests, 2 passed, 1 failed, 1 skipped, 1 flaky, 67% pass rate, 4s, grade B, failures: Failing Test',
       )]);
     });
   });

@@ -16,24 +16,29 @@ export interface RunStats {
   skipped: number;
   /** Passed on retry in this run. A flaky history score does not count here. */
   flaky: number;
-  /** The tests the pass rate is out of. */
+  /** The tests the pass rate is out of: the ones that ran, so skipped tests are left out. */
   rated: number;
-  /** passed / rated; 0 when nothing is rated. */
-  passRatio: number;
-  /** passRatio as a whole percent, as summaries store and show it. */
-  passRate: number;
+  /** passed / rated; null when no test ran. */
+  passRatio: number | null;
+  /** passRatio as a whole percent, as summaries store and show it; null when no test ran. */
+  passRate: number | null;
 }
 
 type Counts = Pick<RunStats, 'total' | 'passed' | 'skipped'>;
 
 function ratedOf(counts: Counts): number {
-  return counts.total;
+  return counts.total - counts.skipped;
 }
 
 /** The pass rate formula, for callers that only have counts (such as merged shard summaries). */
-export function passRateOf(counts: Counts): number {
+export function passRateOf(counts: Counts): number | null {
   const rated = ratedOf(counts);
-  return rated > 0 ? Math.round((counts.passed / rated) * 100) : 0;
+  return rated > 0 ? Math.round((counts.passed / rated) * 100) : null;
+}
+
+/** The pass rate as text: "75%", or "n/a" when no test ran. */
+export function formatPassRate(passRate: number | null): string {
+  return passRate === null ? 'n/a' : `${passRate}%`;
 }
 
 export function computeRunStats(results: Array<Pick<TestResultData, 'status' | 'outcome'>>): RunStats {
@@ -44,7 +49,7 @@ export function computeRunStats(results: Array<Pick<TestResultData, 'status' | '
     failed: results.filter(isFailedTest).length,
     flaky: results.filter(r => r.outcome === 'flaky').length,
     rated,
-    passRatio: rated > 0 ? counts.passed / rated : 0,
+    passRatio: rated > 0 ? counts.passed / rated : null,
     passRate: passRateOf(counts),
   };
 }

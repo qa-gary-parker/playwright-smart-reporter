@@ -3,6 +3,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, RunSummary } from '../types';
+import { passRateOf } from '../utils/run-stats';
 
 interface MergeOptions {
   output?: string;
@@ -164,17 +165,18 @@ function mergeHistories(histories: TestHistory[]): TestHistory {
     }
     const total = prev.total + summary.total;
     const passed = prev.passed + summary.passed;
+    const skipped = prev.skipped + summary.skipped;
     summariesByRunId.set(summary.runId, {
       ...prev,
       timestamp: summary.timestamp < prev.timestamp ? summary.timestamp : prev.timestamp,
       total,
       passed,
       failed: prev.failed + summary.failed,
-      skipped: prev.skipped + summary.skipped,
+      skipped,
       flaky: prev.flaky + summary.flaky,
       slow: prev.slow + summary.slow,
       duration: Math.max(prev.duration, summary.duration),
-      passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
+      passRate: passRateOf({ total, passed, skipped }),
     });
   }
   merged.summaries = [...summariesByRunId.values()];
@@ -377,9 +379,10 @@ async function main(): Promise<void> {
     console.log(`  Total runs: ${merged.runs.length}`);
     if (merged.summaries && merged.summaries.length > 0) {
       console.log(`  Run summaries: ${merged.summaries.length}`);
-      const passRates = merged.summaries.map((s) => s.passRate);
-      const avgPassRate = passRates.reduce((a, b) => a + b, 0) / passRates.length;
-      console.log(`  Average pass rate: ${Math.round(avgPassRate)}%`);
+      // Runs where every test was skipped have no pass rate.
+      const passRates = merged.summaries.flatMap((s) => s.passRate ?? []);
+      const avgPassRate = passRates.length ? `${Math.round(passRates.reduce((a, b) => a + b, 0) / passRates.length)}%` : 'n/a';
+      console.log(`  Average pass rate: ${avgPassRate}`);
     }
 
     process.exit(0);

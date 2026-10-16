@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportTest } from '../../report-data/schema';
-import { csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, titlePath, trendStats } from './data';
+import { csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, suiteHealth, titlePath, trendStats } from './data';
 import { formatQuery, matchesQuery, parseQuery } from './filters';
 import { groupTests } from './grouping';
 import { QUEUES } from './queues';
@@ -190,5 +190,16 @@ describe('trend statistics', () => {
   it('flags nothing on short or flat series', () => {
     expect(trendStats([10, 90, 10, 90]).anomalies).toEqual([false, false, false, false]);
     expect(trendStats([5, 5, 5, 5, 5, 5]).anomalies.every((a) => !a)).toBe(true);
+  });
+
+  it('gives a run where every test was skipped no health grade, instead of an F from a 0% pass rate', () => {
+    expect(suiteHealth({ total: 3, passRate: null, flaky: 0, slow: 0 })).toEqual({ score: null, grade: 'n/a', pass: null, stability: 100, perf: 100 });
+    expect(suiteHealth({ total: 3, passRate: 100, flaky: 0, slow: 0 })).toEqual({ score: 100, grade: 'A', pass: 100, stability: 100, perf: 100 });
+  });
+
+  it('leaves a run with no pass rate (every test skipped) out of the average and the anomalies', () => {
+    const { average, anomalies } = trendStats([90, 92, null, 93, 92, 91, 40, 92]);
+    expect(average).toEqual([null, null, null, null, null, (93 + 92 + 91) / 3, (92 + 91 + 40) / 3, (91 + 40 + 92) / 3]);
+    expect(anomalies).toEqual([false, false, false, false, false, false, true, false]);
   });
 });

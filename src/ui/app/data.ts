@@ -4,6 +4,7 @@ import { computeRunStats } from '../../utils/run-stats';
 import type { TestStatus } from '../components';
 
 export type { ReportData, ReportTest };
+export { formatPassRate } from '../../utils/run-stats';
 
 // Playwright's verdict: a test.fail() test that passed is a failure.
 export const isFailing: (t: ReportTest) => boolean = isFailedTest;
@@ -50,10 +51,11 @@ export function formatDate(iso: string | number, withTime = false): string {
   return d.toLocaleString('en-GB', withTime ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short' });
 }
 
-// Same weights and grade bands as the 2.x suite health gauge.
-export function suiteHealth(s: { total: number; passRate: number; flaky: number; slow: number }) {
+// Same weights and grade bands as the 2.x suite health gauge. With no pass rate (no test ran) there is no grade.
+export function suiteHealth(s: { total: number; passRate: number | null; flaky: number; slow: number }) {
   const stability = s.total > 0 ? Math.max(0, 100 - (s.flaky / s.total) * 200) : 100;
   const perf = s.total > 0 ? Math.max(0, 100 - (s.slow / s.total) * 200) : 100;
+  if (s.passRate === null) return { score: null, grade: 'n/a', pass: null, stability: Math.round(stability), perf: Math.round(perf) };
   const score = Math.round(s.passRate * 0.5 + stability * 0.3 + perf * 0.2);
   const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
   return { score, grade, pass: s.passRate, stability: Math.round(stability), perf: Math.round(perf) };
@@ -77,11 +79,16 @@ export function outcomeCounts(tests: ReportTest[]) {
 }
 
 // Three-run moving average, and runs more than two standard deviations from the mean.
-export function trendStats(values: number[]): { average: Array<number | null>; anomalies: boolean[] } {
-  const average = values.map((_, i) => (i < 2 ? null : (values[i] + values[i - 1] + values[i - 2]) / 3));
-  const mean = values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1);
-  const sd = Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(values.length, 1));
-  const anomalies = values.map((v) => values.length >= 5 && sd > 0 && Math.abs(v - mean) > 2 * sd);
+// A null value (a run with no pass rate) has neither, and is left out of the window and the mean.
+export function trendStats(values: Array<number | null>): { average: Array<number | null>; anomalies: boolean[] } {
+  const average = values.map((_, i) => {
+    const w = values.slice(Math.max(0, i - 2), i + 1);
+    return i < 2 || w.some((v) => v === null) ? null : (w[2]! + w[1]! + w[0]!) / 3;
+  });
+  const known = values.filter((v): v is number => v !== null);
+  const mean = known.reduce((a, b) => a + b, 0) / Math.max(known.length, 1);
+  const sd = Math.sqrt(known.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(known.length, 1));
+  const anomalies = values.map((v) => v !== null && known.length >= 5 && sd > 0 && Math.abs(v - mean) > 2 * sd);
   return { average, anomalies };
 }
 

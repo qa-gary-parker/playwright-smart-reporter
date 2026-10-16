@@ -49,6 +49,17 @@ function rectFill(content: string, rect: string): string | undefined {
   return rgb && '#' + rgb.split(' ').map(v => Math.round(Number(v) * 255).toString(16).padStart(2, '0')).join('');
 }
 
+// Fill colour of each drawn text equal to `text`: the last colour set before it.
+function textColors(content: string, text: string): string[] {
+  const hex = `<${Buffer.from(text, 'latin1').toString('hex')}>`;
+  const colors: string[] = [];
+  for (let at = content.indexOf(hex); at >= 0; at = content.indexOf(hex, at + 1)) {
+    const rgb = [...content.slice(0, at).matchAll(/([\d.]+ [\d.]+ [\d.]+) scn/g)].at(-1)![1];
+    colors.push('#' + rgb.split(' ').map(v => Math.round(Number(v) * 255).toString(16).padStart(2, '0')).join(''));
+  }
+  return colors;
+}
+
 // Segment count of each stroked polyline with 2+ segments: the trend sparklines.
 const sparklines = (content: string) => (content.match(/ m\n(?:[\d.-]+ [\d.-]+ l\n){2,}S\n/g) ?? []).map(p => p.split(' l\n').length - 1);
 
@@ -207,10 +218,10 @@ describe('executive-pdf', () => {
     });
   });
 
-  it('renders an empty run as zero tests on one page', () => {
+  it('renders an empty run as zero tests on one page, with no pass rate', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: [] }), tmpDir));
 
-    expectDrawn(lines, ['0 tests  ·  0% pass rate  ·  5.0s', '0', 'Total Tests', '0%', 'Pass Rate', '0', 'Failed', '0', 'Flaky', '5.0s', 'Duration']);
+    expectDrawn(lines, ['0 tests  ·  n/a pass rate  ·  5.0s', '0', 'Total Tests', 'n/a', 'Pass Rate', '0', 'Failed', '0', 'Flaky', '5.0s', 'Duration']);
     expect(pages(lines)).toEqual(['Page 1']);
   });
 
@@ -263,6 +274,45 @@ describe('executive-pdf', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results }), tmpDir));
     expectDrawn(lines, ['ALL TESTS PASSED', '3 tests  ·  100% pass rate  ·  5.0s', '3', 'Total Tests', '100%', 'Pass Rate', '0', 'Failed', '0', 'Flaky', '5.0s', 'Duration']);
     expect(pages(lines)).toEqual(['Page 1']);
+  });
+
+  it('shows the pass rate in green at 80% or more, from the tests that ran', () => {
+    const results = [
+      createTestResult({ testId: '1', status: 'passed', outcome: 'expected' }),
+      createTestResult({ testId: '2', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const file = generateExecutivePdf(createBasicData({ results }), tmpDir);
+    expectDrawn(pdfLines(file), ['ALL TESTS PASSED', '2 tests  ·  100% pass rate  ·  5.0s', '2', 'Total Tests', '100%', 'Pass Rate']);
+    // The KPI card and the donut centre
+    expect(textColors(contentStreams(file)[0], '100%')).toEqual(['#16a34a', '#16a34a']);
+  });
+
+  it('shows the pass rate as n/a in grey, not 0% in red, when every test was skipped', () => {
+    const results = [
+      createTestResult({ testId: '1', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: '2', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const file = generateExecutivePdf(createBasicData({ results }), tmpDir);
+    const lines = pdfLines(file);
+    expectDrawn(lines, ['2 tests  ·  n/a pass rate  ·  5.0s', '2', 'Total Tests', 'n/a', 'Pass Rate', '0', 'Failed']);
+    expectDrawn(lines, ['Test Distribution', 'n/a', 'pass rate']);
+    expect(textColors(contentStreams(file)[0], 'n/a')).toEqual(['#9ca3af', '#9ca3af']);
+  });
+
+  it('lists a file whose tests were all skipped last in the file breakdown, as n/a', () => {
+    const results = [
+      createTestResult({ testId: '1', file: 'tests/skipped.spec.ts', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: '2', file: 'tests/cart.spec.ts', status: 'passed', outcome: 'expected' }),
+      createTestResult({ testId: '3', file: 'tests/cart.spec.ts', status: 'failed', outcome: 'unexpected', error: 'Boom' }),
+    ];
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ results }), tmpDir));
+    expectDrawn(lines, ['Breakdown by file', '50%', 'tests/cart.spec.ts', 'n/a', 'tests/skipped.spec.ts']);
+    expectDrawn(lines, [
+      'Suite Breakdown',
+      'File', 'Total', 'Passed', 'Failed', 'Flaky', 'Duration', 'Pass Rate',
+      'tests/cart.spec.ts', '2', '1', '1', '0', '2.0s', '50%',
+      'tests/skipped.spec.ts', '1', '0', '0', '0', '1.0s', 'n/a',
+    ]);
   });
 
   it('handles results with failures and AI suggestions', () => {
@@ -340,8 +390,9 @@ describe('executive-pdf', () => {
       createTestResult({ testId: '4', status: 'passed', outcome: 'flaky' }),
     ];
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results }), tmpDir));
-    expectDrawn(lines, ['1 FAILURE DETECTED', '4 tests  ·  50% pass rate  ·  5.0s', '4', 'Total Tests', '50%', 'Pass Rate', '1', 'Failed', '1', 'Flaky']);
-    expectDrawn(lines, ['Test Distribution', '50%', 'pass rate', '1', 'Passed', '1', 'Flaky', '1', 'Failed', '1', 'Skipped']);
+    // 2 of the 3 that ran; the skipped test is left out
+    expectDrawn(lines, ['1 FAILURE DETECTED', '4 tests  ·  67% pass rate  ·  5.0s', '4', 'Total Tests', '67%', 'Pass Rate', '1', 'Failed', '1', 'Flaky']);
+    expectDrawn(lines, ['Test Distribution', '67%', 'pass rate', '1', 'Passed', '1', 'Flaky', '1', 'Failed', '1', 'Skipped']);
   });
 
   it('handles failure clusters without AI suggestion', () => {
@@ -485,7 +536,7 @@ describe('executive-pdf', () => {
     };
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: twoFileRun(), qualityGateResult }), tmpDir));
 
-    expectDrawn(lines, ['QUALITY GATES FAILED', '2/3 rules passed  ·  5 tests  ·  60% pass rate  ·  5.0s']);
+    expectDrawn(lines, ['QUALITY GATES FAILED', '2/3 rules passed  ·  5 tests  ·  75% pass rate  ·  5.0s']);
     expectDrawn(lines, [
       'Quality Gates',
       'Rule', 'Actual', 'Threshold', 'Status',
@@ -511,11 +562,11 @@ describe('executive-pdf', () => {
   it('draws the suite breakdown, worst pass rate first, with a flaky test counted as passed', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: twoFileRun() }), tmpDir));
 
-    expectDrawn(lines, ['Breakdown by file', '33%', 'tests/checkout.spec.ts', '100%', 'tests/cart.spec.ts']);
+    expectDrawn(lines, ['Breakdown by file', '50%', 'tests/checkout.spec.ts', '100%', 'tests/cart.spec.ts']);
     expectDrawn(lines, [
       'Suite Breakdown',
       'File', 'Total', 'Passed', 'Failed', 'Flaky', 'Duration', 'Pass Rate',
-      'tests/checkout.spec.ts', '3', '1', '1', '0', '3.5s', '33%',
+      'tests/checkout.spec.ts', '3', '1', '1', '0', '3.5s', '50%',
       'tests/cart.spec.ts', '2', '1', '0', '1', '2.0s', '100%',
       'Failure Details',
     ]);

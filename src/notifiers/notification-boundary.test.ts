@@ -7,7 +7,7 @@
  *   - minFailures: exactly at threshold (notify) vs one below (no notify)
  *   - maxPassRate: exactly at threshold (notify) vs one above (no notify)
  *   - empty results array: no crash, no notification
- *   - all-skipped results: 0% pass rate, 0 failures — should not notify on minFailures
+ *   - all-skipped results: no pass rate, 0 failures — should not notify on minFailures or maxPassRate
  *   - combined conditions: both minFailures AND maxPassRate must be satisfied
  *   - zero minFailures threshold: always fires (edge: 0 failures still >= 0)
  *   - maxPassRate = 100: only fires when ALL tests pass
@@ -328,7 +328,7 @@ describe('Notification boundary conditions', () => {
 
       expect(errorSpy).not.toHaveBeenCalled();
       expect(SlackNotifier).not.toHaveBeenCalled();
-      expect(mockTeamsSendMessage.mock.calls).toEqual([['Test Run: 0/0 passed (0%) — 0 failures']]);
+      expect(mockTeamsSendMessage.mock.calls).toEqual([['Test Run: 0/0 passed (n/a) — 0 failures']]);
     });
 
     it('does not notify on empty results when minFailures: 1 (0 < 1)', async () => {
@@ -360,7 +360,7 @@ describe('Notification boundary conditions', () => {
 
       await manager.notify([], Date.now());
 
-      expect(mockSendMessage.mock.calls).toEqual([['Test Run: 0/0 passed (0%) — 0 failures']]);
+      expect(mockSendMessage.mock.calls).toEqual([['Test Run: 0/0 passed (n/a) — 0 failures']]);
     });
   });
 
@@ -380,21 +380,18 @@ describe('Notification boundary conditions', () => {
       expect(SlackNotifier).not.toHaveBeenCalled();
     });
 
-    it('all-skipped: pass rate is 0% — notifies when maxPassRate: 50', async () => {
-      // Skipped tests are not counted as passed, so passRate = 0
-      // 0 is NOT > 50, condition passes → notification fires
+    it('all-skipped: there is no pass rate, so maxPassRate: 50 does not notify', async () => {
+      // Skipped tests are left out of the pass rate; with none left the pass rate is null, not 0%
       const { SlackNotifier } = await import('./slack-notifier');
-      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
-        sendMessage: mockSendMessage,
-      } as any));
-      const manager = new NotificationManager([slackConfig({ maxPassRate: 50 })]);
+      const manager = new NotificationManager([
+        slackConfig({ maxPassRate: 50 }),
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/always' } },
+      ]);
 
       const results = Array(10).fill(null).map(() => makeSkipped());
       await manager.notify(results, Date.now());
 
-      expect(SlackNotifier).toHaveBeenCalled();
-      expect(mockSendMessage).toHaveBeenCalledOnce();
+      expect(vi.mocked(SlackNotifier).mock.calls).toEqual([['https://hooks.slack.com/always']]);
     });
 
     it('all-skipped: does not notify when minFailures: 1 AND maxPassRate: 50 combined', async () => {

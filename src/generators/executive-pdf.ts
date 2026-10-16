@@ -13,7 +13,7 @@ import type {
   PdfFontConfig,
 } from '../types';
 import { isFailedTest } from '../utils/flakiness';
-import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
+import { computeRunStats, formatPassRate, runStabilityGrade } from '../utils/run-stats';
 
 export type { PdfFontConfig };
 
@@ -189,7 +189,13 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
-// Run stats per file, worst pass rate first.
+// Pass rate colour: green from 80%, red below, grey when no test ran.
+function passRateColor(passRate: number | null, scheme: PdfColorScheme): string {
+  if (passRate === null) return scheme.accentGray;
+  return passRate >= 80 ? scheme.accentGreenDark : scheme.accentRedDark;
+}
+
+// Run stats per file, worst pass rate first; a file with no test that ran goes last.
 function statsByFile(results: TestResultData[]) {
   const byFile = new Map<string, TestResultData[]>();
   for (const r of results) {
@@ -198,7 +204,7 @@ function statsByFile(results: TestResultData[]) {
   }
   return [...byFile]
     .map(([file, tests]) => ({ file, ...computeRunStats(tests), duration: tests.reduce((sum, t) => sum + t.duration, 0) }))
-    .sort((a, b) => a.passRatio - b.passRatio);
+    .sort((a, b) => (a.passRatio ?? 2) - (b.passRatio ?? 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -481,19 +487,19 @@ function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sche
     accentColor = gatesPassed ? scheme.accentGreen : scheme.accentRed;
     const passedRules = data.qualityGateResult.rules.filter(r => r.passed).length;
     const totalRules = data.qualityGateResult.rules.length;
-    subtitleText = `${passedRules}/${totalRules} rules passed  \u00B7  ${stats.total} tests  \u00B7  ${stats.passRate}% pass rate  \u00B7  ${formatDuration(duration)}`;
+    subtitleText = `${passedRules}/${totalRules} rules passed  \u00B7  ${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   } else if (stats.failed === 0) {
     verdictText = 'ALL TESTS PASSED';
     bgColor = scheme.accentGreenBg;
     textColor = scheme.accentGreenDark;
     accentColor = scheme.accentGreen;
-    subtitleText = `${stats.total} tests  \u00B7  ${stats.passRate}% pass rate  \u00B7  ${formatDuration(duration)}`;
+    subtitleText = `${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   } else {
     verdictText = `${stats.failed} FAILURE${stats.failed === 1 ? '' : 'S'} DETECTED`;
     bgColor = scheme.accentRedBg;
     textColor = scheme.accentRedDark;
     accentColor = scheme.accentRed;
-    subtitleText = `${stats.total} tests  \u00B7  ${stats.passRate}% pass rate  \u00B7  ${formatDuration(duration)}`;
+    subtitleText = `${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   }
 
   doc.save();
@@ -526,7 +532,7 @@ function drawKpiCards(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: P
 
   const metrics = [
     { label: 'Total Tests', value: String(stats.total), accent: scheme.accentBlue },
-    { label: 'Pass Rate', value: `${stats.passRate}%`, accent: stats.passRate >= 80 ? scheme.accentGreenDark : scheme.accentRedDark },
+    { label: 'Pass Rate', value: formatPassRate(stats.passRate), accent: passRateColor(stats.passRate, scheme) },
     { label: 'Failed', value: String(stats.failed), accent: stats.failed === 0 ? scheme.accentGreenDark : scheme.accentRedDark },
     { label: 'Flaky', value: String(stats.flaky), accent: stats.flaky === 0 ? scheme.accentGreenDark : scheme.accentAmber },
     { label: 'Duration', value: formatDuration(duration), accent: scheme.bodyText },
@@ -608,8 +614,8 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
 
   // Center text in donut
   doc.save();
-  doc.font(FONT_BOLD).fontSize(18).fillColor(stats.passRate >= 80 ? scheme.accentGreenDark : scheme.accentRedDark);
-  doc.text(`${stats.passRate}%`, donutCx - 28, donutCy - 12, { width: 56, align: 'center' });
+  doc.font(FONT_BOLD).fontSize(18).fillColor(passRateColor(stats.passRate, scheme));
+  doc.text(formatPassRate(stats.passRate), donutCx - 28, donutCy - 12, { width: 56, align: 'center' });
   doc.font(FONT_REGULAR).fontSize(7).fillColor(scheme.mutedText);
   doc.text('pass rate', donutCx - 28, donutCy + 8, { width: 56, align: 'center' });
   doc.restore();
@@ -664,16 +670,17 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
       doc.save();
       // Mini bar
       const miniBarW = 60;
-      const filledW = (pct / 100) * miniBarW;
+      const filledW = ((pct ?? 0) / 100) * miniBarW;
+      const fill = (pct ?? 0) >= 80 ? scheme.accentGreen : (pct ?? 0) >= 50 ? scheme.accentAmber : scheme.accentRed;
       doc.roundedRect(legendX, ty + 1, miniBarW, 8, 4).fill(scheme.dividerColor);
       if (filledW > 0) {
         doc.save();
         doc.roundedRect(legendX, ty + 1, miniBarW, 8, 4).clip();
-        doc.rect(legendX, ty + 1, filledW, 8).fill(pct >= 80 ? scheme.accentGreen : pct >= 50 ? scheme.accentAmber : scheme.accentRed);
+        doc.rect(legendX, ty + 1, filledW, 8).fill(fill);
         doc.restore();
       }
       doc.font(FONT_REGULAR).fontSize(7).fillColor(scheme.bodyText);
-      doc.text(`${pct}%`, legendX + miniBarW + 6, ty, { width: 28 });
+      doc.text(formatPassRate(pct), legendX + miniBarW + 6, ty, { width: 28 });
       doc.text(truncate(file, 50), legendX + miniBarW + 34, ty, { width: legendW - miniBarW - 34 });
       doc.restore();
       ty += 14;
@@ -785,7 +792,8 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
   const chartH = 60;
 
   const charts = [
-    { label: 'Pass Rate', values: summaries.map(s => s.passRate), color: scheme.accentGreen, suffix: '%' },
+    // Runs where every test was skipped have no pass rate, so the pass rate trend leaves them out.
+    { label: 'Pass Rate', values: summaries.flatMap(s => s.passRate ?? []), color: scheme.accentGreen, suffix: '%' },
     { label: 'Duration', values: summaries.map(s => s.duration), color: scheme.accentBlue, suffix: '' },
     { label: 'Total Tests', values: summaries.map(s => s.total), color: scheme.bodyText, suffix: '' },
     { label: 'Flaky Tests', values: summaries.map(s => s.flaky), color: scheme.accentAmber, suffix: '' },
@@ -798,7 +806,7 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
     const cy = y + row * (chartH + 40);
 
     const chart = charts[i];
-    const latest = chart.values[chart.values.length - 1];
+    const latest = chart.values[chart.values.length - 1] ?? 0;
     const prev = chart.values.length >= 2 ? chart.values[chart.values.length - 2] : latest;
     const diff = latest - prev;
     const diffStr = diff === 0 ? '' : diff > 0 ? ` (+${chart.label === 'Duration' ? formatDuration(diff) : diff + chart.suffix})` : ` (${chart.label === 'Duration' ? '-' + formatDuration(Math.abs(diff)) : diff + chart.suffix})`;
@@ -809,7 +817,7 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
     doc.text(chart.label, cx, cy);
 
     // Latest value
-    const latestStr = chart.label === 'Duration' ? formatDuration(latest) : `${latest}${chart.suffix}`;
+    const latestStr = chart.values.length === 0 ? 'n/a' : chart.label === 'Duration' ? formatDuration(latest) : `${latest}${chart.suffix}`;
     doc.font(FONT_BOLD).fontSize(14).fillColor(chart.color);
     doc.text(latestStr, cx, cy + 12, { width: chartW * 0.5, continued: false });
 
@@ -1085,8 +1093,8 @@ function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sta
 
     // Pass rate with color
     doc.font(FONT_BOLD).fontSize(7);
-    doc.fillColor(pct >= 80 ? scheme.accentGreenDark : pct >= 50 ? scheme.accentAmber : scheme.accentRedDark);
-    doc.text(`${pct}%`, rx, y + 5, { width: colWidths[6] - 8 });
+    doc.fillColor(pct === null ? scheme.accentGray : pct >= 80 ? scheme.accentGreenDark : pct >= 50 ? scheme.accentAmber : scheme.accentRedDark);
+    doc.text(formatPassRate(pct), rx, y + 5, { width: colWidths[6] - 8 });
 
     doc.restore();
     y += rowH;

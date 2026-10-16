@@ -34,9 +34,7 @@ function runSuite(out: string, options: object, args: string[] = []) {
 
 function mergeHistory(name: string, args: string[]): TestHistory {
   const output = path.join(tmp, name);
-  // A copy outside this repo, so it cannot load packages that a real install does not have (such as glob)
-  const bin = path.join(tmp, 'merge-history.js');
-  fs.copyFileSync(MERGE_HISTORY, bin);
+  const bin = path.join(tmp, 'dist/bin/merge-history.js');
   const run = spawnSync(process.execPath, [bin, ...args, '-o', output], { cwd: tmp, encoding: 'utf8' });
   expect(run.stderr).toBe('');
   expect(run.status).toBe(0);
@@ -52,6 +50,8 @@ const shardSummaries = () =>
 beforeAll(() => {
   if (!fs.existsSync(MERGE_HISTORY)) throw new Error('dist/ is missing: run `npm run build` first');
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-merge-history-'));
+  // A copy of dist/ outside this repo, so the bin cannot load packages that a real install does not have (such as glob)
+  fs.cpSync(path.join(ROOT, 'dist'), path.join(tmp, 'dist'), { recursive: true });
   const restored = path.join(tmp, 'restored.json');
   for (const runId of ['ci-1', 'ci-2']) runSuite(path.join(tmp, runId), { historyFile: restored, runId }, ['--grep', GREP]);
   shards = [1, 2].map((n) => {
@@ -74,10 +74,11 @@ describe('merge-history on sharded runs', () => {
 
     const merged = mergeHistory('merged.json', shards);
 
+    // The skipped test is left out of the pass rate: 2 of the 3 that ran
     expect(merged.summaries!.map(counts)).toEqual([
-      ['run-ci-1', 4, 2, 1, 1, 1, 50],
-      ['run-ci-2', 4, 2, 1, 1, 1, 50],
-      ['run-ci-3', 4, 2, 1, 1, 1, 50],
+      ['run-ci-1', 4, 2, 1, 1, 1, 67],
+      ['run-ci-2', 4, 2, 1, 1, 1, 67],
+      ['run-ci-3', 4, 2, 1, 1, 1, 67],
     ]);
     const [shard1, shard2] = shardSummaries();
     expect(merged.summaries![2].duration).toBe(Math.max(shard1.duration, shard2.duration));
