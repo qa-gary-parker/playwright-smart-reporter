@@ -13,42 +13,60 @@ export interface SseHandler {
   stop(): void;
 }
 
+function splitLines(buf: Buffer): string[] {
+  return buf.toString('utf-8').split('\n').filter(l => l.trim());
+}
+
 export function buildSseHandler(jsonlPath: string): SseHandler {
   const clients: Set<SseClient> = new Set();
+  // Byte offset just past the last complete line read. A line still being written is read
+  // again once it ends, so it is sent once and whole; 0x0A never occurs inside a UTF-8 character.
   let lastOffset = 0;
   let watcher: fs.FSWatcher | null = null;
   let dirWatcher: fs.FSWatcher | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-  if (fs.existsSync(jsonlPath)) {
-    lastOffset = fs.statSync(jsonlPath).size;
-  }
-
-  function broadcastNewLines(): void {
-    if (clients.size === 0) return;
-
-    let content: string;
+  function readNewLines(): string[] {
+    let buf: Buffer;
     try {
       const fd = fs.openSync(jsonlPath, 'r');
-      const stat = fs.fstatSync(fd);
-      if (stat.size < lastOffset) {
-        // File was truncated/recreated (e.g. new test run) — reset
-        lastOffset = 0;
-      }
-      if (stat.size <= lastOffset) {
+      try {
+        const size = fs.fstatSync(fd).size;
+        if (size < lastOffset) {
+          // File was truncated/recreated (e.g. new test run) — reset
+          lastOffset = 0;
+        }
+        buf = Buffer.alloc(size - lastOffset);
+        buf = buf.subarray(0, fs.readSync(fd, buf, 0, buf.length, lastOffset));
+      } finally {
         fs.closeSync(fd);
-        return;
       }
-      const buf = Buffer.alloc(stat.size - lastOffset);
-      fs.readSync(fd, buf, 0, buf.length, lastOffset);
-      fs.closeSync(fd);
-      lastOffset = stat.size;
-      content = buf.toString('utf-8');
     } catch {
-      return;
+      return [];
     }
+    const end = buf.lastIndexOf(0x0a);
+    if (end === -1) return [];
+    lastOffset += end + 1;
+    return splitLines(buf.subarray(0, end));
+  }
 
-    const lines = content.split('\n').filter(l => l.trim());
+  function readSentLines(): string[] {
+    try {
+      const fd = fs.openSync(jsonlPath, 'r');
+      try {
+        const buf = Buffer.alloc(lastOffset);
+        return splitLines(buf.subarray(0, fs.readSync(fd, buf, 0, buf.length, 0)));
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  // Reads even with no client connected, so the lines a later client is replayed are not sent again.
+  function broadcastNewLines(): void {
+    const lines = readNewLines();
     for (const line of lines) {
       const message = `data: ${line}\n\n`;
       for (const client of clients) {
@@ -66,15 +84,16 @@ export function buildSseHandler(jsonlPath: string): SseHandler {
     try {
       watcher = fs.watch(jsonlPath, (event) => {
         if (event === 'rename') {
-          // File was replaced — restart watcher
+          // File may have been replaced — restart watcher. macOS also reports some appends as a
+          // rename, so the offset starts over only when the file is gone; a smaller file resets it on read.
           watcher?.close();
           watcher = null;
-          lastOffset = 0;
           if (fs.existsSync(jsonlPath)) {
             startFileWatcher();
             broadcastNewLines();
           } else {
             // File deleted, watch directory for recreation
+            lastOffset = 0;
             startDirWatcher();
           }
           return;
@@ -107,6 +126,8 @@ export function buildSseHandler(jsonlPath: string): SseHandler {
     }
   }
 
+  readNewLines();
+
   // Watch the file if it exists, otherwise watch the parent directory for creation
   if (fs.existsSync(jsonlPath)) {
     startFileWatcher();
@@ -129,18 +150,16 @@ export function buildSseHandler(jsonlPath: string): SseHandler {
 
   return {
     addClient(client: SseClient) {
-      clients.add(client);
-      if (fs.existsSync(jsonlPath)) {
-        try {
-          const content = fs.readFileSync(jsonlPath, 'utf-8');
-          const lines = content.split('\n').filter(l => l.trim());
-          for (const line of lines) {
-            client.write(`data: ${line}\n\n`);
-          }
-        } catch {
-          // ignore
+      // Connected clients get the newest lines first, so the replay below ends where they are.
+      broadcastNewLines();
+      try {
+        for (const line of readSentLines()) {
+          client.write(`data: ${line}\n\n`);
         }
+      } catch {
+        // ignore
       }
+      clients.add(client);
     },
     removeClient(client: SseClient) {
       clients.delete(client);
