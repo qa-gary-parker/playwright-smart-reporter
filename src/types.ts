@@ -185,6 +185,8 @@ export interface SmartReporterOptions {
   exportFailures?: boolean;        // Write redacted <name>-failures.json for coding agents (default: false)
   // Phase 5: CI surface integrations
   exportCtrf?: boolean;            // Write <name>-ctrf.json (Common Test Report Format) alongside HTML
+  // Mask secrets in test text before any report file is written (default: false). patterns adds regular expressions.
+  redact?: boolean | { patterns?: Array<string | RegExp> };
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';

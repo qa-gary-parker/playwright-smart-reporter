@@ -356,3 +356,51 @@ describe('merge-reports', () => {
     expect(meta.runId).toBe(summary.runId);
   });
 });
+
+describe('redact', () => {
+  const TOKEN = 'tok-acceptance-7f3a9c21';
+  const EMAIL = 'qa.user@example.com';
+  const CONTROL = 'control text kept';
+
+  // What each output file of one failed test contains.
+  const outputs = (name: string, redact?: object | boolean) => {
+    const out = path.join(tmp, name);
+    const options = {
+      exportJson: true, exportJunit: true, exportCtrf: true, enableHistoryDrilldown: true,
+      live: { enabled: true, outputFile: path.join(out, 'live.jsonl') },
+      ...(redact === undefined ? {} : { redact }),
+    };
+    runSuite(out, options, [], 'test', { ACCEPTANCE_MATCH: 'redact.fixtures.ts', MY_API_TOKEN: TOKEN });
+    const read = (file: string) => fs.readFileSync(path.join(out, file), 'utf8');
+    const html = read('smart-report.html');
+    const runs = fs.readdirSync(path.join(out, 'history-runs'));
+    expect(runs).toHaveLength(1);
+    const files = {
+      'report data': html.slice(html.indexOf('window.__SMART_DATA__='), html.indexOf(';</script>', html.indexOf('window.__SMART_DATA__='))),
+      aiPrompt: reportData(html).tests[0].aiPrompt ?? '',
+      'smart-report-data.json': read('smart-report-data.json'),
+      'smart-report-junit.xml': read('smart-report-junit.xml'),
+      'smart-report-ctrf.json': read('smart-report-ctrf.json'),
+      'history-runs/<id>.json': read(path.join('history-runs', runs[0])),
+      'live.jsonl': read('live.jsonl'),
+    };
+    return Object.fromEntries(Object.entries(files).map(([file, text]) => [file, {
+      token: text.includes(TOKEN), redacted: text.includes('[REDACTED]'), email: text.includes(EMAIL), control: text.includes(CONTROL),
+    }]));
+  };
+  const everyFile = (found: object) => Object.fromEntries(
+    ['report data', 'aiPrompt', 'smart-report-data.json', 'smart-report-junit.xml', 'smart-report-ctrf.json', 'history-runs/<id>.json', 'live.jsonl'].map((f) => [f, found]),
+  );
+
+  it('leaves the token in every file when redact is not set', () => {
+    expect(outputs('redact-unset')).toEqual(everyFile({ token: true, redacted: false, email: true, control: true }));
+  });
+
+  it('with redact: true, masks the token in every file and keeps text that is not secret', () => {
+    expect(outputs('redact-on', true)).toEqual(everyFile({ token: false, redacted: true, email: true, control: true }));
+  });
+
+  it('with redact.patterns, also masks what the patterns match', () => {
+    expect(outputs('redact-patterns', { patterns: ['[\\w.]+@example\\.com'] })).toEqual(everyFile({ token: false, redacted: true, email: false, control: true }));
+  });
+});

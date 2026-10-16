@@ -128,6 +128,7 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
             "enableStabilityScore": True,
             "enableFailureClustering": True,
             "enableRetryAnalysis": False,
+            "redact": False,
         },
     }
 

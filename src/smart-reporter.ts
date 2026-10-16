@@ -74,6 +74,7 @@ import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlaky
 import { buildRunSummary, computeRunStats } from './utils/run-stats';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
+import { createRedactor, redactTestResult } from './agent/redact';
 import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
@@ -129,9 +130,11 @@ class SmartReporter implements Reporter {
   private ownership = new Map<string, OwnerInfo>();
   private testIds = new Map<string, string>(); // Playwright's test.id -> the id results and history are keyed on
   private allTests: TestCase[] = [];
+  private redact?: (text: string) => string;
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
+    if (options.redact) this.redact = createRedactor(process.env, options.redact === true ? [] : options.redact.patterns).string;
 
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     // Issue #22: Pass filterPwApiSteps option to StepCollector
@@ -484,6 +487,9 @@ class SmartReporter implements Reporter {
         console.warn(`Failed to build AI prompt for "${test.title}":`, err);
       }
     }
+
+    // Before attempts, the live file, history and every export copy these fields
+    if (this.redact) redactTestResult(testData, this.redact);
 
     // Run all analyzers (flakiness, performance, retries, stability)
     this.flakinessAnalyzer.analyze(testData, history);

@@ -915,6 +915,7 @@ reporter: [
     exportJunit: false,
     exportCtrf: false,          // <name>-ctrf.json
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
+    redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
     qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50 }
     branding: {},               // { logo, title, footer, hidePoweredBy }
@@ -1033,7 +1034,7 @@ Limits of redaction:
 
 - Redaction does not remove personal data, page text, or values typed into form fields. The page snapshot records typed values (for example `textbox "Email": jane@example.com`). Keep AI analysis off for suites whose pages show data that must not leave your network, or use a local model.
 - Name matching can also mask values that are not secret. For example, `NEXTAUTH_URL=http://localhost:3000` turns every `http://localhost:3000` in the prompt into `[REDACTED]`.
-- The prompt behind **Copy AI prompt** in the report is not redacted.
+- The prompt behind **Copy AI prompt** in the report is redacted only when `redact` is set (see [Redacting Report Files](#redacting-report-files)).
 
 #### Limits and failure behaviour
 
@@ -1056,6 +1057,45 @@ The reporter writes report data one test at a time. `assetMode` sets where the d
 - The HTML loads the data file with `<script src>`, so the report still opens over `file://`.
 - Keep the data file next to the HTML when you copy, upload, or archive the report. Without it the page shows "report data is missing".
 - Each run logs the data size and location, for example `Report data: 7.0 MB, inline in the HTML`.
+
+### Redacting Report Files
+
+Report files contain error messages, step titles, console messages, page URLs and the **Copy AI prompt** text. Any of these can contain a secret. Set `redact` to mask secrets before the reporter writes a file. It is off by default.
+
+```ts
+reporter: [
+  ['playwright-smart-reporter', {
+    redact: true,
+    // Or add your own regular expressions. A string is the source of a regular expression.
+    // redact: { patterns: ['[\\w.+-]+@example\\.com', /order-\d+/i] },
+  }],
+],
+```
+
+`redact` uses the same rules as the AI prompts (see [What the provider receives](#what-the-provider-receives)): secret environment values, credential pairs, tokens and `key`/`sig`-style query parameters. Each match of a `patterns` entry also becomes `[REDACTED]`.
+
+The reporter redacts these fields of each test when the test ends:
+
+- The error message and stack of every attempt, and the source snippet.
+- Step titles.
+- The **Copy AI prompt** text. It includes stdout and stderr.
+- The failure timeline: step titles, request URLs, console messages and the first-anomaly summary.
+- Network log URLs.
+
+Every output is built from these fields. So the HTML report, the JSON, JUnit and CTRF exports, the PDF, `test-history.json`, the `history-runs/` snapshots, the failure bundle, the live results file and the AI prompts get the redacted text.
+
+These are not redacted:
+
+- Trace zips, screenshots, videos and other attachments, including base64 attachments in the report.
+- Test titles, test ids, file paths and annotations.
+- Network request bodies and accessibility results.
+- Files and history snapshots that earlier runs wrote without `redact`.
+
+Limits:
+
+- Redaction does not remove personal data, page text or typed values, unless one of your `patterns` matches them.
+- Name matching can also mask values that are not secret. For example, `NEXTAUTH_URL=http://localhost:3000` turns every `http://localhost:3000` in the report into `[REDACTED]`.
+- Environment values come from the process that runs the reporter. With `merge-reports`, set the variables in the merge job.
 
 ## Stability Grades
 
