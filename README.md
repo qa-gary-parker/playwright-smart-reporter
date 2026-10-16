@@ -539,7 +539,7 @@ The bundle is made to be sent to a third-party model, so the reporter redacts it
 - Header values are replaced with `[REDACTED]` for `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`, and any header whose name contains `cookie`, `token`, `secret`, `password`, `session`, `signature`, `credential`, or `api-key`, or has an `auth` segment (for example `X-Auth-User`).
 - These patterns are replaced in every string: JWTs, `sk-` and `sk-ant-` keys, AWS access key IDs, GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), Slack tokens (`xoxb-`, `xoxp-`, ...), bearer tokens, private key blocks, `password=`/`secret=`/`token=`-style pairs, passwords in URLs (`scheme://user:password@`), and `key`/`sig`/`code`/`jwt` query parameters.
 - The value of each environment variable whose name contains `token`, `secret`, `password`, `api_key`, `access_key`, `private_key`, `auth`, `session`, `cookie`, `credential`, `webhook`, `dsn`, or `signature` is replaced wherever it appears (values of 8 characters or more).
-- The AI prompt, which carries an environment snapshot, is never copied.
+- The AI prompt is never copied.
 
 Environment values are redacted from the environment of the process that builds the bundle. Use `exportFailures: true` so that the reporter builds the bundle in the test process.
 
@@ -977,6 +977,23 @@ The first match wins:
 5. `OLLAMA_HOST` or `OLLAMA_MODEL`
 
 A cloud key wins over `OLLAMA_*`. When that happens, the reporter prints a warning. Set `ai: { provider: 'ollama' }` to use the local model. Each run prints the provider and model it uses, for example `Analyzing 3 failure(s) with AI (ollama, llama3.2)...`. The report data records the same values in `ai.provider` and `ai.model`, and the AI analysis section shows the model.
+
+#### What the provider receives
+
+- One prompt per failed test: the test name and location, the error message and stack, stdout and stderr, the possible first anomaly, the page snapshot from `error-context.md`, and the test source around the failure. The prompt is capped at 200,000 characters.
+- One prompt per failure cluster: the cluster's error type, up to five test titles, and the first test's error.
+- One prompt for the suite health summary: run counts, the pass rate trend, cluster error types, and titles of flaky and slow tests.
+
+The reporter redacts every prompt before it sends it, for every provider:
+
+- The value of each environment variable whose name contains `token`, `secret`, `password`, `api_key`, `access_key`, `private_key`, `auth`, `session`, `cookie`, `credential`, `webhook`, `dsn`, or `signature`, or ends in `_pass`, `_pwd`, `_key`, or `_pat`, is replaced wherever it appears (values of 8 characters or more).
+- `password=`/`secret=`/`token=`/`api_key=`-style pairs, `Authorization` and `Cookie` values, bearer tokens, JWTs, `sk-` keys, AWS, GitHub, Slack, Stripe and GitLab tokens, private key blocks, passwords in URLs, and `key`/`sig`/`token`/`auth`-style query parameters are replaced.
+
+Limits of redaction:
+
+- Redaction does not remove personal data, page text, or values typed into form fields. The page snapshot records typed values (for example `textbox "Email": jane@example.com`). Keep AI analysis off for suites whose pages show data that must not leave your network, or use a local model.
+- Name matching can also mask values that are not secret. For example, `NEXTAUTH_URL=http://localhost:3000` turns every `http://localhost:3000` in the prompt into `[REDACTED]`.
+- The prompt behind **Copy AI prompt** in the report is not redacted.
 
 #### Limits and failure behaviour
 

@@ -638,6 +638,64 @@ describe('AIAnalyzer', () => {
     });
   });
 
+  describe('prompt redaction (issue #56)', () => {
+    const ENV = { OPENAI_API_KEY: 'openai-key', MY_TOKEN: 'tokenvalue-12345678' };
+    const LEAKY_ERROR = 'Error: api_key=abcd1234efgh tokenvalue-12345678';
+    const sentPrompt = () => JSON.parse(mockFetch.mock.calls[0][1].body).messages[0].content;
+
+    it('redacts the failure prompt before it is sent', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockOpenAIResponse('suggestion'));
+
+      await new AIAnalyzer(undefined, ENV).analyzeFailed([createTestResult({ status: 'failed', error: LEAKY_ERROR })]);
+
+      expect(sentPrompt()).toBe(`Analyze this Playwright test failure and suggest a fix. Be concise (2-3 sentences max).
+
+Test: Test 1
+File: test.spec.ts
+Error:
+Error: api_key=[REDACTED] [REDACTED]
+
+Provide a brief, actionable suggestion to fix this failure.`);
+    });
+
+    it('redacts the example error in the cluster prompt', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce(mockOpenAIResponse('suggestion'));
+
+      await new AIAnalyzer(undefined, ENV).analyzeClusters([
+        createFailureCluster({ tests: [createTestResult({ status: 'failed', error: LEAKY_ERROR })] }),
+      ]);
+
+      expect(sentPrompt()).toBe(`Analyze this group of similar test failures and suggest a fix. Be concise (2-3 sentences max).
+
+Error Type: Timeout Error
+Number of Affected Tests: 1
+Example Tests:
+- Test 1
+
+Example Error:
+Error: api_key=[REDACTED] [REDACTED]
+
+Provide a brief, actionable suggestion to fix these failures.`);
+    });
+
+    it('redacts the aiPrompt piped to the Claude CLI', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const child = makeFakeChild();
+      mockSpawn.mockImplementationOnce(() => {
+        queueMicrotask(() => child.emit('close', 0));
+        return child;
+      });
+
+      await new AIAnalyzer(undefined, { CLAUDE_CODE_OAUTH_TOKEN: 'oauth-123', MY_TOKEN: 'tokenvalue-12345678' }).analyzeFailed([
+        createTestResult({ status: 'failed', aiPrompt: '# Error details\n\nlogin password=hunter2 failed with tokenvalue-12345678' }),
+      ]);
+
+      expect(child.stdin.write.mock.calls).toEqual([['# Error details\n\nlogin password=[REDACTED] failed with [REDACTED]']]);
+    });
+  });
+
   describe('generateRecommendations', () => {
     it('recommends fixing consistently failing tests separately from flaky ones', () => {
       const analyzer = new AIAnalyzer();

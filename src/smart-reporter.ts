@@ -464,7 +464,7 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
+    // Build Playwright-style prompt for AI analysis and Copy AI prompt (no binaries)
     if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
       try {
         testData.aiPrompt = buildPlaywrightStyleAiPrompt({

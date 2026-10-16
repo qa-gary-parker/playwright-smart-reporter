@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import type { AIConfig, AIProviderName, TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
 import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
+import { createRedactor } from '../agent/redact';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_TOTAL_MS = 300_000;
@@ -161,6 +162,7 @@ const secs = (ms: number) => `${+(ms / 1000).toFixed(1)}s`;
  * subscription via CLAUDE_CODE_OAUTH_TOKEN and the Claude Code CLI, or run a local model
  * through Ollama or any OpenAI-compatible endpoint. See resolveAIProvider for precedence.
  * An unreachable or slow provider skips the remaining analysis with one warning; it never fails the run.
+ * Every prompt is redacted (secret env values, credential pairs, tokens) before it is sent.
  */
 export class AIAnalyzer {
   private provider?: ResolvedAIProvider;
@@ -170,8 +172,10 @@ export class AIAnalyzer {
   private deadline?: number;
   private skipReason?: string;
   private cliUnavailable = false;
+  private redact: (text: string) => string;
 
   constructor(config?: AIConfig, env: NodeJS.ProcessEnv = process.env) {
+    this.redact = createRedactor(env).string;
     this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxTotalMs = config?.maxTotalMs ?? DEFAULT_MAX_TOTAL_MS;
     let resolution: AIProviderResolution;
@@ -378,10 +382,11 @@ export class AIAnalyzer {
     return recommendations.sort((a, b) => b.priority - a.priority);
   }
 
-  private async callAI(prompt: string): Promise<string> {
+  private async callAI(rawPrompt: string): Promise<string> {
     const p = this.provider;
     if (!p) return 'AI analysis not available';
     if (this.skipReason) throw new AISkippedError(this.skipReason);
+    const prompt = this.redact(rawPrompt);
 
     const capReason = `the ${secs(this.maxTotalMs)} total analysis cap (ai.maxTotalMs) was reached; remaining items were not analyzed`;
     this.deadline ??= Date.now() + this.maxTotalMs;
