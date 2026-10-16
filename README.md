@@ -206,7 +206,7 @@ Tabs filter by All, Screenshots, Videos, and Traces, with counts. Screenshots an
 
 ### Live
 
-Live shows the progress of a running suite: elapsed time, a progress bar, counters, and a feed of failures. Turn on `live: { enabled: true }` and serve the report with `npx playwright-smart-reporter-serve --live`. Add `--run-command "npx playwright test"` to get the Run and Cancel buttons and an optional filter for the run.
+Live shows the progress of a running suite: elapsed time, a progress bar, counters, and a feed of failures. Turn on `live: { enabled: true }` and serve the report with `npx playwright-smart-reporter-serve --live`. Add `--run-command "npx playwright test"` to get the Run and Cancel buttons and an optional filter for the run. Cancel, or Ctrl+C in the terminal that runs serve, stops the run and every process it started, on Windows too.
 
 ### Themes
 
@@ -1096,7 +1096,7 @@ Browsers block the viewer from reading trace files over `file://`. There, the vi
 ```bash
 npx playwright-smart-reporter-serve smart-report.html
 ```
-Serves the report locally with full trace viewer support — no `file://` CORS issues.
+Serves the report locally with full trace viewer support — no `file://` CORS issues. It opens the report in your default browser; add `--no-open` to turn that off.
 
 ### CLI Viewer
 ```bash
