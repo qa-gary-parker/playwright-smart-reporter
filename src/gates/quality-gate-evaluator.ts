@@ -12,6 +12,19 @@ import { isFailedTest, isPassedTest } from '../utils/flakiness';
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
 
+// Sign of (count/total*100 - threshold), in integers so boundaries are exact.
+// The threshold is scaled by its own decimal places, so 99.4 compares as 994/10.
+function compareRate(count: number, total: number, threshold: number): number {
+  const scale = 10 ** (String(threshold).split('.')[1]?.length ?? 0);
+  return count * 100 * scale - Math.round(threshold * scale) * total;
+}
+
+// Whole number when exact, otherwise 1 decimal place rounded towards the failing side.
+function formatRate(count: number, total: number, round: (n: number) => number): string {
+  if ((count * 100) % total === 0) return `${(count * 100) / total}%`;
+  return `${(round((count * 1000) / total) / 10).toFixed(1)}%`;
+}
+
 export class QualityGateEvaluator {
   evaluate(
     config: QualityGateConfig,
@@ -83,12 +96,11 @@ export class QualityGateEvaluator {
     }
 
     const passed = results.filter(isPassedTest).length;
-    const rate = Math.round((passed / total) * 100);
 
     return {
       rule: 'minPassRate',
-      passed: rate >= threshold,
-      actual: `${rate}%`,
+      passed: compareRate(passed, total, threshold) >= 0,
+      actual: formatRate(passed, total, Math.floor),
       threshold: `≥ ${threshold}%`,
     };
   }
@@ -105,12 +117,11 @@ export class QualityGateEvaluator {
     }
 
     const flaky = results.filter(r => r.outcome === 'flaky').length;
-    const rate = Math.round((flaky / total) * 100);
 
     return {
       rule: 'maxFlakyRate',
-      passed: rate <= threshold,
-      actual: `${rate}%`,
+      passed: compareRate(flaky, total, threshold) <= 0,
+      actual: formatRate(flaky, total, Math.ceil),
       threshold: `≤ ${threshold}%`,
     };
   }

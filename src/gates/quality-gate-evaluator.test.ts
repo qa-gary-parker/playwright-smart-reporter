@@ -618,8 +618,65 @@ describe('QualityGateEvaluator', () => {
       const result = evaluator.evaluate({ minPassRate: 34 }, results);
       const rule = result.rules.find(r => r.rule === 'minPassRate');
       expect(rule?.passed).toBe(false);
-      // 33% < 34%
-      expect(rule?.actual).toBe('33%');
+      expect(rule?.actual).toBe('33.3%');
+    });
+  });
+
+  // ── Threshold boundaries (#47) ──────────────────────────────────────
+
+  describe('threshold boundaries', () => {
+    const failedTest = createTestResult({ status: 'failed', outcome: 'unexpected' });
+    const flakyTest = createTestResult({ status: 'passed', outcome: 'flaky' });
+    const passedTest = createTestResult({ status: 'passed', outcome: 'expected' });
+    const pool = (test: TestResultData) => new Array<TestResultData>(1000).fill(test);
+    const [failedPool, flakyPool, passedPool] = [pool(failedTest), pool(flakyTest), pool(passedTest)];
+    const run = (total: number, failed: number, flaky = 0): TestResultData[] =>
+      failedPool.slice(0, failed).concat(flakyPool.slice(0, flaky), passedPool.slice(0, total - failed - flaky));
+    const rule = (config: QualityGateConfig, results: TestResultData[]) => evaluator.evaluate(config, results).rules[0];
+
+    it('fails minPassRate 100 when 1 of 300 tests fails, and shows the rate rounded down', () => {
+      expect(rule({ minPassRate: 100 }, run(300, 1))).toEqual({
+        rule: 'minPassRate', passed: false, actual: '99.6%', threshold: '≥ 100%',
+      });
+    });
+
+    it('fails maxFlakyRate 0 when 1 of 300 tests is flaky, and shows the rate rounded up', () => {
+      expect(rule({ maxFlakyRate: 0 }, run(300, 0, 1))).toEqual({
+        rule: 'maxFlakyRate', passed: false, actual: '0.4%', threshold: '≤ 0%',
+      });
+    });
+
+    it('passes a fractional minPassRate that the run meets exactly', () => {
+      expect(rule({ minPassRate: 99.4 }, run(500, 3))).toEqual({
+        rule: 'minPassRate', passed: true, actual: '99.4%', threshold: '≥ 99.4%',
+      });
+    });
+
+    it('passes minPassRate 29 at exactly 29 of 100', () => {
+      expect(rule({ minPassRate: 29 }, run(100, 71))).toEqual({
+        rule: 'minPassRate', passed: true, actual: '29%', threshold: '≥ 29%',
+      });
+    });
+
+    it('puts every minPassRate and maxFlakyRate boundary at the exact count for up to 1000 tests', () => {
+      const wrong: string[] = [];
+      for (let total = 1; total <= 1000; total++) {
+        for (let threshold = 0; threshold <= 100; threshold++) {
+          // Smallest passing count with passed/total >= threshold%, and largest flaky count with flaky/total <= threshold%
+          const minPassed = Math.ceil((threshold * total) / 100);
+          const maxFlaky = Math.floor((threshold * total) / 100);
+          const checks: Array<[QualityGateConfig, TestResultData[], boolean]> = [
+            [{ minPassRate: threshold }, run(total, total - minPassed), true],
+            [{ maxFlakyRate: threshold }, run(total, 0, maxFlaky), true],
+          ];
+          if (minPassed > 0) checks.push([{ minPassRate: threshold }, run(total, total - minPassed + 1), false]);
+          if (maxFlaky < total) checks.push([{ maxFlakyRate: threshold }, run(total, 0, maxFlaky + 1), false]);
+          for (const [config, results, expected] of checks) {
+            if (rule(config, results).passed !== expected) wrong.push(`${JSON.stringify(config)} total=${total}`);
+          }
+        }
+      }
+      expect({ wrong: wrong.length, first: wrong.slice(0, 3) }).toEqual({ wrong: 0, first: [] });
     });
   });
 
