@@ -28,6 +28,9 @@ function createHistoryEntry(
   };
 }
 
+// The fewest passing runs in history that a trend is reported from (5 with this run).
+const passes = (duration: number) => Array.from({ length: 4 }, () => createHistoryEntry(duration));
+
 describe('PerformanceAnalyzer', () => {
   describe('with default threshold (20%)', () => {
     const analyzer = new PerformanceAnalyzer();
@@ -61,10 +64,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('marks stable performance (within threshold)', () => {
         const test = createTestResult({ duration: 1100 }); // 10% slower
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -74,10 +74,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('marks slower tests (above threshold)', () => {
         const test = createTestResult({ duration: 1500 }); // 50% slower
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -88,10 +85,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('marks faster tests (below negative threshold)', () => {
         const test = createTestResult({ duration: 500 }); // 50% faster
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -102,7 +96,7 @@ describe('PerformanceAnalyzer', () => {
       it('excludes skipped runs from calculations', () => {
         const test = createTestResult({ duration: 1000 });
         const history = [
-          createHistoryEntry(2000), // real
+          ...passes(2000),
           createHistoryEntry(5000, { skipped: true }), // skipped - ignored
         ];
 
@@ -115,8 +109,7 @@ describe('PerformanceAnalyzer', () => {
       it('takes the baseline from passing runs only, so a slow failure does not hide a regression', () => {
         const test = createTestResult({ duration: 5000 });
         const history = [
-          createHistoryEntry(2000),
-          createHistoryEntry(2000),
+          ...passes(2000),
           createHistoryEntry(30000, { passed: false }),
         ];
 
@@ -160,12 +153,12 @@ describe('PerformanceAnalyzer', () => {
 
       it('does not count a short test as slower or faster when the change is under 250ms', () => {
         const slower = createTestResult({ duration: 155 }); // 63% slower, but only 60ms
-        analyzer.analyze(slower, [createHistoryEntry(95), createHistoryEntry(95)]);
+        analyzer.analyze(slower, passes(95));
         expect(slower.performanceTrend).toBe('→ Stable');
         expect(slower.performanceMetrics?.isRegression).toBe(false);
 
         const faster = createTestResult({ duration: 300 }); // 40% faster, but only 200ms
-        analyzer.analyze(faster, [createHistoryEntry(500)]);
+        analyzer.analyze(faster, passes(500));
         expect(faster.performanceTrend).toBe('→ Stable');
         expect(faster.performanceMetrics?.isImprovement).toBe(false);
       });
@@ -179,9 +172,16 @@ describe('PerformanceAnalyzer', () => {
 
       it('counts a test that is both 20% and 250ms slower', () => {
         const test = createTestResult({ duration: 1250 });
-        analyzer.analyze(test, [createHistoryEntry(1000)]);
+        analyzer.analyze(test, passes(1000));
         expect(test.performanceTrend).toBe('↑ 25% slower');
         expect(test.performanceMetrics?.isRegression).toBe(true);
+      });
+
+      it('reports insufficient history with fewer than 4 passing runs, and no change', () => {
+        const test = createTestResult({ duration: 2500 });
+        analyzer.analyze(test, [createHistoryEntry(1000), createHistoryEntry(1000), createHistoryEntry(1000), createHistoryEntry(9000, { passed: false })]);
+
+        expect([test.performanceTrend, test.averageDuration, test.performanceMetrics]).toEqual(['→ Insufficient history', 1000, undefined]);
       });
 
       it('does not compare the duration of a test that did not pass', () => {
@@ -196,10 +196,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('calculates performance metrics correctly', () => {
         const test = createTestResult({ duration: 1200 });
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -214,7 +211,7 @@ describe('PerformanceAnalyzer', () => {
     describe('severity calculation', () => {
       it('classifies low severity (under 25%)', () => {
         const test = createTestResult({ duration: 1200 }); // 20% slower
-        const history = [createHistoryEntry(1000)];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -223,7 +220,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('classifies medium severity (25-50%)', () => {
         const test = createTestResult({ duration: 1350 }); // 35% slower
-        const history = [createHistoryEntry(1000)];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -232,7 +229,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('classifies high severity (over 50%)', () => {
         const test = createTestResult({ duration: 1600 }); // 60% slower
-        const history = [createHistoryEntry(1000)];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -288,7 +285,7 @@ describe('PerformanceAnalyzer', () => {
     it('uses custom threshold for analysis', () => {
       const analyzer = new PerformanceAnalyzer(0.5); // 50% threshold
       const test = createTestResult({ duration: 1400 }); // 40% slower
-      const history = [createHistoryEntry(1000)];
+      const history = passes(1000);
 
       analyzer.analyze(test, history);
 

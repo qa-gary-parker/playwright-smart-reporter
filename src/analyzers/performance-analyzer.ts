@@ -1,5 +1,5 @@
 import type { TestResultData, TestHistoryEntry, PerformanceMetrics } from '../types';
-import { median } from '../utils/stats';
+import { MIN_SAMPLE_RUNS, median } from '../utils/stats';
 
 // A change also has to be this many ms, so jitter in short tests is not a trend.
 export const MIN_DURATION_CHANGE_MS = 250;
@@ -48,6 +48,12 @@ export class PerformanceAnalyzer {
     // A failed run's duration is mostly time spent waiting on the failure, not a speed change.
     if (test.status !== 'passed') {
       test.performanceTrend = '→ Not compared';
+      return;
+    }
+
+    // MIN_SAMPLE_RUNS counts this run, so history needs one passing run fewer.
+    if (relevantHistory.length < MIN_SAMPLE_RUNS - 1) {
+      test.performanceTrend = '→ Insufficient history';
       return;
     }
 

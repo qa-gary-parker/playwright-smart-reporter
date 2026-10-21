@@ -62,7 +62,7 @@ The report is a single-page app. The rail on the left holds the queues and views
 |---|---|
 | Failures | Tests that failed this run, grouped by failure cluster. CI links to a failed run open here. |
 | Flaky | Tests that passed on retry this run, or that history marks as flaky |
-| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than the median of their passing runs in history, or than the previous run |
+| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than the median of their passing runs in history, or than the previous run. The median needs at least 4 passing runs; with fewer, the trend is `→ Insufficient history`. |
 | Quarantined | Tests in the quarantine file |
 | All tests | Every test, grouped by file |
 | Insights | The landing view: run metrics, a Failed card that opens Failures, and summary panels |
@@ -95,7 +95,7 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
 | Console | Console messages from the trace of the failed attempt |
 | Attachments | Screenshots and videos (open in a lightbox), traces (Open or Download), custom attachments (download) |
-| History | Outcome strip for recent runs, pass count, median duration of passing runs, flakiness, grade, duration sparkline |
+| History | Outcome strip for recent runs, pass count, median duration of passing runs, flakiness with its 95% interval and run count (or "insufficient history" below 5 runs), grade, duration sparkline |
 | Accessibility | axe-core violations for this test |
 | Annotations | Each annotation's type and description |
 
@@ -342,10 +342,11 @@ Smart Reporter tracks flakiness **across runs**, not within a single run:
 | **Criteria** | Fails then passes on retry | Passes on retry, or results that keep changing between pass and fail |
 | **Use Case** | Immediate retry success | Chronically unreliable tests |
 
-A test with history gets three values. Skipped runs are left out of all of them.
+A test with history gets four values. Skipped runs are left out of all of them.
 
 - `flakinessScore`: the share of runs, this run included, that failed or passed only on a retry (0 to 1). A score of exactly 1 means every run failed.
 - `flakinessRuns`: the number of runs behind the score, this run included.
+- `flakinessInterval`: the 95% Wilson interval of the score, for example `[0.21, 0.72]` for 5 of 11 runs. Fewer runs give a wider interval.
 - `flakinessStatus`: the classification, shown as an indicator. It measures instability, not the failure rate.
 
 Instability is the number of times the result changed between pass and fail from one run to the next, plus the runs that passed only on a retry, divided by the number of runs. The first change is not counted: a test that was broken and then fixed, or that broke and still fails, changed once and is not flaky.
@@ -356,6 +357,7 @@ Instability is the number of times the result changed between pass and fail from
 | 🟡 Unstable | `unstable` | Instability is at least `thresholds.flakinessStable` (default 0.1) |
 | 🟢 Stable | `stable` | Instability is lower, and the test passed this run |
 | 🔴 Failing | `failing` | Every run failed, or instability is lower and the test failed this run |
+| ⚪ Insufficient history | `insufficient-history` | Fewer than 5 runs, this run included, and the test did not pass on a retry this run |
 | ⚪ New | none | The test has no history |
 | ⚪ Skipped | none | The test was skipped this run, or in every run in history |
 

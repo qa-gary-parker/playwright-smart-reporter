@@ -384,6 +384,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1075,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -597,6 +601,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1090,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -810,6 +818,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1039,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1023,6 +1035,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1068,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1236,6 +1252,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1085,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1449,6 +1469,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1086,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -1868,6 +1892,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.21,
+    0.72
+   ],
    "averageDuration": 877,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -2158,6 +2186,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1077,
    "performanceTrend": "↓ 35% faster",
    "performanceMetrics": {
@@ -2572,6 +2604,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.21,
+    0.72
+   ],
    "averageDuration": 1095,
    "performanceTrend": "↓ 29% faster",
    "performanceMetrics": {
@@ -3067,6 +3103,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 2772,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -3562,6 +3602,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 2712,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -4057,6 +4101,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 2688,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -4552,6 +4600,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 5802,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5047,6 +5099,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 2699,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5352,6 +5408,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 4009,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5580,6 +5640,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 3688,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -5793,6 +5857,10 @@
    "flakinessIndicator": "🔴 Flaky",
    "flakinessStatus": "flaky",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.21,
+    0.72
+   ],
    "averageDuration": 675,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -6315,6 +6383,10 @@
    "flakinessIndicator": "🔴 Flaky",
    "flakinessStatus": "flaky",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.35,
+    0.85
+   ],
    "averageDuration": 737,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -6569,6 +6641,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 687,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -7093,6 +7169,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 625,
    "performanceTrend": "↑ 28% slower",
    "performanceMetrics": {
@@ -7305,6 +7385,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 630,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -7521,6 +7605,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 961,
    "performanceTrend": "↓ 29% faster",
    "performanceMetrics": {
@@ -7734,6 +7822,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 737,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -8303,6 +8395,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 5845,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -8593,6 +8689,10 @@
    "flakinessIndicator": "🔴 Flaky",
    "flakinessStatus": "flaky",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 649,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9053,6 +9153,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 3244,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9346,6 +9450,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 629,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9552,6 +9660,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 624,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9765,6 +9877,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 2611,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -9979,6 +10095,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 622,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10188,6 +10308,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 635,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10392,6 +10516,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 610,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10601,6 +10729,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 821,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -10810,6 +10942,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 645,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11033,6 +11169,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 653,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11256,6 +11396,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 625,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11669,6 +11813,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 2743,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -11977,6 +12125,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 716,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -12330,6 +12482,10 @@
    "flakinessIndicator": "🔴 Flaky",
    "flakinessStatus": "flaky",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 1215,
    "performanceTrend": "↓ 33% faster",
    "performanceMetrics": {
@@ -12800,6 +12956,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 5809,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13118,6 +13278,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 675,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13534,6 +13698,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 5818,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -13834,6 +14002,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 2704,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14053,6 +14225,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 1065,
    "performanceTrend": "↑ 548% slower",
    "performanceMetrics": {
@@ -14265,6 +14441,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 653,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14469,6 +14649,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 652,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14678,6 +14862,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 836,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -14887,6 +15075,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 599,
    "performanceTrend": "↑ 26% slower",
    "performanceMetrics": {
@@ -15323,6 +15515,10 @@
    "flakinessIndicator": "🔴 Failing",
    "flakinessStatus": "failing",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0.74,
+    1
+   ],
    "averageDuration": 5826,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {
@@ -15673,6 +15869,10 @@
    "flakinessIndicator": "🟢 Stable",
    "flakinessStatus": "stable",
    "flakinessRuns": 11,
+   "flakinessInterval": [
+    0,
+    0.26
+   ],
    "averageDuration": 714,
    "performanceTrend": "→ Stable",
    "performanceMetrics": {

@@ -90,6 +90,21 @@ describe('FlakinessAnalyzer', () => {
       expect([test.flakinessScore, test.flakinessRuns, test.flakinessStatus, test.flakinessIndicator]).toEqual([0.1, 10, 'flaky', '🔴 Flaky']);
     });
 
+    it('reports insufficient history below 5 runs, with the score and its 95% interval', () => {
+      const test = createTestResult();
+      analyzer.analyze(test, historyOf('PPF'));
+
+      expect([test.flakinessScore, test.flakinessRuns, test.flakinessStatus, test.flakinessIndicator, test.flakinessInterval])
+        .toEqual([0.25, 4, 'insufficient-history', '⚪ Insufficient history', [0.05, 0.7]]);
+    });
+
+    it('gives the 95% Wilson interval of the score over every run', () => {
+      const test = createTestResult();
+      analyzer.analyze(test, historyOf('FFFFFPPPPP'));
+
+      expect([test.flakinessScore, test.flakinessInterval]).toEqual([0.45, [0.21, 0.72]]);
+    });
+
     it('marks a test that broke and still fails as Failing, not Flaky', () => {
       const test = createTestResult({ status: 'failed', outcome: 'unexpected' });
       analyzer.analyze(test, historyOf('PPPPPPFFFF'));
@@ -102,19 +117,22 @@ describe('FlakinessAnalyzer', () => {
       const history: TestHistoryEntry[] = [
         createHistoryEntry(true),
         createHistoryEntry(true),
+        createHistoryEntry(true),
+        createHistoryEntry(true),
         createHistoryEntry(false, 1000, true), // skipped - should be ignored
         createHistoryEntry(false, 1000, true), // skipped - should be ignored
       ];
 
       analyzer.analyze(test, history);
 
-      expect(test.flakinessScore).toBe(0);
+      expect([test.flakinessScore, test.flakinessRuns]).toEqual([0, 5]);
       expect(test.flakinessIndicator).toBe('🟢 Stable');
     });
 
     it('marks consistently failing tests as Failing, not Flaky', () => {
       const test = createTestResult({ status: 'failed', outcome: 'unexpected' });
       const history: TestHistoryEntry[] = [
+        createHistoryEntry(false),
         createHistoryEntry(false),
         createHistoryEntry(false),
         createHistoryEntry(false),
@@ -126,22 +144,24 @@ describe('FlakinessAnalyzer', () => {
       expect(test.flakinessIndicator).toBe('🔴 Failing');
     });
 
-    it('marks a single failed historical run as Failing', () => {
-      const test = createTestResult({ status: 'failed', outcome: 'unexpected' });
-      const history: TestHistoryEntry[] = [createHistoryEntry(false)];
+    it('needs 5 runs, this run included, to call a test Failing', () => {
+      const failed: Partial<TestResultData> = { status: 'failed', outcome: 'unexpected' };
+      const four = createTestResult(failed);
+      analyzer.analyze(four, historyOf('FFF'));
+      const five = createTestResult(failed);
+      analyzer.analyze(five, historyOf('FFFF'));
 
-      analyzer.analyze(test, history);
-
-      expect(test.flakinessIndicator).toBe('🔴 Failing');
+      expect([four.flakinessIndicator, five.flakinessIndicator]).toEqual(['⚪ Insufficient history', '🔴 Failing']);
     });
 
     it('counts a run that passed on retry as flaky, and keeps a score of 1 for runs that all failed', () => {
       const mixed = createTestResult();
-      analyzer.analyze(mixed, historyOf('RP'));
+      analyzer.analyze(mixed, historyOf('RPRP'));
+      // A pass on a retry this run is flaky even before there are 5 runs.
       const everyRunRetried = createTestResult(passedOnRetry);
       analyzer.analyze(everyRunRetried, historyOf('RR'));
 
-      expect([mixed.flakinessScore, mixed.flakinessIndicator]).toEqual([0.33, '🔴 Flaky']);
+      expect([mixed.flakinessScore, mixed.flakinessIndicator]).toEqual([0.4, '🔴 Flaky']);
       expect([everyRunRetried.flakinessScore, everyRunRetried.flakinessIndicator]).toEqual([0.99, '🔴 Flaky']);
     });
 

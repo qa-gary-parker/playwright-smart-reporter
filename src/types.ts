@@ -332,7 +332,7 @@ export interface AttemptRequestDiff {
   passed?: number;                  // status in the passing attempt; absent when that attempt did not send it
 }
 
-export type FlakinessStatus = 'stable' | 'unstable' | 'flaky' | 'failing';
+export type FlakinessStatus = 'stable' | 'unstable' | 'flaky' | 'failing' | 'insufficient-history';
 
 export interface TestResultData {
   testId: string;
@@ -354,6 +354,7 @@ export interface TestResultData {
   flakinessIndicator?: string;
   flakinessStatus?: FlakinessStatus;
   flakinessRuns?: number;    // Non-skipped runs behind the score and status, this run included
+  flakinessInterval?: [number, number]; // 95% Wilson interval of flakinessScore
   performanceTrend?: string;
   averageDuration?: number;
   aiSuggestion?: string;

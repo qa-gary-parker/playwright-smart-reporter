@@ -101,6 +101,7 @@ export const SYNTHETIC: ReportTest = {
   flakinessScore: 0.27,
   flakinessStatus: 'failing',
   flakinessRuns: 11,
+  flakinessInterval: [0.1, 0.57],
   stabilityScore: { overall: 84, flakiness: 85, performance: 70, reliability: 90, grade: 'B', needsAttention: false },
   averageDuration: 1990,
   performanceMetrics: { averageDuration: 1990, currentDuration: 6412, percentChange: 222, absoluteChange: 4422, threshold: 0.2, isRegression: true, isImprovement: false, severity: 'high' },

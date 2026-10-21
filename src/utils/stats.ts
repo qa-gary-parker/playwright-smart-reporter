@@ -2,6 +2,9 @@
  * Statistics helpers shared by the analyzers
  */
 
+/** Fewest non-skipped runs, this run included, that a flakiness or duration verdict is given from. */
+export const MIN_SAMPLE_RUNS = 5;
+
 /** Middle value, or the mean of the two middle values for an even count. NaN for an empty list. */
 export function median(xs: readonly number[]): number {
   const s = [...xs].sort((a, b) => a - b);
@@ -39,4 +42,15 @@ export function flipRate(outcomes: readonly boolean[], weight: (age: number) => 
     if (outcomes[k] !== outcomes[k - 1]) flipped += w;
   }
   return total > 0 ? flipped / total : 0;
+}
+
+/** 95% Wilson score interval of the rate `k` of `n`, as [low, high]. [0, 1] when `n` is 0. */
+export function wilson(k: number, n: number): [number, number] {
+  if (n === 0) return [0, 1];
+  const z2 = 1.96 * 1.96;
+  const p = k / n;
+  const denominator = 1 + z2 / n;
+  const centre = p + z2 / (2 * n);
+  const margin = 1.96 * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n));
+  return [clamp01((centre - margin) / denominator), clamp01((centre + margin) / denominator)];
 }

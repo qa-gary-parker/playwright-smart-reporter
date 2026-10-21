@@ -229,6 +229,28 @@ test('Most flaky lists the tests history classifies as flaky or unstable, with t
   await expect(panel.locator('.lines__value')).toHaveText(['99% of 11 runs', '99% of 11 runs', '64% of 11 runs', '45% of 11 runs']);
 });
 
+test('History shows the flakiness interval, or insufficient history below 5 runs', async ({ page }) => {
+  const flakiness = page.locator('.history .statline > span', { hasText: 'Flakiness' });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(flakiness).toHaveText('Flakiness 64% 35–85% over 11 runs');
+
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<Record<string, unknown>> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        Object.assign(flaky, { flakinessScore: 0.33, flakinessStatus: 'insufficient-history', flakinessRuns: 3, flakinessInterval: [0.06, 0.79] });
+        value = d;
+      },
+    });
+  });
+  await page.reload();
+  await expect(flakiness).toHaveText('Flakiness insufficient history 3 of 5 runs');
+});
+
 test('the retry comparison appears for a test that failed and then passed, and not for one that always failed', async ({ page }) => {
   await page.goto(url('screen=flaky&mode=light'));
   await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();

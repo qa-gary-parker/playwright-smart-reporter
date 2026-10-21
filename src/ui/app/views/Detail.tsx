@@ -17,6 +17,7 @@ import {
 } from '../../components';
 import { displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
 import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
+import { MIN_SAMPLE_RUNS } from '../../../utils/stats';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
 import { alignSteps, divergenceSummary, pickAttempts } from '../../../analyzers/attempt-compare';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -224,7 +225,18 @@ function History({ t }: { t: ReportTest }) {
         </span>
         {t.flakinessScore !== undefined && (
           <span>
-            Flakiness <strong>{Math.round(t.flakinessScore * 100)}%</strong>
+            Flakiness{' '}
+            {t.flakinessStatus === 'insufficient-history' ? (
+              <>
+                <strong>insufficient history</strong> {t.flakinessRuns} of {MIN_SAMPLE_RUNS} runs
+              </>
+            ) : (
+              <>
+                <strong>{Math.round(t.flakinessScore * 100)}%</strong>
+                {t.flakinessInterval && <span class="faint"> {t.flakinessInterval.map((x) => Math.round(x * 100)).join('–')}%</span>} over{' '}
+                {plural(t.flakinessRuns ?? 0, 'run')}
+              </>
+            )}
           </span>
         )}
         {t.stabilityScore && (

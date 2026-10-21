@@ -74,6 +74,7 @@ export interface JsonTestEntry {
   flakinessScore?: number;
   flakinessStatus?: TestResultData['flakinessStatus'];
   flakinessRuns?: number;
+  flakinessInterval?: [number, number];
   stabilityScore?: {
     overall: number;
     grade: string;
@@ -140,6 +141,7 @@ export function exportJsonData(
     flakinessScore: r.flakinessScore,
     flakinessStatus: r.flakinessStatus,
     flakinessRuns: r.flakinessRuns,
+    flakinessInterval: r.flakinessInterval,
     stabilityScore: r.stabilityScore ? {
       overall: r.stabilityScore.overall,
       grade: r.stabilityScore.grade,

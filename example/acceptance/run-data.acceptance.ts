@@ -372,6 +372,24 @@ describe('flaky', () => {
     const entriesOut = JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string; runs?: number }) => [e.testId, e.runs]);
     expect(entriesOut).toEqual([[id('passes on retry'), 10]]);
   }, TIMEOUT);
+
+  it('reports insufficient history for flakiness and duration below 5 runs, this run included', () => {
+    const out = path.join(tmp, 'short-history');
+    const entries = (n: number, duration: number) => Array.from({ length: n }, () => ({ passed: true, duration, timestamp: new Date(0).toISOString() }));
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'test-history.json'), JSON.stringify({
+      runs: [],
+      summaries: [],
+      tests: { [id('passes')]: entries(3, 5), [id('runs for three seconds')]: entries(1, 1000) },
+    }));
+    runSuite(out, {}, ['--grep', 'passes|three seconds', '--grep-invert', 'expected failure|retry']);
+
+    const trends = Object.fromEntries(reportData(out).tests.map((t) => [t.title, [t.flakinessIndicator, t.performanceTrend]]));
+    expect(trends).toEqual({
+      passes: ['⚪ Insufficient history', '→ Insufficient history'],
+      'runs for three seconds': ['⚪ Insufficient history', '→ Insufficient history'],
+    });
+  }, TIMEOUT);
 });
 
 describe('JUnit export', () => {
