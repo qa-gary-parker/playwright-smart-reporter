@@ -52,8 +52,8 @@ runs:
         if [ -f "$SMART_REPORTER_LOCAL_CLI" ]; then
           node "$SMART_REPORTER_LOCAL_CLI" "${args[@]}"
         else
-          # Run the package version that matches the action tag (v3.0.0 -> 3.0.0, v3 -> 3), never whatever is latest.
-          version=3
+          # Run the package version that matches the action tag (v4.0.0 -> 4.0.0, v4 -> 4), never whatever is latest.
+          version=4
           if [[ "$SMART_REPORTER_ACTION_REF" =~ ^v([0-9]+(\.[0-9]+){0,2})$ ]]; then version="${BASH_REMATCH[1]}"; fi
           npx --yes "playwright-smart-reporter@$version" "${args[@]}"
         fi

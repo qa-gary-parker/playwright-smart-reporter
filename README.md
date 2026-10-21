@@ -1557,7 +1557,7 @@ jobs:
           name: smart-report
           path: smart-report.html
 
-      - uses: qa-gary-parker/playwright-smart-reporter@v3.0.0
+      - uses: qa-gary-parker/playwright-smart-reporter@v4.0.0
         if: always()
         with:
           data: smart-report-data.json
@@ -1594,7 +1594,7 @@ The `github` command can open one GitHub issue for each New failure cluster (see
       issues: write
     steps:
       # ...
-      - uses: qa-gary-parker/playwright-smart-reporter@v3.0.0
+      - uses: qa-gary-parker/playwright-smart-reporter@v4.0.0
         if: always() && github.ref == 'refs/heads/main'
         with:
           data: smart-report-data.json
