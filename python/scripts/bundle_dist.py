@@ -19,6 +19,8 @@ REQUIRED_FILES = [
     "agent/redact.js",
     "analyzers/a11y-analyzer.js",
     "analyzers/ai-analyzer.js",
+    "analyzers/efficiency.js",
+    "analyzers/environment.js",
     "analyzers/flake-forecast.js",
     "analyzers/ownership.js",
     "generators/json-exporter.js",
