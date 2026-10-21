@@ -350,6 +350,14 @@ describe('baseline.branch', () => {
       expect(renderSummary(json, { workspace: ROOT })).toContain('**Baseline run:** `main` @ `c0ffee30`');
     }
   }, TIMEOUT);
+
+  it('notes once per run that history has no run on the baseline branch', () => {
+    const out = path.join(tmp, 'baseline-branch-missing');
+    const args = ['--grep', 'fails when asked', '--retries=0'];
+    runSuite(out, { runId: 'main-1' }, args, github('1', false));
+    const { output } = runSuite(out, { runId: 'now', baseline: { branch: 'release' } }, args, github('2', false));
+    expect(output.split("history has no run on the baseline branch 'release'").length - 1).toBe(1);
+  }, TIMEOUT);
 });
 
 describe('flaky', () => {

@@ -625,6 +625,9 @@ class SmartReporter implements Reporter {
     // The file is truncated automatically on the next run via LiveWriter.start().
     this.liveWriter.complete(Date.now() - this.startTime);
 
+    // Looked up once: it prints a note when the baseline branch has no run
+    const baselineRun = this.historyCollector.getBaselineRun();
+
     // Get failure clusters, and track them against the runs before this one (history saves this run last)
     const clustering = this.options.enableFailureClustering !== false;
     let failureClusters: FailureCluster[] = [];
@@ -636,7 +639,7 @@ class SmartReporter implements Reporter {
         this.results,
         this.historyCollector.getHistory(),
         { ...this.historyCollector.getCurrentRun(), ciInfo: this.ciInfo },
-        this.historyCollector.getBaselineRun()?.runId,
+        baselineRun?.runId,
       );
       // History saves each test's cluster id, and notifications read the tracking
       this.failureClusterer.assignClusters(this.results, failureClusters);
@@ -678,7 +681,6 @@ class SmartReporter implements Reporter {
     // Get comparison data if enabled
     let comparison: RunComparison | undefined;
     if (options.enableComparison !== false) {
-      const baselineRun = this.historyCollector.getBaselineRun();
       if (baselineRun) {
         const currentSummary = buildRunSummary(this.results, { ...this.historyCollector.getCurrentRun(), duration: Date.now() - this.startTime });
 
