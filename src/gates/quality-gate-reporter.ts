@@ -10,6 +10,8 @@ export const ruleLabels: Record<string, string> = {
   maxA11yCritical: 'Max a11y critical',
   maxA11ySerious: 'Max a11y serious',
   minCoverage: 'Min line coverage',
+  maxDurationRegression: 'Max duration regression',
+  noNewFlaky: 'No new flaky tests',
 };
 
 /** The rule's id, or its label with its scope, so two rules of the same kind can be told apart. */

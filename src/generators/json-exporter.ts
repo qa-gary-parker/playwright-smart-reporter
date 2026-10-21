@@ -84,6 +84,7 @@ export interface JsonTestEntry {
     grade: string;
   };
   performanceTrend?: string;
+  performanceMetrics?: TestResultData['performanceMetrics'];
   tags?: string[];
   suite?: string;
   browser?: string;
@@ -127,6 +128,7 @@ export function toTestResultData(entry: JsonTestEntry): TestResultData {
     tags: entry.tags,
     project: entry.project,
     owners: entry.owners,
+    performanceMetrics: entry.performanceMetrics,
   };
 }
 
@@ -182,6 +184,7 @@ export function exportJsonData(
       grade: r.stabilityScore.grade,
     } : undefined,
     performanceTrend: r.performanceTrend,
+    performanceMetrics: r.performanceMetrics,
     tags: r.tags,
     suite: r.suite,
     browser: r.browser,

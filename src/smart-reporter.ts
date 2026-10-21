@@ -690,6 +690,7 @@ class SmartReporter implements Reporter {
               // History saved the baseline's verdict; the outcome spread above is this run's.
               outcome: entry.skipped ? 'skipped' : entry.passed ? 'expected' : 'unexpected',
               duration: entry.duration,
+              retry: entry.retry ?? 0,
             });
           }
         }

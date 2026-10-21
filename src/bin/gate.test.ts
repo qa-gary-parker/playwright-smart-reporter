@@ -50,6 +50,8 @@ beforeAll(() => {
     test('home', 'home.spec.ts', 'flaky', { project: 'firefox' }),
     test('about', 'about.spec.ts', 'expected', { project: 'firefox' }),
   ], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'scoped');
+  const performanceMetrics = { averageDuration: 1000, currentDuration: 1300, percentChange: 30, absoluteChange: 300, threshold: 0.2, isRegression: true, isImprovement: false, severity: 'medium' } as const;
+  exportJsonData([test('slow', 'slow.spec.ts', 'expected', { duration: 1300, performanceMetrics })], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'timed');
 });
 
 afterAll(() => {
@@ -122,7 +124,7 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
     const res = runCli(['gate', '--config', config, '--data', 'scanned-data.json']);
     expect(res.status).toBe(1);
     expect(res.stderr).toBe(
-      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage.',
+      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky.',
     );
   });
 });
@@ -159,7 +161,7 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) scoped rules', () => {
 
   it('exits 1 on an unknown key in a rule, in both CLIs', () => {
     const config = writeJson('bogus-gates.json', { rules: [{ bogus: 1 }] });
-    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage.';
+    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky.';
     expect(runCli(['gate', '--config', config, '--data', 'scoped-data.json'])).toMatchObject({ status: 1, stderr: message });
     const res = spawnSync(process.execPath, [bundle('gate'), '--input', 'scoped-data.json', '--config', config], { cwd: dir, encoding: 'utf-8' });
     expect([res.status, res.stderr.trim()]).toEqual([1, message]);
@@ -188,6 +190,13 @@ describe('gate CLI (src/bin/gate.ts) flags', () => {
     expect(status).toBe(0);
     expect(stdout).toContain('○ Min pass rate        (skipped — no test ran)');
     expect(stdout).toContain('○ Max flaky rate       (skipped — no test ran)');
+  });
+
+  it('evaluates --max-duration-regression from the duration baseline in the JSON export, and --no-new-flaky', () => {
+    const { status, stdout } = runGate(['--input', 'timed-data.json', '--max-duration-regression', '20', '--no-new-flaky']);
+    expect(status).toBe(1);
+    expect(stdout).toContain('✗ Max duration regression 30% ≤ 20%');
+    expect(stdout).toContain('○ No new flaky tests   (skipped — no comparison data)');
   });
 
   it('says why --min-stability-grade is skipped when no test has a grade', () => {

@@ -16,7 +16,8 @@ export function buildComparison(
     newTests: [],
     regressions: [],
     improvements: [],
-    notInBaseline: []
+    notInBaseline: [],
+    newFlaky: []
   };
 
   for (const test of currentTests) {
@@ -35,6 +36,10 @@ export function buildComparison(
 
     if (isPassedTest(test) && isFailedTest(baselineTest)) {
       changes.fixedTests.push(test);
+    }
+
+    if (test.outcome === 'flaky' && isPassedTest(baselineTest) && baselineTest.retry === 0) {
+      changes.newFlaky.push(test);
     }
 
     // Check for performance regressions/improvements

@@ -47,7 +47,7 @@ describe('buildReportData', () => {
         comparison: {
           baselineRun: { runId: 'b', timestamp: '', total: 3, passed: 3, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 1, passRate: 100 },
           currentRun: { runId: 'c', timestamp: '', total: 3, passed: 2, failed: 1, skipped: 0, flaky: 1, slow: 1, duration: 1, passRate: 66 },
-          changes: { newFailures: [FAILED], fixedTests: [], newTests: [], regressions: [regressed], improvements: [], notInBaseline: [notRunInBaseline] },
+          changes: { newFailures: [FAILED], fixedTests: [], newTests: [], regressions: [regressed], improvements: [], notInBaseline: [notRunInBaseline], newFlaky: [] },
         },
       }),
       2_000,

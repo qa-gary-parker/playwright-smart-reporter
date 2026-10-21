@@ -278,6 +278,7 @@ describe('json-exporter', () => {
           regressions: [],
           improvements: [],
           notInBaseline: [],
+          newFlaky: [],
         },
       };
 

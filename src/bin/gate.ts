@@ -18,6 +18,8 @@ interface GateOptions {
   noNewFailures?: boolean;
   maxA11yViolations?: number;
   minCoverage?: number;
+  maxDurationRegression?: number;
+  noNewFlaky?: boolean;
 }
 
 function printUsage(): void {
@@ -36,6 +38,8 @@ Options:
   --no-new-failures           Fail if new failures detected (requires comparison data)
   --max-a11y-violations <n>   Maximum accessibility violations (skipped when no test was scanned)
   --min-coverage <n>          Minimum line coverage percentage (fails when no coverage was collected)
+  --max-duration-regression <n>  Maximum % the tests run longer than the median of their passing runs
+  --no-new-flaky              Fail if a test that passed first time in the baseline run passed on a retry now
   -h, --help                  Show this help message
 
 Examples:
@@ -106,6 +110,12 @@ function parseArgs(argv: string[]): GateOptions {
       case '--max-a11y-violations':
         options.maxA11yViolations = number(arg, ++i);
         break;
+      case '--max-duration-regression':
+        options.maxDurationRegression = number(arg, ++i);
+        break;
+      case '--no-new-flaky':
+        options.noNewFlaky = true;
+        break;
       case '--min-coverage':
         options.minCoverage = number(arg, ++i);
         break;
@@ -140,6 +150,8 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   if (options.noNewFailures !== undefined) config.noNewFailures = options.noNewFailures;
   if (options.maxA11yViolations !== undefined) config.maxA11yViolations = options.maxA11yViolations;
   if (options.minCoverage !== undefined) config.minCoverage = options.minCoverage;
+  if (options.maxDurationRegression !== undefined) config.maxDurationRegression = options.maxDurationRegression;
+  if (options.noNewFlaky !== undefined) config.noNewFlaky = options.noNewFlaky;
 
   return config;
 }

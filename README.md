@@ -741,6 +741,10 @@ The result shows in the top bar and in the Quality gate panel in Insights, and i
 
 `noNewFailures` counts tests that failed now and passed in the baseline run. It also counts a failing test that did not run in the baseline run, so a run compared with a partial baseline does not pass by default.
 
+`noNewFlaky: true` counts tests that passed on a retry now and passed on the first attempt in the baseline run. Like `noNewFailures`, it also counts a flaky test that did not run in the baseline run. The CLI skips it for a JSON export from before 4.0.0.
+
+`maxDurationRegression: 20` fails the gate when the tests run more than 20% longer than the median of their passing runs. It adds up the tests that passed and have 5 passing runs, this run included (the tests that get a duration trend), so one test's jitter does not decide the gate. It is skipped when no test has that history.
+
 `minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
 
 #### Scoped rules and warnings
@@ -775,7 +779,7 @@ npx playwright-smart-reporter gate --config gates.json --data smart-report-data.
 
 `--data` defaults to `smart-report-data.json`. Exit codes: `0` = all gates passed, `1` = a gate failed or the input is missing.
 
-To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, and `--min-coverage`.
+To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, `--min-coverage`, `--max-duration-regression` and `--no-new-flaky`.
 
 ### Flaky Test Quarantine
 
@@ -1031,7 +1035,7 @@ reporter: [
     exportCtrf: false,          // <name>-ctrf.json
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
-    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, rules }
+    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, rules }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
     live: {},                   // { enabled, outputFile: '.smart-live-results.jsonl', dashboard, notifyOnFirstFailure }

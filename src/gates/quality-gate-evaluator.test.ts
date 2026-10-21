@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { QualityGateEvaluator, validateQualityGates } from './quality-gate-evaluator';
+import { PerformanceAnalyzer } from '../analyzers/performance-analyzer';
 import type {
   TestResultData,
   QualityGateConfig,
@@ -62,6 +63,7 @@ function createComparison(overrides: Partial<RunComparison> = {}): RunComparison
       regressions: [],
       improvements: [],
       notInBaseline: [],
+      newFlaky: [],
     },
     ...overrides,
   };
@@ -426,6 +428,7 @@ describe('QualityGateEvaluator', () => {
           regressions: [],
           improvements: [],
           notInBaseline: [],
+          newFlaky: [],
         },
       });
       const result = evaluator.evaluate(
@@ -454,6 +457,7 @@ describe('QualityGateEvaluator', () => {
             createTestResult({ testId: 'passed', status: 'passed', outcome: 'expected' }),
             createTestResult({ testId: 'expected-failure', status: 'failed', outcome: 'expected' }),
           ],
+          newFlaky: [],
         },
       });
       const result = evaluator.evaluate({ noNewFailures: true }, [createTestResult()], comparison);
@@ -790,6 +794,74 @@ describe('QualityGateEvaluator', () => {
     });
   });
 
+  // #70: duration against the median of passing runs
+  describe('maxDurationRegression', () => {
+    const entry = (duration: number, passed = true) => ({ passed, duration, timestamp: '2026-10-01T00:00:00.000Z' });
+    // Analyzed as the reporter does, with one slow failed run that the baseline must leave out.
+    const timed = (testId: string, duration: number, passing: number[]) => {
+      const test = createTestResult({ testId, duration, outcome: 'expected' });
+      new PerformanceAnalyzer().analyze(test, [...passing.map((d) => entry(d)), entry(30_000, false)]);
+      return test;
+    };
+
+    it('fails when the tests run 30% longer than the median of their passing runs, against 20', () => {
+      expect(evaluator.evaluate({ maxDurationRegression: 20 }, [timed('a', 1300, [1000, 900, 1000, 1100])])).toEqual({
+        passed: false,
+        rules: [{ rule: 'maxDurationRegression', passed: false, actual: '30%', threshold: '≤ 20%' }],
+      });
+    });
+
+    it('sums the tests, so a slower test is weighed against a faster one', () => {
+      // +300ms and -100ms against 3000ms of medians is 6.7% slower, rounded up
+      const results = [timed('a', 1300, [1000, 1000, 1000, 1000]), timed('b', 1900, [2000, 2000, 2000, 2000])];
+      expect(evaluator.evaluate({ maxDurationRegression: 5 }, results).rules).toEqual([
+        { rule: 'maxDurationRegression', passed: false, actual: '6.7%', threshold: '≤ 5%' },
+      ]);
+    });
+
+    it('passes at exactly the threshold', () => {
+      expect(evaluator.evaluate({ maxDurationRegression: 20 }, [timed('a', 1200, [1000, 1000, 1000, 1000])]).rules).toEqual([
+        { rule: 'maxDurationRegression', passed: true, actual: '20%', threshold: '≤ 20%' },
+      ]);
+    });
+
+    it('is skipped when no test has enough passing runs to compare with', () => {
+      const results = [timed('a', 1300, [1000, 1000, 1000]), createTestResult({ testId: 'b', status: 'failed', outcome: 'unexpected' })];
+      expect(evaluator.evaluate({ maxDurationRegression: 20 }, results).rules).toEqual([
+        { rule: 'maxDurationRegression', passed: true, actual: 'N/A', threshold: '≤ 20%', skipped: true, skipReason: 'no duration history' },
+      ]);
+    });
+  });
+
+  // #70: tests that passed on the first attempt in the baseline run and on a retry now
+  describe('noNewFlaky', () => {
+    const flaky = (testId: string) => createTestResult({ testId, outcome: 'flaky', retry: 1 });
+
+    it('fails for a test in newFlaky', () => {
+      const comparison = createComparison({ changes: { ...createComparison().changes, newFlaky: [flaky('a')] } });
+      expect(evaluator.evaluate({ noNewFlaky: true }, [flaky('a')], comparison)).toEqual({
+        passed: false,
+        rules: [{ rule: 'noNewFlaky', passed: false, actual: '1', threshold: '≤ 0' }],
+      });
+    });
+
+    it('counts a flaky test that did not run in the baseline run, as noNewFailures counts a failing one', () => {
+      const notInBaseline = [flaky('a'), createTestResult({ testId: 'b', outcome: 'expected' }), createTestResult({ testId: 'c', status: 'failed', outcome: 'unexpected' })];
+      const comparison = createComparison({ changes: { ...createComparison().changes, notInBaseline } });
+      expect(evaluator.evaluate({ noNewFlaky: true }, notInBaseline, comparison).rules).toEqual([
+        { rule: 'noNewFlaky', passed: false, actual: '1', threshold: '≤ 0' },
+      ]);
+    });
+
+    it('is skipped without comparison data, and for a comparison saved before newFlaky existed', () => {
+      const { newFlaky: _, ...changes } = createComparison().changes;
+      const saved = { ...createComparison(), changes } as unknown as RunComparison;
+      const skipped = { rule: 'noNewFlaky', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no comparison data' };
+      expect(evaluator.evaluate({ noNewFlaky: true }, [flaky('a')]).rules).toEqual([skipped]);
+      expect(evaluator.evaluate({ noNewFlaky: true }, [flaky('a')], saved).rules).toEqual([skipped]);
+    });
+  });
+
   // #70: scoped rules and warn severity
   describe('rules', () => {
     const failed = { status: 'failed', outcome: 'unexpected' } as const;
@@ -871,7 +943,7 @@ describe('QualityGateEvaluator', () => {
   });
 
   describe('validateQualityGates', () => {
-    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage';
+    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky';
 
     it.each<[string, unknown, string]>([
       ['an unknown key in a rule', { rules: [{ bogus: 1 }] }, `unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, ${RULES}.`],

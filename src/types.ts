@@ -507,6 +507,7 @@ export interface ComparisonChanges {
   regressions: TestResultData[];  // Got slower
   improvements: TestResultData[]; // Got faster
   notInBaseline: TestResultData[]; // Has history, but did not run in the baseline run
+  newFlaky: TestResultData[];      // Passed on a retry now, and on the first attempt in the baseline run
 }
 
 // NEW: AI Recommendations
@@ -601,6 +602,10 @@ export interface QualityGateConfig {
   maxA11ySerious?: number;
   // Phase 6: Code coverage (minimum line coverage percentage)
   minCoverage?: number;
+  // #70: max % the tests run longer than the median of their passing runs, summed over the tests that have one
+  maxDurationRegression?: number;
+  // #70: fail on a test that passed on a retry now and on the first attempt in the baseline run
+  noNewFlaky?: boolean;
 
   // #70: rules with a scope or a severity, evaluated after the rules above
   rules?: QualityGateRule[];

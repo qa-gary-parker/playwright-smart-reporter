@@ -133,7 +133,7 @@ describe('NotificationManager', () => {
     const comparedTo = (stabilityGrade?: StabilityScore['grade']): RunComparison => ({
       baselineRun: createRunSummary({ passRate: 100, stabilityGrade }),
       currentRun: createRunSummary({ passRate: 100 }),
-      changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [] },
+      changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [], newFlaky: [] },
     });
     const dropOrAll = () => new NotificationManager([
       { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/drop' }, conditions: { stabilityGradeDrop: true } },

@@ -112,6 +112,41 @@ describe('quality gate rules', () => {
       ],
     });
   });
+
+  // History as the reporter saves it, one run per entry, the last run being the baseline.
+  function seedHistory(out: string, title: string, entries: Array<{ passed: boolean; duration: number; retry: number }>) {
+    const runs = entries.map((_, i) => ({ runId: `seed-${i}`, timestamp: `2026-10-0${i + 1}T00:00:00.000Z` }));
+    const summaries = runs.map((run, i) => ({
+      ...run, total: 1, passed: 1, failed: 0, skipped: 0, flaky: entries[i].retry > 0 ? 1 : 0, slow: 0, duration: entries[i].duration, passRate: 100,
+    }));
+    const tests = { [`suite.fixtures.ts::${title}`]: entries.map((e, i) => ({ ...e, skipped: false, ...runs[i] })) };
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'test-history.json'), JSON.stringify({ runs: [], tests, summaries }));
+  }
+
+  it('fails noNewFlaky for a test that passed on a retry now and on the first attempt in the baseline run', () => {
+    const out = path.join(tmp, 'gate-new-flaky');
+    seedHistory(out, 'passes on retry', [{ passed: true, duration: 5, retry: 0 }]);
+    const run = runSuite(out, { exportJson: true, qualityGates: { noNewFlaky: true } }, ['--grep', 'passes on retry']);
+
+    expect(run.status).toBe(1);
+    const json = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+    expect(json.comparison.changes.newFlaky.map((t: { testId: string }) => t.testId)).toEqual(['suite.fixtures.ts::passes on retry']);
+    expect(json.qualityGates.rules).toEqual([{ rule: 'noNewFlaky', passed: false, actual: '1', threshold: '≤ 0' }]);
+  });
+
+  it('fails maxDurationRegression when a test runs longer than the median of its passing runs', () => {
+    const out = path.join(tmp, 'gate-duration');
+    seedHistory(out, 'takes a second', [600, 600, 600, 600].map((duration) => ({ passed: true, duration, retry: 0 })));
+    const run = runSuite(out, { exportJson: true, qualityGates: { maxDurationRegression: 20 } }, ['--grep', 'takes a second']);
+
+    expect(run.status).toBe(1);
+    const [rule] = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8')).qualityGates.rules;
+    expect(rule).toMatchObject({ rule: 'maxDurationRegression', passed: false, threshold: '≤ 20%' });
+    // About 1000ms against a 600ms median: 66.7% slower, plus the timer's overshoot.
+    expect(parseFloat(rule.actual)).toBeGreaterThanOrEqual(66.7);
+    expect(parseFloat(rule.actual)).toBeLessThan(100);
+  });
 });
 
 describe('quarantine', () => {

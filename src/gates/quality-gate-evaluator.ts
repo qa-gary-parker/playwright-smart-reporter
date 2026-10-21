@@ -15,7 +15,7 @@ import { compilePattern } from '../analyzers/ownership';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 
-export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
+export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
 const SCOPE_KEYS = ['tag', 'project', 'file', 'owner'] as const satisfies ReadonlyArray<keyof QualityGateScope>;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -159,8 +159,41 @@ export class QualityGateEvaluator {
     if (config.minCoverage !== undefined) {
       rules.push(this.evaluateMinCoverage(config.minCoverage, coverage));
     }
+    if (config.maxDurationRegression !== undefined) {
+      rules.push(this.evaluateMaxDurationRegression(config.maxDurationRegression, results));
+    }
+    if (config.noNewFlaky === true) {
+      rules.push(this.evaluateNoNewFlaky(comparison));
+    }
 
     return rules;
+  }
+
+  // The tests the performance analyzer compared: passed now, with enough passing runs for a median.
+  // Summed, so one test's jitter does not decide the gate.
+  private evaluateMaxDurationRegression(threshold: number, results: TestResultData[]): QualityGateRuleResult {
+    const compared = results.flatMap(r => r.performanceMetrics ?? []);
+    if (compared.length === 0) {
+      return { rule: 'maxDurationRegression', passed: true, actual: 'N/A', threshold: `≤ ${threshold}%`, skipped: true, skipReason: 'no duration history' };
+    }
+    const median = compared.reduce((sum, m) => sum + m.averageDuration, 0);
+    const added = compared.reduce((sum, m) => sum + m.currentDuration, 0) - median;
+    return {
+      rule: 'maxDurationRegression',
+      passed: compareRate(added, median, threshold) <= 0,
+      actual: formatRate(added, median, Math.ceil),
+      threshold: `≤ ${threshold}%`,
+    };
+  }
+
+  // Counts a flaky test that did not run in the baseline run, as noNewFailures counts a failing one.
+  private evaluateNoNewFlaky(comparison?: RunComparison): QualityGateRuleResult {
+    // JSON exported before 4.0.0 has no newFlaky.
+    if (!comparison?.changes.newFlaky) {
+      return { rule: 'noNewFlaky', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no comparison data' };
+    }
+    const count = comparison.changes.newFlaky.length + (comparison.changes.notInBaseline ?? []).filter(t => t.outcome === 'flaky').length;
+    return { rule: 'noNewFlaky', passed: count === 0, actual: String(count), threshold: '≤ 0' };
   }
 
   private evaluateMaxFailures(threshold: number, { failed }: RunStats): QualityGateRuleResult {

@@ -31,7 +31,7 @@ const data: JsonExportData = {
   comparison: {
     baselineRun: run,
     currentRun: run,
-    changes: { newFailures: [timedOut], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [] },
+    changes: { newFailures: [timedOut], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [], newFlaky: [] },
   },
   qualityGates: {
     passed: false,
