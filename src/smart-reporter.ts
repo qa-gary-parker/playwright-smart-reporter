@@ -874,6 +874,7 @@ class SmartReporter implements Reporter {
           coverage,
           resolvedClusters,
           reportData.efficiency,
+          reportData.environmentInsights,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {

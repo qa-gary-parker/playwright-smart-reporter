@@ -9,6 +9,7 @@ import { History } from './views/History';
 import { Insights } from './views/Insights';
 import { Keymap } from './views/Keymap';
 import { Live } from './views/Live';
+import { Matrix } from './views/Matrix';
 import { Palette } from './views/Palette';
 import { QueueView } from './views/QueueView';
 import { Frame } from './views/Shell';
@@ -29,6 +30,7 @@ export function App() {
         {r.view === 'live' && <Live />}
         {r.view === 'a11y' && <Accessibility />}
         {r.view === 'coverage' && <Coverage />}
+        {r.view === 'matrix' && <Matrix />}
       </Frame>
       <Palette />
       <Keymap />

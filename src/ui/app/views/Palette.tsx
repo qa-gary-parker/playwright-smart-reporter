@@ -46,6 +46,7 @@ function gotoTargets(): Array<[string, Route, string?]> {
     ...(f.live ? [['Live', { view: 'live' }] as [string, Route]] : []),
     ...(d.coverage ? [['Coverage', { view: 'coverage' }] as [string, Route]] : []),
     ...(d.a11y ? [['Accessibility', { view: 'a11y' }] as [string, Route]] : []),
+    ...(multiProject.value ? [['Matrix', { view: 'matrix' }] as [string, Route]] : []),
   ];
 }
 

@@ -3,6 +3,7 @@ import type {
   BrandingConfig,
   CIInfo,
   ClusterTracking,
+  EnvironmentInsight,
   FlakeForecast,
   ForecastSummary,
   QualityGateResult,
@@ -115,6 +116,8 @@ export interface ReportData {
   coverage?: ReportCoverage;
   // Phase 31: CI efficiency (absent in reports written before 4.0.0)
   efficiency?: RunEfficiency;
+  // Phase 32: failures that occur in one project, browser or worker slot only
+  environmentInsights?: EnvironmentInsight[];
 }
 
 // Percentages follow Istanbul: floored to 2 decimals, 100 when total is 0.

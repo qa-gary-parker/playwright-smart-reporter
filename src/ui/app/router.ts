@@ -8,7 +8,8 @@ export type ViewRoute =
   | { view: 'gallery' }
   | { view: 'live' }
   | { view: 'a11y' }
-  | { view: 'coverage' };
+  | { view: 'coverage' }
+  | { view: 'matrix' };
 
 export type Route = ViewRoute & { run?: string };
 
@@ -58,6 +59,7 @@ export function parseHash(hash: string): Route {
   if (head === 'live') return withRun({ view: 'live' });
   if (head === 'a11y') return withRun({ view: 'a11y' });
   if (head === 'coverage') return withRun({ view: 'coverage' });
+  if (head === 'matrix') return withRun({ view: 'matrix' });
   return withRun({ ...DEFAULT_ROUTE });
 }
 

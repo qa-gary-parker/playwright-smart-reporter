@@ -13,6 +13,7 @@ import type {
   QualityGateResult,
   CIInfo,
   StabilityScore,
+  EnvironmentInsight,
   RunEfficiency,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
@@ -67,6 +68,8 @@ export interface JsonExportData {
   };
   // Phase 31: CI efficiency
   efficiency?: RunEfficiency;
+  // Phase 32: failures that occur in one project, browser or worker slot only
+  environmentInsights?: EnvironmentInsight[];
 }
 
 export interface JsonTestEntry {
@@ -158,6 +161,7 @@ export function exportJsonData(
   coverage?: ReportCoverage,
   resolvedClusters?: ResolvedCluster[],
   efficiency?: RunEfficiency,
+  environmentInsights?: EnvironmentInsight[],
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -245,6 +249,7 @@ export function exportJsonData(
       files: coverage.files.map(({ path, lines, functions, branches }) => ({ path, lines, functions, branches })),
     },
     efficiency,
+    environmentInsights,
   };
 
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));

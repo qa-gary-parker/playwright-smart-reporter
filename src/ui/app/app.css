@@ -1176,6 +1176,7 @@ a.lines__label {
 }
 
 .heatmap__cell {
+  display: block;
   height: 14px;
   border-radius: var(--radius-sm);
 }

@@ -17,6 +17,7 @@ import type {
 } from '../types';
 import { summarizeA11y } from '../analyzers/a11y-analyzer';
 import { summarizeEfficiency } from '../analyzers/efficiency';
+import { environmentInsights } from '../analyzers/environment';
 import { isFlakyTest } from '../utils/flakiness';
 import { buildRunSummary, computeRunStats } from '../utils/run-stats';
 import {
@@ -194,5 +195,6 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
       merged: run.merged,
       costPerMinute: options.ciCostPerMinute,
     }),
+    environmentInsights: environmentInsights(results, run.merged),
   };
 }

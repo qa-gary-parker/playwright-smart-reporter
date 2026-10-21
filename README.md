@@ -122,7 +122,7 @@ The filter bar above the list takes free text and filter tokens. The command pal
 - Quote values that contain spaces: `suite:"saved cards"`.
 - Matching is not case-sensitive.
 
-The **Group** menu groups the list by cluster, file, project, suite, tag, status, grade, owner, or none. Group by suite uses the `describe` blocks without the file, and tests outside a `describe` block go under `(none)`. Failures groups by cluster by default. The other queues group by file. A test with several tags appears under each tag, and a test with several owners appears under each owner. Keyboard navigation visits each test once.
+The **Group** menu groups the list by cluster, file, project, suite, tag, status, grade, owner, worker, shard, or none. Group by suite uses the `describe` blocks without the file, and tests outside a `describe` block go under `(none)`. Group by worker uses the worker slot (`parallelIndex`) of the final attempt. Group by shard uses the `--shard` of the run, so one report has one shard. A report from `merge-reports` has no worker or shard per test. Failures groups by cluster by default. The other queues group by file. A test with several tags appears under each tag, and a test with several owners appears under each owner. Keyboard navigation visits each test once.
 
 Every view, filter, grouping, and selected test is in the URL hash, so you can share a link to it:
 
@@ -131,7 +131,7 @@ Every view, filter, grouping, and selected test is in the URL hash, so you can s
 | `#/q/failures`, `#/q/flaky`, `#/q/regressions`, `#/q/quarantined`, `#/q/all` | A queue. Add `?test=<id>`, `&q=<filter>`, `&g=<group>`. |
 | `#/insights` | Insights |
 | `#/history/trends`, `#/history/heatmap`, `#/history/compare` | A History tab |
-| `#/gallery`, `#/live`, `#/coverage`, `#/a11y` | Gallery, Live, Coverage, Accessibility |
+| `#/gallery`, `#/live`, `#/coverage`, `#/a11y`, `#/matrix` | Gallery, Live, Coverage, Accessibility, Matrix |
 | `#/run/<runId>/...` | A past run, read only (needs `enableHistoryDrilldown`) |
 
 ### Command palette
@@ -205,6 +205,16 @@ Insights is the landing view and holds the run metrics:
 *Gallery: screenshots, videos, and traces from the run*
 
 Tabs filter by All, Screenshots, Videos, and Traces, with counts. Screenshots and videos open in a lightbox. Traces open in the trace viewer.
+
+### Matrix
+
+Matrix shows when the run has two or more projects. It lists the tests whose outcome is not the same in every project, with one cell per project (up to 100 tests). Click a cell to open that test.
+
+Environment insights above the matrix name failures that point at an environment, also in `environmentInsights` in the JSON export:
+
+- A test that fails in one project and passes in the others, for example "1 test fails on firefox only".
+- The same by browser, when one browser runs in more than one project.
+- Every failure on one worker slot, for example "All 3 failures ran on worker 2". A report from `merge-reports` has no worker insight.
 
 ### Live
 

@@ -1,6 +1,7 @@
+import { workerSlot } from '../../analyzers/environment';
 import { isFailing, suiteNames, type ReportData, type ReportTest } from './data';
 
-export const GROUP_BYS = ['cluster', 'file', 'project', 'suite', 'tag', 'status', 'grade', 'owner', 'none'] as const;
+export const GROUP_BYS = ['cluster', 'file', 'project', 'suite', 'tag', 'status', 'grade', 'owner', 'worker', 'shard', 'none'] as const;
 export type GroupBy = (typeof GROUP_BYS)[number];
 
 export interface Group {
@@ -10,10 +11,12 @@ export interface Group {
   tests: ReportTest[];
 }
 
+type GroupData = Pick<ReportData, 'clusters'> & Partial<Pick<ReportData, 'meta' | 'efficiency'>>;
+
 interface Grouping {
   label: string;
   mono: boolean;
-  keys: (t: ReportTest, clusters: Map<string, string>) => string[];
+  keys: (t: ReportTest, clusters: Map<string, string>, data: GroupData) => string[];
   name?: (key: string, clusters: Map<string, string>) => string;
 }
 
@@ -34,6 +37,13 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
   status: { label: 'Status', mono: false, keys: (t) => [isFailing(t) ? 'failed' : t.outcome === 'flaky' ? 'flaky' : t.status] },
   grade: { label: 'Grade', mono: false, keys: (t) => [t.stabilityScore ? `Grade ${t.stabilityScore.grade}` : NONE] },
   owner: { label: 'Owner', mono: true, keys: (t) => (t.owners?.length ? [...new Set(t.owners)] : ['Unowned']) },
+  // merge-reports does not record which shard ran a test, and every shard numbers its workers from 0
+  worker: {
+    label: 'Worker',
+    mono: false,
+    keys: (t, _, d) => [d.efficiency?.merged ? 'Not recorded in a merged report' : workerSlot(t) === undefined ? NONE : `Worker ${workerSlot(t)}`],
+  },
+  shard: { label: 'Shard', mono: false, keys: (_, __, d) => [d.meta?.shard ? `Shard ${d.meta.shard.current} of ${d.meta.shard.total}` : NONE] },
   none: { label: 'None', mono: false, keys: () => [''] },
 };
 
@@ -51,12 +61,12 @@ function byPriority(a: ReportTest, b: ReportTest): number {
   return score(b) - score(a);
 }
 
-export function groupTests(tests: ReportTest[], by: GroupBy, data: Pick<ReportData, 'clusters'>): Group[] {
+export function groupTests(tests: ReportTest[], by: GroupBy, data: GroupData): Group[] {
   const clusters = new Map(data.clusters.map((c) => [c.id, c.errorType]));
   const grouping = GROUPINGS[by];
   const map = new Map<string, ReportTest[]>();
   for (const t of tests) {
-    for (const key of grouping.keys(t, clusters)) map.set(key, [...(map.get(key) ?? []), t]);
+    for (const key of grouping.keys(t, clusters, data)) map.set(key, [...(map.get(key) ?? []), t]);
   }
   return [...map.entries()]
     .map(([key, ts]) => ({ key, label: grouping.name?.(key, clusters) ?? key, mono: grouping.mono, tests: [...ts].sort(byPriority) }))

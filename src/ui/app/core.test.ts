@@ -112,6 +112,16 @@ describe('grouping', () => {
     }
   });
 
+  it('groups by the worker slot of the final attempt and by the shard of the run, and knows no worker in a merged report', () => {
+    const slot = (testId: string, parallelIndex: number) => t({ testId, attempts: [{ retry: 0, status: 'passed', duration: 1, steps: [], parallelIndex }] });
+    const tests = [slot('a', 1), slot('b', 0), slot('c', 1), t({ testId: 'never started' })];
+    const label = (groups: ReturnType<typeof groupTests>) => groups.map((g) => [g.label, g.tests.map((x) => x.testId)]);
+    expect(label(groupTests(tests, 'worker', data))).toEqual([['Worker 1', ['a', 'c']], ['(none)', ['never started']], ['Worker 0', ['b']]]);
+    expect(label(groupTests(tests, 'worker', { ...data, efficiency: { merged: true } as never }))).toEqual([['Not recorded in a merged report', ['a', 'b', 'c', 'never started']]]);
+    expect(label(groupTests(tests, 'shard', { ...data, meta: { shard: { current: 2, total: 3 } } as never }))).toEqual([['Shard 2 of 3', ['a', 'b', 'c', 'never started']]]);
+    expect(label(groupTests(tests, 'shard', data))).toEqual([['(none)', ['a', 'b', 'c', 'never started']]]);
+  });
+
   it('groups by suite on the describe blocks, without the file that starts the suite path', () => {
     const inBlock = t({ testId: 'b', file: 'suite.fixtures.ts', suites: ['suite.fixtures.ts', 'sign in'] });
     const topLevel = t({ testId: 'l', file: 'suite.fixtures.ts', suites: ['suite.fixtures.ts'] });

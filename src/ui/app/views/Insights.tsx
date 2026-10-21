@@ -6,7 +6,7 @@ import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
 import { isWarning, ruleLabel } from '../../../gates/quality-gate-reporter';
 
-function Panel({ title, meta, children }: { title: string; meta?: string; children: ComponentChildren }) {
+export function Panel({ title, meta, children }: { title: string; meta?: string; children: ComponentChildren }) {
   return (
     <section class="panel">
       <header class="panel__head">

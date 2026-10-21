@@ -502,6 +502,17 @@ describe('efficiency', () => {
   }, TIMEOUT);
 });
 
+describe('environment matrix', () => {
+  it('reports a test that fails on firefox and passes on chromium and webkit as firefox only', () => {
+    const out = path.join(tmp, 'environment');
+    runSuite(out, { exportJson: true }, ['--retries=0'], { ACCEPTANCE_MATCH: 'environment.fixtures.ts', ACCEPTANCE_PROJECTS: 'chromium,firefox,webkit' });
+
+    const insights = [{ dimension: 'project', value: 'firefox', testIds: ['[firefox] environment.fixtures.ts::fails on firefox'], text: '1 test fails on firefox only' }];
+    expect(reportData(out).environmentInsights).toEqual(insights);
+    expect(JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8')).environmentInsights).toEqual(insights);
+  }, TIMEOUT);
+});
+
 describe('JUnit export', () => {
   const junitFile = (out: string) => path.join(out, 'smart-report-junit.xml');
 

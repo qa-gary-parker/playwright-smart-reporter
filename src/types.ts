@@ -595,6 +595,14 @@ export interface RunEfficiency {
   cost?: { perMinute: number; retryWaste: number };           // ciCostPerMinute × minutes of retry waste
 }
 
+// Phase 32: a failure pattern that points at a project, browser or worker slot
+export interface EnvironmentInsight {
+  dimension: 'project' | 'browser' | 'worker';
+  value: string;
+  testIds: string[];  // the failed results
+  text: string;       // e.g. "1 test fails on firefox only"
+}
+
 // ============================================================================
 // Internal Types
 // ============================================================================
