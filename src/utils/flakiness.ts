@@ -34,7 +34,7 @@ export function isSkippedTest(test: Pick<TestResultData, 'status' | 'outcome'>):
   return test.outcome ? test.outcome === 'skipped' : test.status === 'skipped' || test.status === 'interrupted';
 }
 
-/** True when the test should be treated as flaky (score or per-run outcome). */
-export function isFlakyTest(test: Pick<TestResultData, 'flakinessScore' | 'outcome'>, threshold = 0.3): boolean {
-  return test.outcome === 'flaky' || isFlakyScore(test.flakinessScore, threshold);
+/** True when the test passed on a retry this run, or its history classifies it as flaky. */
+export function isFlakyTest(test: Pick<TestResultData, 'flakinessStatus' | 'outcome'>): boolean {
+  return test.outcome === 'flaky' || test.flakinessStatus === 'flaky';
 }

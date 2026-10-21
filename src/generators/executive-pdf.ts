@@ -12,6 +12,9 @@ import type {
   QuarantineEntry,
   PdfFontConfig,
 } from '../types';
+import { isFailedTest } from '../utils/flakiness';
+import { computeRunStats, formatPassRate, runStabilityGrade } from '../utils/run-stats';
+import { isWarning, ruleLabel } from '../gates/quality-gate-reporter';
 
 export type { PdfFontConfig };
 
@@ -187,27 +190,22 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
-function computeStats(results: TestResultData[]) {
-  const total = results.length;
-  const passed = results.filter(
-    r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky',
-  ).length;
-  const failed = results.filter(
-    r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'),
-  ).length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
-  const flaky = results.filter(r => r.outcome === 'flaky').length;
-  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-  return { total, passed, failed, skipped, flaky, passRate };
+// Pass rate colour: green from 80%, red below, grey when no test ran.
+function passRateColor(passRate: number | null, scheme: PdfColorScheme): string {
+  if (passRate === null) return scheme.accentGray;
+  return passRate >= 80 ? scheme.accentGreenDark : scheme.accentRedDark;
 }
 
-function computeAverageGrade(results: TestResultData[]): string | undefined {
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const reverseMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
-  const graded = results.filter(r => r.stabilityScore?.grade);
-  if (graded.length === 0) return undefined;
-  const sum = graded.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-  return reverseMap[Math.round(sum / graded.length)] || 'C';
+// Run stats per file, worst pass rate first; a file with no test that ran goes last.
+function statsByFile(results: TestResultData[]) {
+  const byFile = new Map<string, TestResultData[]>();
+  for (const r of results) {
+    if (!byFile.has(r.file)) byFile.set(r.file, []);
+    byFile.get(r.file)!.push(r);
+  }
+  return [...byFile]
+    .map(([file, tests]) => ({ file, ...computeRunStats(tests), duration: tests.reduce((sum, t) => sum + t.duration, 0) }))
+    .sort((a, b) => (a.passRatio ?? 2) - (b.passRatio ?? 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -471,7 +469,7 @@ function drawTitleBlock(doc: PDFKit.PDFDocument, data: ExecutivePdfData, version
 // ---------------------------------------------------------------------------
 function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: PdfColorScheme): number {
   let y = 108;
-  const stats = computeStats(data.results);
+  const stats = computeRunStats(data.results);
   const duration = Date.now() - data.startTime;
   const bannerH = 52;
 
@@ -490,19 +488,26 @@ function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sche
     accentColor = gatesPassed ? scheme.accentGreen : scheme.accentRed;
     const passedRules = data.qualityGateResult.rules.filter(r => r.passed).length;
     const totalRules = data.qualityGateResult.rules.length;
-    subtitleText = `${passedRules}/${totalRules} rules passed  \u00B7  ${stats.total} tests  \u00B7  ${stats.passRate}% pass rate  \u00B7  ${formatDuration(duration)}`;
+    subtitleText = `${passedRules}/${totalRules} rules passed  \u00B7  ${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
+  } else if (stats.rated === 0) {
+    // Every test was skipped, or there were none: nothing passed, so the verdict is neutral.
+    verdictText = 'NO TESTS RAN';
+    bgColor = scheme.cardBg;
+    textColor = scheme.accentGray;
+    accentColor = scheme.accentGray;
+    subtitleText = `${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   } else if (stats.failed === 0) {
     verdictText = 'ALL TESTS PASSED';
     bgColor = scheme.accentGreenBg;
     textColor = scheme.accentGreenDark;
     accentColor = scheme.accentGreen;
-    subtitleText = `${stats.total} tests  \u00B7  ${stats.passRate}% pass rate  \u00B7  ${formatDuration(duration)}`;
+    subtitleText = `${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   } else {
     verdictText = `${stats.failed} FAILURE${stats.failed === 1 ? '' : 'S'} DETECTED`;
     bgColor = scheme.accentRedBg;
     textColor = scheme.accentRedDark;
     accentColor = scheme.accentRed;
-    subtitleText = `${stats.total} tests  \u00B7  ${stats.passRate}% pass rate  \u00B7  ${formatDuration(duration)}`;
+    subtitleText = `${stats.total} tests  \u00B7  ${formatPassRate(stats.passRate)} pass rate  \u00B7  ${formatDuration(duration)}`;
   }
 
   doc.save();
@@ -524,9 +529,9 @@ function drawVerdictBanner(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sche
 // ---------------------------------------------------------------------------
 function drawKpiCards(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: PdfColorScheme): number {
   const y = 178;
-  const stats = computeStats(data.results);
+  const stats = computeRunStats(data.results);
   const duration = Date.now() - data.startTime;
-  const grade = computeAverageGrade(data.results);
+  const grade = runStabilityGrade(data.results);
   const gc = gradeColors(scheme);
 
   const cardGap = 12;
@@ -535,7 +540,7 @@ function drawKpiCards(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: P
 
   const metrics = [
     { label: 'Total Tests', value: String(stats.total), accent: scheme.accentBlue },
-    { label: 'Pass Rate', value: `${stats.passRate}%`, accent: stats.passRate >= 80 ? scheme.accentGreenDark : scheme.accentRedDark },
+    { label: 'Pass Rate', value: formatPassRate(stats.passRate), accent: passRateColor(stats.passRate, scheme) },
     { label: 'Failed', value: String(stats.failed), accent: stats.failed === 0 ? scheme.accentGreenDark : scheme.accentRedDark },
     { label: 'Flaky', value: String(stats.flaky), accent: stats.flaky === 0 ? scheme.accentGreenDark : scheme.accentAmber },
     { label: 'Duration', value: formatDuration(duration), accent: scheme.bodyText },
@@ -584,7 +589,7 @@ function drawKpiCards(doc: PDFKit.PDFDocument, data: ExecutivePdfData, scheme: P
 // ---------------------------------------------------------------------------
 function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData, startY: number, scheme: PdfColorScheme): number {
   let y = startY;
-  const stats = computeStats(data.results);
+  const stats = computeRunStats(data.results);
   const sectionH = 160;
 
   // Section title
@@ -617,8 +622,8 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
 
   // Center text in donut
   doc.save();
-  doc.font(FONT_BOLD).fontSize(18).fillColor(stats.passRate >= 80 ? scheme.accentGreenDark : scheme.accentRedDark);
-  doc.text(`${stats.passRate}%`, donutCx - 28, donutCy - 12, { width: 56, align: 'center' });
+  doc.font(FONT_BOLD).fontSize(18).fillColor(passRateColor(stats.passRate, scheme));
+  doc.text(formatPassRate(stats.passRate), donutCx - 28, donutCy - 12, { width: 56, align: 'center' });
   doc.font(FONT_REGULAR).fontSize(7).fillColor(scheme.mutedText);
   doc.text('pass rate', donutCx - 28, donutCy + 8, { width: 56, align: 'center' });
   doc.restore();
@@ -659,18 +664,9 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
   }
 
   // File breakdown mini-table
-  const suiteMap = new Map<string, { total: number; passed: number; failed: number; flaky: number }>();
-  for (const r of data.results) {
-    const key = r.file;
-    if (!suiteMap.has(key)) suiteMap.set(key, { total: 0, passed: 0, failed: 0, flaky: 0 });
-    const s = suiteMap.get(key)!;
-    s.total++;
-    if (r.outcome === 'flaky') s.flaky++;
-    else if (r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')) s.failed++;
-    else if (r.status === 'passed' || r.outcome === 'expected') s.passed++;
-  }
+  const files = statsByFile(data.results);
 
-  if (suiteMap.size > 1) {
+  if (files.length > 1) {
     const tableY = ly + 56;
     doc.save();
     doc.font(FONT_BOLD).fontSize(8).fillColor(scheme.bodyText);
@@ -678,27 +674,21 @@ function drawDistributionSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData
     doc.restore();
 
     let ty = tableY + 14;
-    const entries = [...suiteMap.entries()].sort((a, b) => {
-      const rateA = a[1].total > 0 ? a[1].passed / a[1].total : 1;
-      const rateB = b[1].total > 0 ? b[1].passed / b[1].total : 1;
-      return rateA - rateB; // worst first
-    }).slice(0, 5);
-
-    for (const [file, s] of entries) {
-      const pct = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
+    for (const { file, passRate: pct } of files.slice(0, 5)) {
       doc.save();
       // Mini bar
       const miniBarW = 60;
-      const filledW = (pct / 100) * miniBarW;
+      const filledW = ((pct ?? 0) / 100) * miniBarW;
+      const fill = (pct ?? 0) >= 80 ? scheme.accentGreen : (pct ?? 0) >= 50 ? scheme.accentAmber : scheme.accentRed;
       doc.roundedRect(legendX, ty + 1, miniBarW, 8, 4).fill(scheme.dividerColor);
       if (filledW > 0) {
         doc.save();
         doc.roundedRect(legendX, ty + 1, miniBarW, 8, 4).clip();
-        doc.rect(legendX, ty + 1, filledW, 8).fill(pct >= 80 ? scheme.accentGreen : pct >= 50 ? scheme.accentAmber : scheme.accentRed);
+        doc.rect(legendX, ty + 1, filledW, 8).fill(fill);
         doc.restore();
       }
       doc.font(FONT_REGULAR).fontSize(7).fillColor(scheme.bodyText);
-      doc.text(`${pct}%`, legendX + miniBarW + 6, ty, { width: 28 });
+      doc.text(formatPassRate(pct), legendX + miniBarW + 6, ty, { width: 28 });
       doc.text(truncate(file, 50), legendX + miniBarW + 34, ty, { width: legendW - miniBarW - 34 });
       doc.restore();
       ty += 14;
@@ -743,13 +733,14 @@ function drawQualityGates(doc: PDFKit.PDFDocument, result: QualityGateResult, st
       doc.restore();
     }
 
-    const statusColor = rule.skipped ? scheme.lightText : rule.passed ? scheme.accentGreenDark : scheme.accentRedDark;
-    const statusText = rule.skipped ? 'Skipped' : rule.passed ? 'Passed' : 'Failed';
-    const statusIcon = rule.skipped ? '-' : rule.passed ? '\u2713' : '\u2717';
+    const warning = isWarning(rule);
+    const statusColor = rule.skipped ? scheme.lightText : rule.passed ? scheme.accentGreenDark : warning ? scheme.accentAmber : scheme.accentRedDark;
+    const statusText = rule.skipped ? 'Skipped' : rule.passed ? 'Passed' : warning ? 'Warning' : 'Failed';
+    const statusIcon = rule.skipped ? '-' : rule.passed ? '\u2713' : warning ? '!' : '\u2717';
 
     doc.save();
     doc.font(FONT_REGULAR).fontSize(8).fillColor(scheme.bodyText);
-    doc.text(formatRuleName(rule.rule), MARGIN + 8, y + 6, { width: colWidths[0] });
+    doc.text(ruleLabel(rule), MARGIN + 8, y + 6, { width: colWidths[0] });
     doc.text(rule.actual, MARGIN + colWidths[0] + 4, y + 6, { width: colWidths[1] });
     doc.text(rule.threshold, MARGIN + colWidths[0] + colWidths[1] + 4, y + 6, { width: colWidths[2] });
 
@@ -781,17 +772,6 @@ function drawQualityGates(doc: PDFKit.PDFDocument, result: QualityGateResult, st
   return y + 32;
 }
 
-function formatRuleName(rule: string): string {
-  const names: Record<string, string> = {
-    maxFailures: 'Maximum Failures',
-    minPassRate: 'Minimum Pass Rate',
-    maxFlakyRate: 'Maximum Flaky Rate',
-    minStabilityGrade: 'Minimum Stability Grade',
-    noNewFailures: 'No New Failures',
-  };
-  return names[rule] || rule;
-}
-
 // ---------------------------------------------------------------------------
 // Section: Trend charts
 // ---------------------------------------------------------------------------
@@ -810,7 +790,8 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
   const chartH = 60;
 
   const charts = [
-    { label: 'Pass Rate', values: summaries.map(s => s.passRate), color: scheme.accentGreen, suffix: '%' },
+    // Runs where every test was skipped have no pass rate, so the pass rate trend leaves them out.
+    { label: 'Pass Rate', values: summaries.flatMap(s => s.passRate ?? []), color: scheme.accentGreen, suffix: '%' },
     { label: 'Duration', values: summaries.map(s => s.duration), color: scheme.accentBlue, suffix: '' },
     { label: 'Total Tests', values: summaries.map(s => s.total), color: scheme.bodyText, suffix: '' },
     { label: 'Flaky Tests', values: summaries.map(s => s.flaky), color: scheme.accentAmber, suffix: '' },
@@ -823,7 +804,7 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
     const cy = y + row * (chartH + 40);
 
     const chart = charts[i];
-    const latest = chart.values[chart.values.length - 1];
+    const latest = chart.values[chart.values.length - 1] ?? 0;
     const prev = chart.values.length >= 2 ? chart.values[chart.values.length - 2] : latest;
     const diff = latest - prev;
     const diffStr = diff === 0 ? '' : diff > 0 ? ` (+${chart.label === 'Duration' ? formatDuration(diff) : diff + chart.suffix})` : ` (${chart.label === 'Duration' ? '-' + formatDuration(Math.abs(diff)) : diff + chart.suffix})`;
@@ -834,7 +815,7 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
     doc.text(chart.label, cx, cy);
 
     // Latest value
-    const latestStr = chart.label === 'Duration' ? formatDuration(latest) : `${latest}${chart.suffix}`;
+    const latestStr = chart.values.length === 0 ? 'n/a' : chart.label === 'Duration' ? formatDuration(latest) : `${latest}${chart.suffix}`;
     doc.font(FONT_BOLD).fontSize(14).fillColor(chart.color);
     doc.text(latestStr, cx, cy + 12, { width: chartW * 0.5, continued: false });
 
@@ -863,7 +844,7 @@ function drawTrendCharts(doc: PDFKit.PDFDocument, summaries: RunSummary[], start
 // ---------------------------------------------------------------------------
 function drawFailuresSection(doc: PDFKit.PDFDocument, data: ExecutivePdfData, startY: number, version: string, scheme: PdfColorScheme, footerText?: string): number {
   const failures = data.results
-    .filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))
+    .filter(isFailedTest)
     .slice(0, 15);
 
   if (failures.length === 0) return startY;
@@ -993,7 +974,8 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
   doc.roundedRect(MARGIN, y, CONTENT_W, 24, 4).fill(scheme.accentAmberBg);
   doc.rect(MARGIN, y, 3, 24).fill(scheme.accentAmber);
   doc.font(FONT_BOLD).fontSize(8).fillColor(scheme.accentAmber);
-  doc.text(`${entries.length} test${entries.length === 1 ? '' : 's'} quarantined due to high flakiness`, MARGIN + 12, y + 6, { width: CONTENT_W - 24 });
+  const reason = entries.every(e => (e.source ?? 'auto') === 'auto') ? ' due to high flakiness' : '';
+  doc.text(`${entries.length} test${entries.length === 1 ? '' : 's'} quarantined${reason}`, MARGIN + 12, y + 6, { width: CONTENT_W - 24 });
   doc.restore();
   y += 32;
 
@@ -1020,7 +1002,7 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
       doc.restore();
     }
 
-    const scorePct = Math.round(e.flakinessScore * 100);
+    const scorePct = Math.round((e.flakinessScore ?? 0) * 100);
 
     doc.save();
     doc.font(FONT_REGULAR).fontSize(7).fillColor(scheme.bodyText);
@@ -1040,7 +1022,7 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
       doc.restore();
     }
     doc.font(FONT_BOLD).fontSize(7).fillColor(scorePct >= 80 ? scheme.accentRedDark : scheme.accentAmber);
-    doc.text(`${scorePct}%`, barX + barW + 6, y + 5, { width: 30 });
+    doc.text(e.flakinessScore === undefined ? 'n/a' : `${scorePct}%`, barX + barW + 6, y + 5, { width: 30 });
 
     doc.restore();
     y += rowH;
@@ -1053,19 +1035,9 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
 // Section: Suite breakdown table (full page)
 // ---------------------------------------------------------------------------
 function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, startY: number, version: string, scheme: PdfColorScheme, footerText?: string): number {
-  const suiteMap = new Map<string, { total: number; passed: number; failed: number; flaky: number; skipped: number; duration: number }>();
-  for (const r of data.results) {
-    if (!suiteMap.has(r.file)) suiteMap.set(r.file, { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0, duration: 0 });
-    const s = suiteMap.get(r.file)!;
-    s.total++;
-    s.duration += r.duration;
-    if (r.outcome === 'flaky') s.flaky++;
-    else if (r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')) s.failed++;
-    else if (r.status === 'skipped') s.skipped++;
-    else s.passed++;
-  }
+  const entries = statsByFile(data.results);
 
-  if (suiteMap.size <= 1) return startY;
+  if (entries.length <= 1) return startY;
 
   let y = ensureSpace(doc, startY, 80, version, scheme, footerText);
 
@@ -1090,16 +1062,10 @@ function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sta
   doc.restore();
   y += rowH;
 
-  const entries = [...suiteMap.entries()].sort((a, b) => {
-    const rateA = a[1].total > 0 ? a[1].passed / a[1].total : 1;
-    const rateB = b[1].total > 0 ? b[1].passed / b[1].total : 1;
-    return rateA - rateB;
-  });
-
   for (let i = 0; i < entries.length; i++) {
     y = ensureSpace(doc, y, rowH, version, scheme, footerText);
-    const [file, s] = entries[i];
-    const pct = s.total > 0 ? Math.round((s.passed / s.total) * 100) : 0;
+    const s = entries[i];
+    const { file, passRate: pct } = s;
 
     if (i % 2 === 0) {
       doc.save();
@@ -1114,7 +1080,8 @@ function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sta
     rx += colWidths[0];
     doc.text(String(s.total), rx, y + 5, { width: colWidths[1] - 8 });
     rx += colWidths[1];
-    doc.fillColor(scheme.accentGreenDark).text(String(s.passed), rx, y + 5, { width: colWidths[2] - 8 });
+    // The Passed and Flaky columns split the passes, so Passed leaves out flaky.
+    doc.fillColor(scheme.accentGreenDark).text(String(s.passed - s.flaky), rx, y + 5, { width: colWidths[2] - 8 });
     rx += colWidths[2];
     doc.fillColor(s.failed > 0 ? scheme.accentRedDark : scheme.mutedText).text(String(s.failed), rx, y + 5, { width: colWidths[3] - 8 });
     rx += colWidths[3];
@@ -1125,8 +1092,8 @@ function drawSuiteBreakdown(doc: PDFKit.PDFDocument, data: ExecutivePdfData, sta
 
     // Pass rate with color
     doc.font(FONT_BOLD).fontSize(7);
-    doc.fillColor(pct >= 80 ? scheme.accentGreenDark : pct >= 50 ? scheme.accentAmber : scheme.accentRedDark);
-    doc.text(`${pct}%`, rx, y + 5, { width: colWidths[6] - 8 });
+    doc.fillColor(pct === null ? scheme.accentGray : pct >= 80 ? scheme.accentGreenDark : pct >= 50 ? scheme.accentAmber : scheme.accentRedDark);
+    doc.text(formatPassRate(pct), rx, y + 5, { width: colWidths[6] - 8 });
 
     doc.restore();
     y += rowH;
@@ -1185,7 +1152,7 @@ export function generateExecutivePdf(data: ExecutivePdfData, outputDir: string, 
   const summaries = data.history.summaries || [];
   const hasHistory = summaries.length >= 2;
   const hasSuites = new Set(data.results.map(r => r.file)).size > 1;
-  const hasFailures = data.results.some(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'));
+  const hasFailures = data.results.some(isFailedTest);
   const hasClusters = (data.failureClusters?.length ?? 0) > 0;
   const hasQuarantine = (data.quarantineEntries?.length ?? 0) > 0;
 

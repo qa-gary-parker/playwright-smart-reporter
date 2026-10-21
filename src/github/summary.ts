@@ -1,10 +1,15 @@
-import type { JsonExportData } from '../generators/json-exporter';
-import { ruleLabels } from '../gates/quality-gate-reporter';
+import type { JsonClusterEntry, JsonExportData } from '../generators/json-exporter';
+import type { CommitRange } from '../types';
+import { isWarning, ruleLabel } from '../gates/quality-gate-reporter';
+import { parseError } from '../utils/error-stack';
 import { formatDuration } from '../utils/formatters';
+import { formatPassRate } from '../utils/run-stats';
+import { truncate } from '../utils/sanitizers';
 import { failureLocation, isFailure, testLabel } from './annotations';
 
 const LIST_LIMIT = 10;
 const SLOWEST_LIMIT = 5;
+const SUSPECT_LIMIT = 5;
 
 // Code spans stop @mentions, #refs and HTML in test titles from rendering; pipes still need escaping inside tables.
 function code(text: string): string {
@@ -17,6 +22,19 @@ function code(text: string): string {
 
 function table(header: string[], rows: string[][]): string[] {
   return [`| ${header.join(' | ')} |`, `|${header.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${r.join(' | ')} |`)];
+}
+
+// Where a new failure started, and the files changed since it last passed
+function commitsLine(c: CommitRange): string {
+  const to = code(c.firstFailed.commit);
+  const same = c.lastPassed?.commit === c.firstFailed.commit;
+  const at = same
+    ? `No code change: last passed and first failed at ${to}`
+    : `${c.lastPassed ? `Last passed at ${code(c.lastPassed.commit)}, first` : 'First'} failed at ${to}`;
+  const link = c.url ? ` ([${c.lastPassed && !same ? 'compare' : 'commit'}](${c.url}))` : '';
+  const files = c.suspects ?? [];
+  const extra = files.length > SUSPECT_LIMIT ? `, and ${files.length - SUSPECT_LIMIT} more` : '';
+  return `<br>${at}${link}${files.length ? `<br>Changed: ${files.slice(0, SUSPECT_LIMIT).map(code).join(', ')}${extra}` : ''}`;
 }
 
 function more(total: number): string[] {
@@ -44,33 +62,44 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
   out.push('');
   out.push(...table(
     ['Pass rate', 'Passed', 'Failed', 'Flaky', 'Skipped', 'Duration'],
-    [[`${summary.passRate}%`, String(summary.passed), String(summary.failed), String(summary.flaky), String(summary.skipped), formatDuration(summary.duration)]],
+    [[formatPassRate(summary.passRate), String(summary.passed), String(summary.failed), String(summary.flaky), String(summary.skipped), formatDuration(summary.duration)]],
   ));
+
+  const base = data.comparison?.baselineRun.ciInfo;
+  const baseAt = [base?.branch, base?.commit].filter((s): s is string => !!s).map(code).join(' @ ');
+  if (baseAt) out.push('', `**Baseline run:** ${baseAt}`);
 
   const gates = data.qualityGates;
   if (gates) {
     const checked = gates.rules.filter((r) => !r.skipped);
-    const breached = checked.filter((r) => !r.passed);
+    const warnings = checked.filter(isWarning).length;
+    const breached = checked.filter((r) => !r.passed).length - warnings;
+    const warningText = `${warnings} warning${warnings === 1 ? '' : 's'}`;
     out.push('', gates.passed
-      ? `**Quality gates: passed** (${checked.length} of ${checked.length} rules passed)`
-      : `**Quality gates: failed** (${breached.length} of ${checked.length} rules breached)`);
+      ? `**Quality gates: passed${warnings ? ` with ${warningText}` : ''}** (${checked.length - warnings} of ${checked.length} rules passed)`
+      : `**Quality gates: failed** (${breached} of ${checked.length} rules breached${warnings ? `, ${warningText}` : ''})`);
     out.push('', ...table(['Rule', 'Actual', 'Threshold', 'Result'], gates.rules.map((r) => [
-      ruleLabels[r.rule] ?? r.rule,
+      ruleLabel(r),
       r.actual,
       r.threshold,
-      r.skipped ? 'Skipped' : r.passed ? 'Passed' : 'Failed',
+      r.skipped ? 'Skipped' : r.passed ? 'Passed' : isWarning(r) ? 'Warning' : 'Failed',
     ])));
   }
 
   if (failures.length > 0) {
-    // New failures (failed now, passed in the baseline run) are listed first and marked.
-    const newIds = new Set((data.comparison?.changes.newFailures ?? []).map((t) => t.testId));
+    // New failures and failing new tests are listed first and marked, as noNewFailures counts both.
+    const newIds = new Set([...(data.comparison?.changes.newFailures ?? []), ...(data.comparison?.changes.newTests ?? [])].map((t) => t.testId));
+    const absentIds = new Set((data.comparison?.changes.notInBaseline ?? []).map((t) => t.testId));
     const fresh = failures.filter((t) => newIds.has(t.testId));
+    const absent = failures.filter((t) => absentIds.has(t.testId)).length;
     const ordered = [...fresh, ...failures.filter((t) => !newIds.has(t.testId))];
-    out.push('', data.comparison ? `### Failures (${failures.length}, ${fresh.length} new)` : `### Failures (${failures.length})`, '');
+    out.push('', data.comparison
+      ? `### Failures (${failures.length}, ${fresh.length} new${absent ? `, ${absent} not in baseline` : ''})`
+      : `### Failures (${failures.length})`, '');
     out.push(...table(['Test', 'Location'], ordered.slice(0, LIST_LIMIT).map((t) => {
       const loc = failureLocation(t, data.metadata.rootDir, opts.workspace);
-      const label = newIds.has(t.testId) ? `**New** ${code(testLabel(t))}` : code(testLabel(t));
+      const mark = newIds.has(t.testId) ? '**New** ' : absentIds.has(t.testId) ? '**Not in baseline** ' : '';
+      const label = `${mark}${code(testLabel(t))}${t.commits ? commitsLine(t.commits) : ''}`;
       return [label, code(loc.line !== undefined ? `${loc.file}:${loc.line}` : loc.file)];
     })), ...more(ordered.length));
   }
@@ -92,4 +121,27 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
 
   if (opts.reportUrl) out.push('', `[Open the full report](${opts.reportUrl})`);
   return `${out.join('\n')}\n`;
+}
+
+// GitHub rejects issue titles over 256 characters
+const TITLE_LIMIT = 256;
+
+/** Title and body of the GitHub issue for a new failure cluster; the label and error pass through redact. */
+export function renderClusterIssue(data: JsonExportData, cluster: JsonClusterEntry, opts: SummaryOptions & { redact: (text: string) => string }): { title: string; body: string } {
+  const label = opts.redact(cluster.errorType);
+  const ids = new Set(cluster.testIds);
+  const tests = data.tests.filter((t) => ids.has(t.testId));
+  const error = opts.redact((tests[0]?.error && parseError(tests[0].error).message) || 'No error message');
+  const fence = '`'.repeat(Math.max(3, ...(error.match(/`+/g) ?? []).map((r) => r.length + 1)));
+
+  const out = [`**New failure cluster:** ${code(label)}`, '', `${tests.length} test${tests.length === 1 ? '' : 's'} in cluster ${code(cluster.id)}:`, ''];
+  out.push(...table(['Test', 'Location'], tests.slice(0, LIST_LIMIT).map((t) => {
+    const loc = failureLocation(t, data.metadata.rootDir, opts.workspace);
+    return [code(testLabel(t)), code(loc.line !== undefined ? `${loc.file}:${loc.line}` : loc.file)];
+  })), ...more(tests.length));
+  out.push('', fence, error, fence);
+  const commits = cluster.tracking?.commits;
+  if (commits) out.push('', `**Commits:**${commitsLine(commits)}`);
+  if (opts.reportUrl) out.push('', `[Open the full report](${opts.reportUrl})`);
+  return { title: truncate(`New failure cluster: ${label}`, TITLE_LIMIT), body: `${out.join('\n')}\n` };
 }

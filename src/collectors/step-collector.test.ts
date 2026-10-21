@@ -266,6 +266,42 @@ describe('StepCollector', () => {
       expect(steps[2].title).toBe('locator.click');
     });
 
+    it('records the parent index and depth of each nested step, counting only the steps it keeps', () => {
+      const result = makeTestResult([
+        makeStep('Before Hooks', 10, 'hook', [makeStep('Launch browser', 5, 'pw:api')]),
+        makeStep('checkout', 300, 'test.step', [
+          makeStep('page.goto', 100, 'pw:api'),
+          makeStep('pay', 150, 'test.step', [makeStep('expect.toHaveText', 40, 'expect')]),
+        ]),
+        makeStep('After Hooks', 5, 'hook'),
+      ]);
+
+      const steps = new StepCollector().extractSteps(result);
+
+      expect(steps.map(s => [s.title, s.parent, s.depth])).toEqual([
+        ['Launch browser', undefined, undefined],
+        ['checkout', undefined, undefined],
+        ['page.goto', 1, 1],
+        ['pay', 1, 1],
+        ['expect.toHaveText', 3, 2],
+      ]);
+    });
+
+    it('attaches a step to its nearest kept ancestor when filtered steps sit between them', () => {
+      const result = makeTestResult([
+        makeStep('checkout', 300, 'test.step', [
+          makeStep('page.click', 100, 'pw:api', [makeStep('pay', 50, 'test.step')]),
+        ]),
+      ]);
+
+      const steps = new StepCollector({ filterPwApiSteps: true }).extractSteps(result);
+
+      expect(steps.map(s => [s.title, s.parent, s.depth])).toEqual([
+        ['checkout', undefined, undefined],
+        ['pay', 0, 1],
+      ]);
+    });
+
     it('marks the slowest step when its duration exceeds 100ms', () => {
       const result = makeTestResult([
         makeStep('Fast step', 50, 'pw:api'),

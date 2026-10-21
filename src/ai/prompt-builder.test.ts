@@ -209,6 +209,26 @@ describe('buildPlaywrightStyleAiPrompt', () => {
     expect(result).not.toContain('\x1b[31m');
   });
 
+  it('strips non-SGR CSI and OSC 8 hyperlinks from error, stdout and stderr', () => {
+    const ansi = '\x1b[2Kerr\x1b]8;;https://x\x07link\x1b]8;;\x07';
+    const result = buildPlaywrightStyleAiPrompt({
+      config: makeConfig(),
+      test: makeTestCase(),
+      result: makeTestResult({
+        errors: [makeError({
+          message: `Error: ${ansi}`,
+          stack: `Error: ${ansi}\n  at test.ts:1:1`,
+        })],
+        stdout: [`out ${ansi}\n`],
+        stderr: [`warn ${ansi.replace(/\x07/g, '\x1b\\')}\n`],
+      }),
+    });
+
+    expect(result).toContain('# Error details\n\n```\nError: errlink\nError: errlink\n  at test.ts:1:1\n```');
+    expect(result).toContain('# Stdout\n\n```\nout errlink\n\n```');
+    expect(result).toContain('# Stderr\n\n```\nwarn errlink\n\n```');
+  });
+
   it('includes error location in formatted error', () => {
     const error = makeError({
       message: 'Timeout',
@@ -364,6 +384,44 @@ describe('buildPlaywrightStyleAiPrompt', () => {
 
     expect(result).toContain('# Error details');
     expect(result).not.toContain('Possible first anomaly');
+  });
+
+  it('lists every attempt and where they failed when the test ran more than once', () => {
+    const steps = [
+      { title: 'checkout', duration: 3300, category: 'test.step', failed: true },
+      { title: 'pay', duration: 3200, category: 'test.step', failed: true, parent: 0, depth: 1 },
+    ];
+    const result = buildPlaywrightStyleAiPrompt({
+      config: makeConfig(),
+      test: makeTestCase(),
+      result: makeTestResult({ errors: [makeError()] }),
+      attempts: [
+        { retry: 0, status: 'failed', duration: 4800, error: 'Error: card declined\n    at tests/test.spec.ts:10:5', steps },
+        { retry: 1, status: 'timedOut', duration: 30000, error: 'Test timeout of 30000ms exceeded.', steps },
+      ],
+    });
+
+    expect(result).toContain([
+      '# Attempts',
+      '',
+      '- Attempt 1 (failed, 4.8s): Error: card declined',
+      '- Attempt 2 (timedOut, 30.0s): Test timeout of 30000ms exceeded.',
+      '',
+      "Every attempt failed at step 'checkout › pay'",
+    ].join('\n'));
+    expect(result.indexOf('# Attempts')).toBeGreaterThan(result.indexOf('# Error details'));
+  });
+
+  it('has no attempts section for a test that ran once', () => {
+    const result = buildPlaywrightStyleAiPrompt({
+      config: makeConfig(),
+      test: makeTestCase(),
+      result: makeTestResult({ errors: [makeError()] }),
+      attempts: [{ retry: 0, status: 'failed', duration: 4800, error: 'Error: card declined', steps: [] }],
+    });
+
+    expect(result).toContain('# Error details');
+    expect(result).not.toContain('# Attempts');
   });
 
   it('includes error-context attachment content', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportTest } from '../../report-data/schema';
-import { csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, titlePath, trendStats } from './data';
+import { clusterLabel, commitsLabel, csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, suiteHealth, titlePath, trendStats } from './data';
 import { formatQuery, matchesQuery, parseQuery } from './filters';
 import { groupTests } from './grouping';
 import { QUEUES } from './queues';
@@ -84,6 +84,15 @@ describe('grouping', () => {
     ]);
   });
 
+  it('keeps two clusters with the same label in separate groups', () => {
+    const other = t({ testId: 'o', status: 'failed', outcome: 'unexpected', clusterId: 'c2' });
+    const twins = { clusters: [...data.clusters, { id: 'c2', errorType: 'toBeVisible failed', testIds: ['o'] }] };
+    expect(groupTests([failed, timedOut, other], 'cluster', twins).map((g) => [g.key, g.label, g.tests.map((x) => x.testId)])).toEqual([
+      ['c1', 'toBeVisible failed', ['to', 'f']],
+      ['c2', 'toBeVisible failed', ['o']],
+    ]);
+  });
+
   it('puts a test in every tag group it carries and counts sum per mode', () => {
     const tagged = t({ testId: 'm', tags: ['@smoke', '@payments', '@smoke'] });
     const groups = groupTests([failed, tagged, passed], 'tag', data);
@@ -101,6 +110,53 @@ describe('grouping', () => {
     for (const by of ['file', 'project', 'suite', 'status', 'grade', 'none'] as const) {
       expect(groupTests([failed, flaky, passed], by, data).reduce((n, g) => n + g.tests.length, 0)).toBe(3);
     }
+  });
+
+  it('groups by the worker slot of the final attempt and by the shard of the run, and knows no worker in a merged report', () => {
+    const slot = (testId: string, parallelIndex: number) => t({ testId, attempts: [{ retry: 0, status: 'passed', duration: 1, steps: [], parallelIndex }] });
+    const tests = [slot('a', 1), slot('b', 0), slot('c', 1), t({ testId: 'never started' })];
+    const label = (groups: ReturnType<typeof groupTests>) => groups.map((g) => [g.label, g.tests.map((x) => x.testId)]);
+    expect(label(groupTests(tests, 'worker', data))).toEqual([['Worker 1', ['a', 'c']], ['(none)', ['never started']], ['Worker 0', ['b']]]);
+    expect(label(groupTests(tests, 'worker', { ...data, efficiency: { merged: true } as never }))).toEqual([['Not recorded in a merged report', ['a', 'b', 'c', 'never started']]]);
+    expect(label(groupTests(tests, 'shard', { ...data, meta: { shard: { current: 2, total: 3 } } as never }))).toEqual([['Shard 2 of 3', ['a', 'b', 'c', 'never started']]]);
+    expect(label(groupTests(tests, 'shard', data))).toEqual([['(none)', ['a', 'b', 'c', 'never started']]]);
+  });
+
+  it('groups by suite on the describe blocks, without the file that starts the suite path', () => {
+    const inBlock = t({ testId: 'b', file: 'suite.fixtures.ts', suites: ['suite.fixtures.ts', 'sign in'] });
+    const topLevel = t({ testId: 'l', file: 'suite.fixtures.ts', suites: ['suite.fixtures.ts'] });
+    expect(groupTests([inBlock, topLevel], 'suite', data).map((g) => [g.label, g.tests.map((x) => x.testId)])).toEqual([
+      ['(none)', ['l']],
+      ['sign in', ['b']],
+    ]);
+  });
+});
+
+describe('cluster labels', () => {
+  it('names a cluster New, Regressed, or Recurring with its runs, and titles a recurring one with its start', () => {
+    const since = '2026-10-12T12:00:00.000Z';
+    expect(clusterLabel({ status: 'new', runs: 1, since, trend: [1] })).toEqual({ text: 'New' });
+    expect(clusterLabel({ status: 'regressed', runs: 1, since, trend: [1, 0, 1] })).toEqual({ text: 'Regressed' });
+    expect(clusterLabel({ status: 'recurring', runs: 4, since, sinceCommit: 'a1b2c3d4', trend: [1, 1, 1, 1] })).toEqual({ text: 'Recurring, 4 runs', title: 'Since 12 Oct at a1b2c3d4' });
+    expect(clusterLabel({ status: 'recurring', runs: 2, since, trend: [1, 1] })).toEqual({ text: 'Recurring, 2 runs', title: 'Since 12 Oct' });
+  });
+
+  it('adds the commit a cluster last passed at to its title', () => {
+    const since = '2026-10-12T12:00:00.000Z';
+    const commits = { lastPassed: { commit: '9f8e7d6c' }, firstFailed: { commit: 'a1b2c3d4' } };
+    expect(clusterLabel({ status: 'new', runs: 1, since, trend: [1], commits })).toEqual({ text: 'New', title: 'Last passed at 9f8e7d6c, first failed at a1b2c3d4' });
+    expect(clusterLabel({ status: 'regressed', runs: 1, since, trend: [1, 0, 1], commits })).toEqual({ text: 'Regressed', title: 'Last passed at 9f8e7d6c, first failed at a1b2c3d4' });
+    expect(clusterLabel({ status: 'recurring', runs: 4, since, sinceCommit: 'a1b2c3d4', trend: [1, 1, 1, 1], commits })).toEqual({
+      text: 'Recurring, 4 runs',
+      title: 'Since 12 Oct at a1b2c3d4, last passed at 9f8e7d6c',
+    });
+  });
+
+  it('shows where a failure started as a git range, or only its first failed commit when no run passed', () => {
+    const firstFailed = { commit: 'bbbbbbbb', sha: 'b'.repeat(40) };
+    expect(commitsLabel({ lastPassed: { commit: 'aaaaaaaa' }, firstFailed })).toEqual({ text: 'aaaaaaaa..bbbbbbbb', title: 'Last passed at aaaaaaaa, first failed at bbbbbbbb' });
+    expect(commitsLabel({ firstFailed })).toEqual({ text: 'bbbbbbbb', title: 'First failed at bbbbbbbb' });
+    expect(commitsLabel({ lastPassed: { commit: 'bbbbbbbb' }, firstFailed })).toEqual({ text: 'no code change', title: 'No code change: last passed and first failed at bbbbbbbb' });
   });
 });
 
@@ -172,5 +228,16 @@ describe('trend statistics', () => {
   it('flags nothing on short or flat series', () => {
     expect(trendStats([10, 90, 10, 90]).anomalies).toEqual([false, false, false, false]);
     expect(trendStats([5, 5, 5, 5, 5, 5]).anomalies.every((a) => !a)).toBe(true);
+  });
+
+  it('gives a run where every test was skipped no health grade, instead of an F from a 0% pass rate', () => {
+    expect(suiteHealth({ total: 3, passRate: null, flaky: 0, slow: 0 })).toEqual({ score: null, grade: 'n/a', pass: null, stability: 100, perf: 100 });
+    expect(suiteHealth({ total: 3, passRate: 100, flaky: 0, slow: 0 })).toEqual({ score: 100, grade: 'A', pass: 100, stability: 100, perf: 100 });
+  });
+
+  it('leaves a run with no pass rate (every test skipped) out of the average and the anomalies', () => {
+    const { average, anomalies } = trendStats([90, 92, null, 93, 92, 91, 40, 92]);
+    expect(average).toEqual([null, null, null, null, null, (93 + 92 + 91) / 3, (92 + 91 + 40) / 3, (91 + 40 + 92) / 3]);
+    expect(anomalies).toEqual([false, false, false, false, false, false, true, false]);
   });
 });

@@ -124,7 +124,7 @@ describe('json-exporter', () => {
       expect(written.summary.failed).toBe(2);
       expect(written.summary.skipped).toBe(1);
       expect(written.summary.flaky).toBe(1);
-      expect(written.summary.passRate).toBe(40); // 2/5 * 100
+      expect(written.summary.passRate).toBe(50); // 2 of the 4 that ran; #3 was skipped
       expect(written.summary.duration).toBeGreaterThanOrEqual(0);
     });
 
@@ -170,6 +170,9 @@ describe('json-exporter', () => {
           error: 'Element not found',
           outcome: 'unexpected',
           flakinessScore: 0.3,
+          flakinessStatus: 'flaky',
+          flakinessRuns: 10,
+          flakinessInterval: [0.11, 0.6],
           stabilityScore: createStabilityScore({ overall: 75, grade: 'C' }),
           performanceTrend: '↑ 15% slower',
           tags: ['@smoke'],
@@ -195,6 +198,7 @@ describe('json-exporter', () => {
       expect(test.error).toBe('Element not found');
       expect(test.outcome).toBe('unexpected');
       expect(test.flakinessScore).toBe(0.3);
+      expect([test.flakinessStatus, test.flakinessRuns, test.flakinessInterval]).toEqual(['flaky', 10, [0.11, 0.6]]);
       expect(test.stabilityScore).toEqual({ overall: 75, grade: 'C' });
       expect(test.performanceTrend).toBe('↑ 15% slower');
       expect(test.tags).toEqual(['@smoke']);
@@ -251,6 +255,18 @@ describe('json-exporter', () => {
       expect(written.failureClusters[0].aiSuggestion).toBe('Increase timeout');
     });
 
+    it('exports the tracking of each cluster and the clusters of the baseline run that went away', () => {
+      const clusterTest = createTestResult({ testId: 'fail-1', status: 'failed' });
+      const tracking = { status: 'regressed' as const, runs: 1, since: '2026-10-03T12:00:00.000Z', trend: [1, 0, 1] };
+      const clusters: FailureCluster[] = [{ id: 'cluster-1', errorType: 'TimeoutError', count: 1, tests: [clusterTest], tracking }];
+
+      exportJsonData([clusterTest], createTestHistory(), Date.now(), {}, undefined, clusters, undefined, undefined, undefined, undefined, undefined, [{ id: 'cluster-0', testIds: ['pass-1'] }]);
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.failureClusters[0].tracking).toEqual(tracking);
+      expect(written.resolvedClusters).toEqual([{ id: 'cluster-0', testIds: ['pass-1'] }]);
+    });
+
     it('comparison data is included when present', () => {
       const comparison: RunComparison = {
         baselineRun: createRunSummary({ runId: 'baseline', passRate: 70 }),
@@ -261,6 +277,8 @@ describe('json-exporter', () => {
           newTests: [],
           regressions: [],
           improvements: [],
+          notInBaseline: [],
+          newFlaky: [],
         },
       };
 
@@ -327,7 +345,7 @@ describe('json-exporter', () => {
       expect(written.summary.failed).toBe(0);
       expect(written.summary.skipped).toBe(0);
       expect(written.summary.flaky).toBe(0);
-      expect(written.summary.passRate).toBe(0);
+      expect(written.summary.passRate).toBe(null);
       expect(written.tests).toEqual([]);
     });
 

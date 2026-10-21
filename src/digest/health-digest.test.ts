@@ -104,6 +104,35 @@ describe('HealthDigest', () => {
       expect(result.passRateTrend!.to).toBe(96);
     });
 
+    it('trends the pass rate over the runs that have one, leaving out a run where every test was skipped', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {},
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6), passRate: 85 }),
+          createSummary({ runId: 'r2', timestamp: timestamp(3), passRate: 96 }),
+          createSummary({ runId: 'r3', timestamp: timestamp(1), passed: 0, failed: 0, skipped: 10, passRate: null }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.passRateTrend).toEqual({ direction: 'up', from: 85, to: 96 });
+      expect(result.summary).toBe('3 runs analyzed. Pass rate trending up (85% -> 96%).');
+    });
+
+    it('has no pass rate trend when every run in the period skipped every test', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {},
+        summaries: [createSummary({ runId: 'r1', timestamp: timestamp(1), passed: 0, failed: 0, skipped: 10, passRate: null })],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect([result.passRateTrend, result.summary]).toEqual([null, '1 runs analyzed. No pass rate data.']);
+    });
+
     it('detects pass rate trending down', () => {
       const history: TestHistory = {
         runs: [],
@@ -165,9 +194,33 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.newFlakyTests.length).toBe(1);
-      expect(result.newFlakyTests[0].testId).toBe('test-flaky');
-      expect(result.newFlakyTests[0].flakinessScore).toBeGreaterThanOrEqual(0.3);
+      expect(result.newFlakyTests).toEqual([{ testId: 'test-flaky', flakinessScore: 0.6, runs: 5 }]);
+    });
+
+    it('does not report a test that was broken and then fixed in the period as newly flaky', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {
+          'test-fixed': [
+            createEntry({ passed: true, timestamp: timestamp(14) }),
+            createEntry({ passed: true, timestamp: timestamp(12) }),
+            // In period: failed 3 runs, then fixed
+            createEntry({ passed: false, timestamp: timestamp(6) }),
+            createEntry({ passed: false, timestamp: timestamp(5) }),
+            createEntry({ passed: false, timestamp: timestamp(4) }),
+            createEntry({ passed: true, timestamp: timestamp(3) }),
+            createEntry({ passed: true, timestamp: timestamp(2) }),
+          ],
+        },
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6) }),
+          createSummary({ runId: 'r2', timestamp: timestamp(2) }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.newFlakyTests).toEqual([]);
     });
 
     it('does not report a consistently failing test as newly flaky', () => {
@@ -221,9 +274,7 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.recoveredTests.length).toBe(1);
-      expect(result.recoveredTests[0].testId).toBe('test-recovered');
-      expect(result.recoveredTests[0].stableForRuns).toBeGreaterThanOrEqual(3);
+      expect(result.recoveredTests).toEqual([{ testId: 'test-recovered', stableForRuns: 4 }]);
     });
 
     it('detects performance regression (>20% slower)', () => {
@@ -249,9 +300,41 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.performanceTrends.length).toBe(1);
-      expect(result.performanceTrends[0].testId).toBe('test-slow');
-      expect(result.performanceTrends[0].percentChange).toBeGreaterThan(20);
+      expect(result.performanceTrends).toEqual([{ testId: 'test-slow', percentChange: 50 }]);
+    });
+
+    it('compares the median of passing runs, so slow failures and one slow pass neither hide nor fake a regression', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {
+          'test-hidden': [
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(14) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(12) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(11) }),
+            createEntry({ passed: false, duration: 30000, timestamp: timestamp(10) }),
+            createEntry({ passed: true, duration: 1500, timestamp: timestamp(6) }),
+            createEntry({ passed: true, duration: 1500, timestamp: timestamp(4) }),
+            createEntry({ passed: true, duration: 1500, timestamp: timestamp(2) }),
+          ],
+          'test-noisy': [
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(14) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(12) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(10) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(6) }),
+            createEntry({ passed: false, duration: 30000, timestamp: timestamp(5) }),
+            createEntry({ passed: true, duration: 9000, timestamp: timestamp(4) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(2) }),
+          ],
+        },
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6) }),
+          createSummary({ runId: 'r2', timestamp: timestamp(2) }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.performanceTrends).toEqual([{ testId: 'test-hidden', percentChange: 50 }]);
     });
 
     it('handles empty history', () => {
@@ -362,10 +445,14 @@ describe('HealthDigest', () => {
             createEntry({ passed: false, timestamp: timestamp(14) }),
             createEntry({ passed: true, timestamp: timestamp(13) }),
             createEntry({ passed: false, timestamp: timestamp(12) }),
+            createEntry({ passed: true, timestamp: timestamp(11) }),
+            createEntry({ passed: false, timestamp: timestamp(10) }),
             // In period: still flaky
-            createEntry({ passed: false, timestamp: timestamp(5) }),
-            createEntry({ passed: true, timestamp: timestamp(4) }),
-            createEntry({ passed: false, timestamp: timestamp(3) }),
+            createEntry({ passed: false, timestamp: timestamp(6) }),
+            createEntry({ passed: true, timestamp: timestamp(5) }),
+            createEntry({ passed: false, timestamp: timestamp(4) }),
+            createEntry({ passed: true, timestamp: timestamp(3) }),
+            createEntry({ passed: false, timestamp: timestamp(2) }),
           ],
         },
         summaries: [
@@ -384,9 +471,11 @@ describe('HealthDigest', () => {
         tests: {
           'test-new-flaky': [
             // Only in period
-            createEntry({ passed: false, timestamp: timestamp(5) }),
-            createEntry({ passed: true, timestamp: timestamp(4) }),
-            createEntry({ passed: false, timestamp: timestamp(3) }),
+            createEntry({ passed: false, timestamp: timestamp(6) }),
+            createEntry({ passed: true, timestamp: timestamp(5) }),
+            createEntry({ passed: false, timestamp: timestamp(4) }),
+            createEntry({ passed: true, timestamp: timestamp(3) }),
+            createEntry({ passed: false, timestamp: timestamp(2) }),
           ],
         },
         summaries: [
@@ -396,8 +485,28 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.newFlakyTests.length).toBe(1);
-      expect(result.newFlakyTests[0].testId).toBe('test-new-flaky');
+      expect(result.newFlakyTests).toEqual([{ testId: 'test-new-flaky', flakinessScore: 0.6, runs: 5 }]);
+    });
+
+    it('does not report a test with fewer than 5 runs in the period as newly flaky', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {
+          'test-short': [
+            createEntry({ passed: false, timestamp: timestamp(5) }),
+            createEntry({ passed: true, timestamp: timestamp(4) }),
+            createEntry({ passed: false, timestamp: timestamp(3) }),
+            createEntry({ passed: true, timestamp: timestamp(2) }),
+          ],
+        },
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(5) }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.newFlakyTests).toEqual([]);
     });
 
     it('does not report performance change under 20% threshold', () => {
@@ -461,9 +570,11 @@ describe('HealthDigest', () => {
             'test-flaky': [
               createEntry({ passed: true, timestamp: timestamp(14) }),
               createEntry({ passed: true, timestamp: timestamp(12) }),
-              createEntry({ passed: false, timestamp: timestamp(5) }),
-              createEntry({ passed: true, timestamp: timestamp(4) }),
-              createEntry({ passed: false, timestamp: timestamp(3) }),
+              createEntry({ passed: false, timestamp: timestamp(6) }),
+              createEntry({ passed: true, timestamp: timestamp(5) }),
+              createEntry({ passed: false, timestamp: timestamp(4) }),
+              createEntry({ passed: true, timestamp: timestamp(3) }),
+              createEntry({ passed: false, timestamp: timestamp(2) }),
             ],
           },
           summaries: [
@@ -479,7 +590,7 @@ describe('HealthDigest', () => {
       expect(md).toContain('# Test Health Digest');
       expect(md).toContain('## Summary');
       expect(md).toContain('## New Flaky Tests');
-      expect(md).toContain('`test-flaky`');
+      expect(md).toContain('- `test-flaky` (flakiness: 0.60, 5 runs)');
     });
 
     it('handles empty sections', () => {
@@ -509,9 +620,11 @@ describe('HealthDigest', () => {
           tests: {
             'test-flaky': [
               createEntry({ passed: true, timestamp: timestamp(14) }),
-              createEntry({ passed: false, timestamp: timestamp(5) }),
-              createEntry({ passed: true, timestamp: timestamp(4) }),
-              createEntry({ passed: false, timestamp: timestamp(3) }),
+              createEntry({ passed: false, timestamp: timestamp(6) }),
+              createEntry({ passed: true, timestamp: timestamp(5) }),
+              createEntry({ passed: false, timestamp: timestamp(4) }),
+              createEntry({ passed: true, timestamp: timestamp(3) }),
+              createEntry({ passed: false, timestamp: timestamp(2) }),
             ],
           },
           summaries: [
@@ -527,7 +640,7 @@ describe('HealthDigest', () => {
       expect(text).not.toContain('#');
       expect(text).not.toContain('`');
       expect(text).toContain('Test Health Digest');
-      expect(text).toContain('test-flaky');
+      expect(text).toContain('- test-flaky (flakiness: 0.60, 5 runs)');
     });
   });
 });

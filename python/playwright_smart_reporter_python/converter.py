@@ -123,11 +123,15 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
             "enableGalleryView": False,
             "enableComparison": False,
             "enableHistoryDrilldown": False,
-            "enableAIRecommendations": True,
+            "enableAIRecommendations": False,
             "enableTrendsView": True,
             "enableStabilityScore": True,
             "enableFailureClustering": True,
             "enableRetryAnalysis": False,
+            "redact": False,
+            # pytest writes no live results file
+            "live": {"enabled": False},
+            "ciCostPerMinute": None,
         },
     }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PerformanceAnalyzer } from './performance-analyzer';
-import type { TestResultData, TestHistoryEntry } from '../types';
+import type { StepData, TestResultData, TestHistoryEntry } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
   return {
@@ -16,14 +16,20 @@ function createTestResult(overrides: Partial<TestResultData> = {}): TestResultDa
   };
 }
 
-function createHistoryEntry(duration: number, skipped: boolean = false): TestHistoryEntry {
+function createHistoryEntry(
+  duration: number,
+  { skipped = false, passed = true }: { skipped?: boolean; passed?: boolean } = {}
+): TestHistoryEntry {
   return {
-    passed: true,
+    passed,
     duration,
     timestamp: new Date().toISOString(),
     skipped,
   };
 }
+
+// The fewest passing runs in history that a trend is reported from (5 with this run).
+const passes = (duration: number) => Array.from({ length: 4 }, () => createHistoryEntry(duration));
 
 describe('PerformanceAnalyzer', () => {
   describe('with default threshold (20%)', () => {
@@ -47,8 +53,8 @@ describe('PerformanceAnalyzer', () => {
       it('marks tests with only skipped history as baseline', () => {
         const test = createTestResult();
         const history = [
-          createHistoryEntry(1000, true),
-          createHistoryEntry(1500, true),
+          createHistoryEntry(1000, { skipped: true }),
+          createHistoryEntry(1500, { skipped: true }),
         ];
 
         analyzer.analyze(test, history);
@@ -58,10 +64,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('marks stable performance (within threshold)', () => {
         const test = createTestResult({ duration: 1100 }); // 10% slower
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -71,10 +74,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('marks slower tests (above threshold)', () => {
         const test = createTestResult({ duration: 1500 }); // 50% slower
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -85,10 +85,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('marks faster tests (below negative threshold)', () => {
         const test = createTestResult({ duration: 500 }); // 50% faster
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -99,8 +96,8 @@ describe('PerformanceAnalyzer', () => {
       it('excludes skipped runs from calculations', () => {
         const test = createTestResult({ duration: 1000 });
         const history = [
-          createHistoryEntry(2000), // real
-          createHistoryEntry(5000, true), // skipped - ignored
+          ...passes(2000),
+          createHistoryEntry(5000, { skipped: true }), // skipped - ignored
         ];
 
         analyzer.analyze(test, history);
@@ -109,14 +106,59 @@ describe('PerformanceAnalyzer', () => {
         expect(test.performanceTrend).toBe('↓ 50% faster');
       });
 
+      it('takes the baseline from passing runs only, so a slow failure does not hide a regression', () => {
+        const test = createTestResult({ duration: 5000 });
+        const history = [
+          ...passes(2000),
+          createHistoryEntry(30000, { passed: false }),
+        ];
+
+        analyzer.analyze(test, history);
+
+        expect(test.averageDuration).toBe(2000);
+        expect(test.performanceMetrics?.averageDuration).toBe(2000);
+        expect(test.performanceTrend).toBe('↑ 150% slower');
+      });
+
+      it('takes the median of passing runs, so one slow pass does not hide a regression', () => {
+        const test = createTestResult({ duration: 5000 });
+        const history = [
+          createHistoryEntry(2000),
+          createHistoryEntry(2000),
+          createHistoryEntry(2000),
+          createHistoryEntry(30000),
+        ];
+
+        analyzer.analyze(test, history);
+
+        expect(test.averageDuration).toBe(2000);
+        expect(test.performanceTrend).toBe('↑ 150% slower');
+      });
+
+      it('rounds the median of an even number of passing runs to whole ms', () => {
+        const test = createTestResult({ duration: 1000 });
+        analyzer.analyze(test, [1000, 1001, 1002, 5000].map((d) => createHistoryEntry(d)));
+
+        expect(test.averageDuration).toBe(1002);
+      });
+
+      it('marks tests whose history has no passing run as baseline', () => {
+        const test = createTestResult({ duration: 5000 });
+        analyzer.analyze(test, [createHistoryEntry(1000, { passed: false }), createHistoryEntry(1000, { passed: false })]);
+
+        expect(test.performanceTrend).toBe('→ Baseline');
+        expect(test.averageDuration).toBeUndefined();
+        expect(test.performanceMetrics).toBeUndefined();
+      });
+
       it('does not count a short test as slower or faster when the change is under 250ms', () => {
         const slower = createTestResult({ duration: 155 }); // 63% slower, but only 60ms
-        analyzer.analyze(slower, [createHistoryEntry(95), createHistoryEntry(95)]);
+        analyzer.analyze(slower, passes(95));
         expect(slower.performanceTrend).toBe('→ Stable');
         expect(slower.performanceMetrics?.isRegression).toBe(false);
 
         const faster = createTestResult({ duration: 300 }); // 40% faster, but only 200ms
-        analyzer.analyze(faster, [createHistoryEntry(500)]);
+        analyzer.analyze(faster, passes(500));
         expect(faster.performanceTrend).toBe('→ Stable');
         expect(faster.performanceMetrics?.isImprovement).toBe(false);
       });
@@ -130,9 +172,16 @@ describe('PerformanceAnalyzer', () => {
 
       it('counts a test that is both 20% and 250ms slower', () => {
         const test = createTestResult({ duration: 1250 });
-        analyzer.analyze(test, [createHistoryEntry(1000)]);
+        analyzer.analyze(test, passes(1000));
         expect(test.performanceTrend).toBe('↑ 25% slower');
         expect(test.performanceMetrics?.isRegression).toBe(true);
+      });
+
+      it('reports insufficient history with fewer than 4 passing runs, and no change', () => {
+        const test = createTestResult({ duration: 2500 });
+        analyzer.analyze(test, [createHistoryEntry(1000), createHistoryEntry(1000), createHistoryEntry(1000), createHistoryEntry(9000, { passed: false })]);
+
+        expect([test.performanceTrend, test.averageDuration, test.performanceMetrics]).toEqual(['→ Insufficient history', 1000, undefined]);
       });
 
       it('does not compare the duration of a test that did not pass', () => {
@@ -147,10 +196,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('calculates performance metrics correctly', () => {
         const test = createTestResult({ duration: 1200 });
-        const history = [
-          createHistoryEntry(1000),
-          createHistoryEntry(1000),
-        ];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -165,7 +211,7 @@ describe('PerformanceAnalyzer', () => {
     describe('severity calculation', () => {
       it('classifies low severity (under 25%)', () => {
         const test = createTestResult({ duration: 1200 }); // 20% slower
-        const history = [createHistoryEntry(1000)];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -174,7 +220,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('classifies medium severity (25-50%)', () => {
         const test = createTestResult({ duration: 1350 }); // 35% slower
-        const history = [createHistoryEntry(1000)];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -183,7 +229,7 @@ describe('PerformanceAnalyzer', () => {
 
       it('classifies high severity (over 50%)', () => {
         const test = createTestResult({ duration: 1600 }); // 60% slower
-        const history = [createHistoryEntry(1000)];
+        const history = passes(1000);
 
         analyzer.analyze(test, history);
 
@@ -233,29 +279,33 @@ describe('PerformanceAnalyzer', () => {
         expect(analyzer.getStatus(undefined)).toBe('stable');
       });
     });
+  });
 
-    describe('calculateSmartThreshold', () => {
-      it('returns looser threshold for very fast tests', () => {
-        expect(analyzer.calculateSmartThreshold(50)).toBe(0.5);
-        expect(analyzer.calculateSmartThreshold(99)).toBe(0.5);
-      });
+  describe('step trends', () => {
+    const analyzer = new PerformanceAnalyzer();
+    const step = (title: string, duration: number): StepData => ({ title, duration, category: 'test.step' });
+    const run = (stepDurations: Record<string, number>, passed = true) => ({ ...createHistoryEntry(1000, { passed }), stepDurations });
 
-      it('returns moderate threshold for fast tests', () => {
-        expect(analyzer.calculateSmartThreshold(100)).toBe(0.3);
-        expect(analyzer.calculateSmartThreshold(500)).toBe(0.3);
-        expect(analyzer.calculateSmartThreshold(999)).toBe(0.3);
-      });
+    it('gives each step slower than the median of its passing runs as a ratio', () => {
+      const test = createTestResult({ steps: [step('login', 310), step('checkout', 200)] });
+      analyzer.analyze(test, Array.from({ length: 5 }, () => run({ login: 100, checkout: 190 })));
 
-      it('returns default threshold for normal tests', () => {
-        expect(analyzer.calculateSmartThreshold(1000)).toBe(0.2);
-        expect(analyzer.calculateSmartThreshold(5000)).toBe(0.2);
-        expect(analyzer.calculateSmartThreshold(9999)).toBe(0.2);
-      });
+      expect(test.stepTrends).toEqual([{ title: 'login', median: 100, current: 310, ratio: 3.1 }]);
+    });
 
-      it('returns tighter threshold for slow tests', () => {
-        expect(analyzer.calculateSmartThreshold(10000)).toBe(0.15);
-        expect(analyzer.calculateSmartThreshold(30000)).toBe(0.15);
-      });
+    it('needs 4 passing runs with the step and a change of at least 100ms, and compares only a passing test', () => {
+      const history = [
+        ...Array.from({ length: 3 }, () => run({ login: 100, fill: 20, search: 200 })),
+        ...Array.from({ length: 2 }, () => run({ login: 100, fill: 20, search: 200 }, false)),
+        run({ fill: 20, search: 200 }),
+      ];
+      const steps = [step('login', 310), step('fill', 110), step('search', 500)];
+      const passed = createTestResult({ steps });
+      analyzer.analyze(passed, history);
+      const failed = createTestResult({ steps, status: 'failed' });
+      analyzer.analyze(failed, history);
+
+      expect([passed.stepTrends, failed.stepTrends]).toEqual([[{ title: 'search', median: 200, current: 500, ratio: 2.5 }], undefined]);
     });
   });
 
@@ -263,7 +313,7 @@ describe('PerformanceAnalyzer', () => {
     it('uses custom threshold for analysis', () => {
       const analyzer = new PerformanceAnalyzer(0.5); // 50% threshold
       const test = createTestResult({ duration: 1400 }); // 40% slower
-      const history = [createHistoryEntry(1000)];
+      const history = passes(1000);
 
       analyzer.analyze(test, history);
 

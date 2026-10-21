@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import type {
   SmartReporterOptions,
   TestResultData,
+  AttemptData,
   TestHistory,
   RunComparison,
   StepData,
@@ -24,6 +25,10 @@ import type {
   RunSnapshotFile,
   QualityGateResult,
   QuarantineFile,
+  HistoryRunFile,
+  QuarantineEvent,
+  FailureCluster,
+  ResolvedCluster,
 } from './types';
 
 // ============================================================================
@@ -51,6 +56,7 @@ import {
   StabilityScorer,
   AIAnalyzer,
   forecastRun,
+  trackClusters,
 } from './analyzers';
 
 // ============================================================================
@@ -64,18 +70,25 @@ import { exportJsonData } from './generators/json-exporter';
 import { writeFailureBundle } from './agent/failure-bundle';
 import { exportJunitXml } from './generators/junit-exporter';
 import { exportCtrfReport } from './generators/ctrf-exporter';
+import { exportMetrics, pushMetrics } from './generators/metrics-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
-import { QualityGateEvaluator, formatGateReport } from './gates';
-import { QuarantineGenerator } from './quarantine';
+import { firstFailureMessage } from './notifiers/notification-manager';
+import { QualityGateEvaluator, formatGateReport, validateQualityGates } from './gates';
+import { QuarantineGenerator, quarantineEvents, isExpired, describeQuarantineEntry } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest } from './utils';
+import { buildRunSummary, computeRunStats } from './utils/run-stats';
+import { readHistoryFile, readRunFiles, rebuildHistory, limitHistory } from './utils/history-merge';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
+import { createRedactor, redactTestResult } from './agent/redact';
 import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
+import { compareAttemptTraces, type AttemptEvidence } from './analyzers/attempt-compare';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
 import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
+import { addSuspects, failureCommits } from './analyzers/commit-range';
 import type { ReportCoverage } from './report-data/schema';
 
 // ============================================================================
@@ -97,6 +110,7 @@ class SmartReporter implements Reporter {
   private stepCollector: StepCollector;
   private attachmentCollector: AttachmentCollector;
   private networkCollector: NetworkCollector;
+  private attemptNetworkCollector: NetworkCollector;
   private a11yCollector = new A11yCollector();
   private coverageCollector?: CoverageCollector;
 
@@ -106,7 +120,7 @@ class SmartReporter implements Reporter {
   private retryAnalyzer!: RetryAnalyzer;
   private failureClusterer: FailureClusterer;
   private stabilityScorer!: StabilityScorer;
-  private aiAnalyzer: AIAnalyzer;
+  private aiAnalyzer?: AIAnalyzer; // only with enableAIRecommendations: true
 
   // Notifiers
   private slackNotifier!: SlackNotifier;
@@ -119,6 +133,7 @@ class SmartReporter implements Reporter {
   private resultsMap: Map<string, TestResultData> = new Map(); // Track final result per test
   private outputDir: string = '';
   private startTime: number = 0;
+  private begunAt: number = 0;
   private fullConfig: FullConfig | null = null;
   private runnerErrors: string[] = [];
   private ciInfo?: CIInfo;
@@ -127,9 +142,15 @@ class SmartReporter implements Reporter {
   private ownership = new Map<string, OwnerInfo>();
   private testIds = new Map<string, string>(); // Playwright's test.id -> the id results and history are keyed on
   private allTests: TestCase[] = [];
+  private redact?: (text: string) => string;
+  // testId -> retry -> requests and console of that attempt's trace (null: no trace), held until the test settles
+  private attemptTraces = new Map<string, Map<number, AttemptEvidence | null>>();
 
   constructor(options: SmartReporterOptions = {}) {
+    // Before any test runs: evaluation errors after the run only log a warning, so they would pass the gate.
+    if (options.qualityGates) validateQualityGates(options.qualityGates);
     this.options = options;
+    if (options.redact) this.redact = createRedactor(process.env, options.redact === true ? [] : options.redact.patterns).string;
 
     // Initialize collectors (attachment collector will be re-initialized in onBegin with outputDir)
     // Issue #22: Pass filterPwApiSteps option to StepCollector
@@ -145,10 +166,17 @@ class SmartReporter implements Reporter {
       maxEntries: options.networkLogMaxEntries ?? 50,
       includeBodies: true,
     });
+    // The same filters without the entry cap, so two attempts are compared over all their requests
+    this.attemptNetworkCollector = new NetworkCollector({
+      urlFilter: options.networkLogFilter,
+      excludeStaticAssets: options.networkLogExcludeAssets ?? true,
+      maxEntries: 0,
+      includeBodies: false,
+    });
 
     // Initialize other components
     this.failureClusterer = new FailureClusterer();
-    this.aiAnalyzer = new AIAnalyzer(options.ai);
+    if (options.enableAIRecommendations === true) this.aiAnalyzer = new AIAnalyzer(options.ai);
 
     // Initialize live writer (defaults to disabled no-op)
     if (options.live?.enabled) {
@@ -172,6 +200,7 @@ class SmartReporter implements Reporter {
    */
   onBegin(config: FullConfig, suite: Suite): void {
     this.startTime = Date.now();
+    this.begunAt = this.startTime;
     // Issue #20: Support path resolution relative to current working directory
     // When relativeToCwd is true, use process.cwd() instead of config.rootDir
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
@@ -190,7 +219,7 @@ class SmartReporter implements Reporter {
     }
 
     // Initialize HistoryCollector and load history
-    this.historyCollector = new HistoryCollector(this.options, this.outputDir);
+    this.historyCollector = new HistoryCollector(this.options, this.outputDir, config.shard);
     this.historyCollector.loadHistory();
     this.historyCollector.adoptLegacyIds(legacyIds);
 
@@ -263,7 +292,9 @@ class SmartReporter implements Reporter {
 
     // Collect test components
     const steps = this.stepCollector.extractSteps(result);
-    const attachments = this.attachmentCollector.collectAttachments(result);
+    // An attempt Playwright may retry keeps cspSafe screenshots in memory; settleAttemptEvidence writes them if they are kept
+    const mayRetry = result.retry < test.retries && result.status !== test.expectedStatus && result.status !== 'skipped';
+    const attachments = this.attachmentCollector.collectAttachments(result, mayRetry);
     const history = this.historyCollector.getTestHistory(testId);
 
     // Issue #15: Improved tag extraction
@@ -289,10 +320,10 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Tertiary source: extract from test title (e.g., "Login @smoke @critical")
-    const titleTagMatches = test.title.match(/@[\w-]+/g);
-    if (titleTagMatches) {
-      for (const tag of titleTagMatches) {
+    // Tertiary source: extract from test title (e.g., "Login @smoke @critical"), only for Playwright before 1.42,
+    // which has no test.tags. A tag starts a word, so the "@example" in "user@example.com" is not one.
+    if (!Array.isArray(test.tags)) {
+      for (const [, tag] of test.title.matchAll(/(?:^|\s)(@[\w-]+)/g)) {
         if (!tags.includes(tag)) tags.push(tag);
       }
     }
@@ -301,7 +332,9 @@ class SmartReporter implements Reporter {
     const titlePath = test.titlePath();
     // Filter out empty strings from titlePath (some Playwright versions include empty root)
     const filteredPath = titlePath.filter(p => p && p.length > 0);
-    const suites = filteredPath.slice(1, -1); // Remove project name (first) and test title (last)
+    // Drop the project name and the test title. An unnamed project's '' is already filtered out,
+    // so named and unnamed projects both get [file, ...describes].
+    const suites = filteredPath.slice(test.parent?.project?.()?.name ? 1 : 0, -1);
     const suite = suites.length > 0 ? suites[suites.length - 1] : undefined;
 
     // Extract browser name and project name from project configuration (if available)
@@ -416,13 +449,15 @@ class SmartReporter implements Reporter {
       a => a.name === 'trace' && a.contentType === 'application/zip'
     );
     const wantTimeline = (result.status === 'failed' || result.status === 'timedOut') && this.options.enableCausalTimeline !== false;
+    // A failed attempt that may be retried, or a retry that passed: the test may turn out flaky, so its attempts get compared
+    const comparable = mayRetry || (result.retry > 0 && result.status === test.expectedStatus);
     let trace: TraceContents | undefined;
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
-      // One trace read feeds both the network log and the causal timeline
-      if (this.options.enableNetworkLogs !== false || wantTimeline) {
+      // One trace read feeds the network log, the causal timeline and the attempt comparison
+      if (this.options.enableNetworkLogs !== false || wantTimeline || comparable) {
         try {
-          trace = readTrace(traceAttachment.path, { timeline: wantTimeline });
+          trace = readTrace(traceAttachment.path, { timeline: wantTimeline || comparable });
         } catch (err) {
           console.warn(`Failed to parse trace file: ${traceAttachment.path}`, err);
         }
@@ -438,6 +473,14 @@ class SmartReporter implements Reporter {
           // Network log extraction is optional, don't fail on errors
         }
       }
+    }
+    if (comparable) {
+      const traces = this.attemptTraces.get(testId) ?? new Map<number, AttemptEvidence | null>();
+      traces.set(result.retry, trace ? {
+        ...(this.options.enableNetworkLogs !== false && { network: this.attemptNetworkCollector.collectFromContents(trace).entries }),
+        console: trace.contexts.flatMap((c) => c.console),
+      } : null);
+      this.attemptTraces.set(testId, traces);
     }
 
     // Phase 10: Accessibility
@@ -464,7 +507,14 @@ class SmartReporter implements Reporter {
       }
     }
 
-    // Build Playwright-style prompt for AI analysis (no binaries, includes env + config snapshot)
+    const existingResult = this.resultsMap.get(testId);
+    const attempt: AttemptData = {
+      retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps,
+      ...(result.workerIndex >= 0 && { workerIndex: result.workerIndex, parallelIndex: result.parallelIndex, startTime: result.startTime.getTime() }),
+    };
+    testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
+
+    // Build Playwright-style prompt for AI analysis and Copy AI prompt (no binaries)
     if (this.fullConfig && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')) {
       try {
         testData.aiPrompt = buildPlaywrightStyleAiPrompt({
@@ -472,6 +522,7 @@ class SmartReporter implements Reporter {
           test,
           result,
           firstAnomaly: testData.timeline?.firstAnomaly,
+          attempts: testData.attempts,
         });
       } catch (err) {
         // Prompt building should never fail the reporter
@@ -479,23 +530,31 @@ class SmartReporter implements Reporter {
       }
     }
 
+    // Before attempts, the live file, history and every export copy these fields
+    if (this.redact) {
+      redactTestResult(testData, this.redact);
+      // The attempt was built for the AI prompt, before redaction
+      attempt.error = testData.error;
+    }
+
     // Run all analyzers (flakiness, performance, retries, stability)
-    this.flakinessAnalyzer.analyze(testData, history);
-    this.performanceAnalyzer.analyze(testData, history);
+    const baselineHistory = this.historyCollector.getBaselineHistory(testId);
+    this.flakinessAnalyzer.analyze(testData, baselineHistory);
+    this.performanceAnalyzer.analyze(testData, baselineHistory);
     if (this.options.enableRetryAnalysis !== false) this.retryAnalyzer.analyze(testData, history);
     if (this.options.enableStabilityScore !== false) this.stabilityScorer.scoreTest(testData);
 
     // Store result - only keep the final attempt for each test (Issue #17 fix)
     // This prevents double-counting when tests retry
-    const existingResult = this.resultsMap.get(testId);
-    const attempt = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
-    testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
     if (!existingResult || result.retry > existingResult.retry) {
       // This is a newer attempt - replace the previous one
+      if (existingResult) keepAttemptEvidence(existingResult, testData.attempts.find((a) => a.retry === existingResult.retry)!);
       this.resultsMap.set(testId, testData);
     } else {
+      keepAttemptEvidence(testData, attempt);
       existingResult.attempts = testData.attempts;
     }
+    if (!mayRetry) this.settleAttemptEvidence(this.resultsMap.get(testId)!);
 
     // Write live result for real-time dashboard
     this.liveWriter.writeTestResult({
@@ -506,25 +565,24 @@ class SmartReporter implements Reporter {
       duration: result.duration,
       retry: result.retry,
       error: testData.error,
+      outcome,
     });
 
-    // Live: send notification on first failure
-    if (
-      this.options.live?.notifyOnFirstFailure &&
-      !this.liveFirstFailureSent &&
-      (result.status === 'failed' || result.status === 'timedOut')
-    ) {
+    // Live: notify on the first test that fails for good. An attempt Playwright will retry may still pass,
+    // and a test.fail() test that failed is not a failure.
+    if (this.options.live?.notifyOnFirstFailure && !this.liveFirstFailureSent && !mayRetry && isFailedTest(testData)) {
       this.liveFirstFailureSent = true;
-      const msg = `First failure detected: "${test.title}" in ${file}`;
-      if (this.options.slackWebhook) {
-        this.slackNotifier.sendMessage(msg).catch(() => {});
-      }
-      if (this.options.teamsWebhook) {
-        this.teamsNotifier.sendMessage(msg).catch(() => {});
-      }
+      // As at the end of the run, notifications take precedence over the legacy webhooks
       if (this.notificationManager) {
-        const failureResult: TestResultData[] = [testData];
-        this.notificationManager.notify(failureResult, this.startTime).catch(() => {});
+        this.notificationManager.notifyFirstFailure(testData).catch(() => {});
+      } else {
+        const msg = firstFailureMessage(testData);
+        if (this.options.slackWebhook) {
+          this.slackNotifier.sendMessage(msg).catch(() => {});
+        }
+        if (this.options.teamsWebhook) {
+          this.teamsNotifier.sendMessage(msg).catch(() => {});
+        }
       }
     }
   }
@@ -549,9 +607,17 @@ class SmartReporter implements Reporter {
     // This fixes Issue #17: retries no longer double-counted
     this.results = Array.from(this.resultsMap.values());
 
+    // A run that stopped before a retry leaves attempts unsettled
+    for (const r of this.results) this.settleAttemptEvidence(r);
+
+    // merge-reports calls onBegin after every test ran
+    const merged = this.results.some((r) => r.attempts?.some((a) => a.startTime !== undefined && a.startTime < this.begunAt));
+
     // Durations below are Date.now() - startTime. merge-reports calls onBegin at merge time,
-    // so start the clock from the run's own duration instead.
-    if (result.duration > 0) this.startTime = Date.now() - result.duration;
+    // so start the clock from the run's own duration instead. Playwright's duration is fractional;
+    // round it so the history run id stays a whole number.
+    if (result.duration > 0) this.startTime = Date.now() - Math.round(result.duration);
+    this.historyCollector.setRunStart(this.startTime);
 
     // Signal live reporting that the run is complete
     // Note: JSONL file is intentionally NOT cleaned up here — the SSE handler
@@ -559,29 +625,43 @@ class SmartReporter implements Reporter {
     // The file is truncated automatically on the next run via LiveWriter.start().
     this.liveWriter.complete(Date.now() - this.startTime);
 
-    // Get failure clusters
-    const failureClusters = this.options.enableFailureClustering === false ? [] : this.failureClusterer.clusterFailures(this.results);
+    // Looked up once: it prints a note when the baseline branch has no run
+    const baselineRun = this.historyCollector.getBaselineRun();
+
+    // Get failure clusters, and track them against the runs before this one (history saves this run last)
+    const clustering = this.options.enableFailureClustering !== false;
+    let failureClusters: FailureCluster[] = [];
+    let resolvedClusters: ResolvedCluster[] | undefined;
+    if (clustering) {
+      failureClusters = this.failureClusterer.clusterFailures(this.results);
+      resolvedClusters = trackClusters(
+        failureClusters,
+        this.results,
+        this.historyCollector.getHistory(),
+        { ...this.historyCollector.getCurrentRun(), ciInfo: this.ciInfo },
+        baselineRun?.runId,
+      );
+      // History saves each test's cluster id, and notifications read the tracking
+      this.failureClusterer.assignClusters(this.results, failureClusters);
+    }
 
     // Run AI analysis on failures and clusters if enabled
     const options = this.historyCollector.getOptions();
     let aiSuiteHealthSummary: string | undefined;
     // An AI outage must never fail the run (Phase 0.5)
     try {
-      if (options.enableAIRecommendations !== false) {
+      if (this.aiAnalyzer) {
         await this.aiAnalyzer.analyzeFailed(this.results);
         if (failureClusters.length > 0) {
           await this.aiAnalyzer.analyzeClusters(failureClusters);
         }
         // AI Suite Health Summary (opt-out with enableAISuiteHealth: false)
         if (options.enableAISuiteHealth !== false && this.aiAnalyzer.isAvailable()) {
-          const passed = this.results.filter(isPassedTest).length;
-          const failed = this.results.filter(isFailedTest).length;
-          const skipped = this.results.filter(isSkippedTest).length;
+          const { total, passed, failed, skipped, passRate } = computeRunStats(this.results);
+          // Flaky here means flaky by history or on retry this run, which is what the AI should look at.
           const flakyCount = this.results.filter(r => isFlakyTest(r)).length;
           const slowCount = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
           const needsRetry = this.results.filter(r => r.retryInfo?.needsAttention).length;
-          const total = this.results.length;
-          const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
           const avgStability = this.results.reduce((sum, r) => sum + (r.stabilityScore?.overall ?? 100), 0) / Math.max(total, 1);
           const suiteStats = {
             total, passed, failed, skipped,
@@ -601,48 +681,29 @@ class SmartReporter implements Reporter {
     // Get comparison data if enabled
     let comparison: RunComparison | undefined;
     if (options.enableComparison !== false) {
-      const baselineRun = this.historyCollector.getBaselineRun();
       if (baselineRun) {
-        // Build current run summary with proper outcome-based counting
-        // Issue #17: Use outcome to properly count flaky tests
-        // Issue #16: Tests with expectedStatus='failed' that fail are counted as passed (expected behavior)
-        const passed = this.results.filter(isPassedTest).length;
-        const failed = this.results.filter(isFailedTest).length;
-        const skipped = this.results.filter(isSkippedTest).length;
-        // Flaky: tests that passed on retry (outcome === 'flaky')
-        const flaky = this.results.filter(r => r.outcome === 'flaky').length;
-        const slow = this.results.filter(r => r.performanceTrend?.startsWith('↑')).length;
-        const duration = Date.now() - this.startTime;
-
-        const currentSummary = {
-          runId: this.historyCollector.getCurrentRun().runId,
-          timestamp: this.historyCollector.getCurrentRun().timestamp,
-          total: this.results.length,
-          passed,
-          failed,
-          skipped,
-          flaky,
-          slow,
-          duration,
-          passRate: this.results.length > 0 ? Math.round((passed / this.results.length) * 100) : 0,
-        };
+        const currentSummary = buildRunSummary(this.results, { ...this.historyCollector.getCurrentRun(), duration: Date.now() - this.startTime });
 
         // Build baseline tests map from history
         const baselineTests = new Map<string, TestResultData>();
         const history = this.historyCollector.getHistory();
 
-        // Reconstruct baseline test results: each test's last entry, or with baselineRunId its entry for that run
+        // Reconstruct baseline test results from each test's entry for the baseline run
         // (history saved before entries carried a run id cannot tell, so it keeps the last entry).
-        const pinned = !!options.baselineRunId && Object.values(history.tests).some(entries => entries.some(e => e.runId === baselineRun.runId));
+        const byRunId = Object.values(history.tests).some(entries => entries.some(e => e.runId === baselineRun.runId));
+        const resultsById = new Map(this.results.map(r => [r.testId, r]));
         for (const [testId, entries] of Object.entries(history.tests)) {
-          const entry = pinned ? entries.filter(e => e.runId === baselineRun.runId).pop() : entries[entries.length - 1];
-          const matchingTest = this.results.find(r => r.testId === testId);
+          const entry = byRunId ? entries.filter(e => e.runId === baselineRun.runId).pop() : entries[entries.length - 1];
+          const matchingTest = resultsById.get(testId);
 
           if (entry && matchingTest) {
             baselineTests.set(testId, {
               ...matchingTest,
               status: entry.skipped ? 'skipped' : entry.passed ? 'passed' : 'failed',
+              // History saved the baseline's verdict; the outcome spread above is this run's.
+              outcome: entry.skipped ? 'skipped' : entry.passed ? 'expected' : 'unexpected',
               duration: entry.duration,
+              retry: entry.retry ?? 0,
             });
           }
         }
@@ -653,38 +714,42 @@ class SmartReporter implements Reporter {
           baselineRun,
           baselineTests,
           this.options.thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2,
+          new Set(Object.keys(history.tests)),
         );
+        for (const t of comparison.changes.newFailures) t.commits = failureCommits(t.testId, history, this.ciInfo);
       }
+    }
+
+    // #73: suspects run git, so they are opt-in
+    if (this.options.suspects) {
+      addSuspects([...this.results.map(r => r.commits), ...failureClusters.map(c => c.tracking?.commits)], this.outputDir, this.redact);
     }
 
     const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');
 
     // Copy trace files to traces subdirectory for browser download BEFORE HTML generation
     const tracesDir = path.join(path.dirname(outputPath), 'traces');
-    const traceResults = this.results.filter(r => r.attachments?.traces && r.attachments.traces.length > 0);
-
-    if (traceResults.length > 0) {
-      fs.mkdirSync(tracesDir, { recursive: true });
-
-      for (const result of traceResults) {
-        if (result.attachments && result.attachments.traces) {
-          for (let i = 0; i < result.attachments.traces.length; i++) {
-            const tracePath = result.attachments.traces[i];
-            if (fs.existsSync(tracePath)) {
-              // Sanitize testId to prevent path separator issues
-              const safeTestId = sanitizeFilename(result.testId);
-              const traceFileName = `${safeTestId}-trace-${i}.zip`;
-              const destPath = path.join(tracesDir, traceFileName);
-              try {
-                fs.copyFileSync(tracePath, destPath);
-                // Update the path to relative for HTML
-                result.attachments.traces[i] = `./traces/${traceFileName}`;
-              } catch (err) {
-                console.warn(`⚠️  Could not copy trace ${tracePath}:`, err);
-              }
-            }
-          }
+    const copyTraces = (traces: string[], prefix: string) => {
+      for (let i = 0; i < traces.length; i++) {
+        const tracePath = traces[i];
+        if (!fs.existsSync(tracePath)) continue;
+        const traceFileName = `${prefix}-trace-${i}.zip`;
+        try {
+          fs.mkdirSync(tracesDir, { recursive: true });
+          fs.copyFileSync(tracePath, path.join(tracesDir, traceFileName));
+          // Update the path to relative for HTML
+          traces[i] = `./traces/${traceFileName}`;
+        } catch (err) {
+          console.warn(`⚠️  Could not copy trace ${tracePath}:`, err);
         }
+      }
+    };
+    for (const result of this.results) {
+      // Sanitize testId to prevent path separator issues
+      const safeTestId = sanitizeFilename(result.testId);
+      copyTraces(result.attachments?.traces ?? [], safeTestId);
+      for (const attempt of result.attempts ?? []) {
+        copyTraces(attempt.attachments?.traces ?? [], `${safeTestId}-attempt-${attempt.retry + 1}`);
       }
     }
 
@@ -723,29 +788,31 @@ class SmartReporter implements Reporter {
       console.warn('⚠️  Coverage merge failed:', err);
     }
 
+    // Quarantine - before the gates, which read expiry, and before HTML generation so badges/cards embed in report
+    let quarantineResult: QuarantineFile | undefined;
+    let quarantinedTestIds: Set<string> | undefined;
+    let quarantineChanges: QuarantineEvent[] = [];
+    if (this.options.quarantine?.enabled) {
+      try {
+        const generator = new QuarantineGenerator(this.options.quarantine);
+        const previous = generator.read(exportDir);
+        quarantineResult = generator.generate(this.results, exportDir, previous);
+        quarantineChanges = quarantineEvents(previous, quarantineResult, Date.parse(quarantineResult.generatedAt));
+        quarantinedTestIds = new Set(quarantineResult.entries.map(e => e.testId));
+      } catch (err) {
+        console.warn('⚠️  Quarantine generation failed:', err);
+      }
+    }
+
     // Quality gates - evaluate BEFORE HTML generation so results embed in report
     let qualityGateResult: QualityGateResult | undefined;
     if (this.options.qualityGates) {
       try {
         const evaluator = new QualityGateEvaluator();
-        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary);
+        const clusters = clustering ? failureClusters.map((c) => ({ testIds: c.tests.map((t) => t.testId), tracking: c.tracking })) : undefined;
+        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary, clusters, quarantineResult);
       } catch (err) {
         console.warn('⚠️  Quality gate evaluation failed:', err);
-      }
-    }
-
-    // Quarantine - evaluate BEFORE HTML generation so badges/cards embed in report
-    let quarantineResult: QuarantineFile | null = null;
-    let quarantinedTestIds: Set<string> | undefined;
-    if (this.options.quarantine?.enabled) {
-      try {
-        const generator = new QuarantineGenerator(this.options.quarantine);
-        quarantineResult = generator.generate(this.results, exportDir);
-        if (quarantineResult) {
-          quarantinedTestIds = new Set(quarantineResult.entries.map(e => e.testId));
-        }
-      } catch (err) {
-        console.warn('⚠️  Quarantine generation failed:', err);
       }
     }
 
@@ -758,6 +825,7 @@ class SmartReporter implements Reporter {
       comparison,
       historyRunSnapshots,
       failureClusters,
+      resolvedClusters,
       ciInfo: this.ciInfo,
       outputBasename: path.basename(outputPath, '.html'),
       liveFile: this.options.live?.enabled ? path.relative(path.dirname(outputPath), path.resolve(this.liveWriter.getOutputPath())).split(path.sep).join('/') : undefined,
@@ -767,6 +835,8 @@ class SmartReporter implements Reporter {
       quarantineThreshold: this.options.quarantine?.threshold,
       aiSuiteHealthSummary,
       coverage,
+      shard: this.fullConfig?.shard ?? undefined,
+      run: { start: result.startTime?.getTime() ?? this.startTime, duration: result.duration, merged },
     };
 
     const reportData = buildReportData(reportInput);
@@ -806,12 +876,16 @@ class SmartReporter implements Reporter {
           this.startTime,
           this.options,
           comparison,
-          failureClusters,
+          // Left out when clustering is off, so the CLI gate skips noNewClusters
+          clustering ? failureClusters : undefined,
           exportDir,
           reportInput.outputBasename,
           qualityGateResult,
           this.outputDir,
           coverage,
+          resolvedClusters,
+          reportData.efficiency,
+          reportData.environmentInsights,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
@@ -846,6 +920,18 @@ class SmartReporter implements Reporter {
         console.log(`   CTRF JSON: ${ctrfPath}`);
       } catch (err) {
         console.warn('⚠️  CTRF export failed:', err);
+      }
+    }
+
+    if (this.options.exportMetrics) {
+      try {
+        const now = Date.now();
+        const metrics = exportMetrics(this.results, { duration: now - this.startTime, branch: this.ciInfo?.branch, time: now }, exportDir, reportInput.outputBasename);
+        console.log(`   Metrics: ${metrics.files.join(', ')}`);
+        const push = typeof this.options.exportMetrics === 'object' ? this.options.exportMetrics.push : undefined;
+        if (push) await pushMetrics(push, metrics);
+      } catch (err) {
+        console.warn('⚠️  Metrics export failed:', err);
       }
     }
 
@@ -911,12 +997,13 @@ class SmartReporter implements Reporter {
       console.error('⚠️  Could not save test history:', err instanceof Error ? err.message : err);
     }
 
-    // Send webhook notifications if enabled - use outcome-based counting
-    const failed = this.results.filter(isFailedTest).length;
+    // Send webhook notifications if enabled
+    const { failed } = computeRunStats(this.results);
 
     // Advanced notification manager takes precedence
     if (this.notificationManager) {
       await this.notificationManager.notify(this.results, this.startTime, comparison);
+      await this.notificationManager.notifyQuarantine(quarantineChanges);
     } else {
       // Legacy webhook notification path
       if (failed > 0) {
@@ -937,9 +1024,13 @@ class SmartReporter implements Reporter {
     }
 
     // Quarantine - log results (file already written above)
-    if (quarantineResult) {
+    if (quarantineResult?.entries.length) {
       const qPath = new QuarantineGenerator(this.options.quarantine!).getOutputPath(exportDir);
       console.log(`   Quarantine: ${quarantineResult.entries.length} test(s) quarantined -> ${qPath}`);
+      const writtenAt = Date.parse(quarantineResult.generatedAt);
+      for (const e of quarantineResult.entries.filter(e => isExpired(e, writtenAt))) {
+        console.log(`   Quarantine expired ${e.expiresAt}: ${describeQuarantineEntry(e)}`);
+      }
     } else if (this.options.quarantine?.enabled) {
       console.log('   Quarantine: no tests exceed flakiness threshold');
     }
@@ -950,6 +1041,27 @@ class SmartReporter implements Reporter {
   // ============================================================================
   // Helper Methods
   // ============================================================================
+
+  // Earlier attempts keep their evidence only when a later attempt passed. A test that failed
+  // every time has the same evidence on its final attempt. Safe to call more than once.
+  private settleAttemptEvidence(r: TestResultData): void {
+    const traces = this.attemptTraces.get(r.testId);
+    this.attemptTraces.delete(r.testId);
+    const diff = traces && r.outcome === 'flaky' ? compareAttemptTraces(r.attempts ?? [], traces, this.redact, r.expectedStatus) : undefined;
+    if (diff) r.attemptDiff = diff;
+    for (const attempt of r.attempts ?? []) {
+      if (r.outcome !== 'flaky') {
+        delete attempt.attachments;
+        delete attempt.tracePath;
+      } else if (attempt.attachments) {
+        this.attachmentCollector.saveInlineScreenshots(attempt.attachments.screenshots);
+      }
+    }
+    if (r.attachments) {
+      this.attachmentCollector.saveInlineScreenshots(r.attachments.screenshots);
+      if (r.screenshot) r.screenshot = r.attachments.screenshots[0];
+    }
+  }
 
   /**
    * Create a unique test ID from test file, title, and project name
@@ -986,6 +1098,13 @@ class SmartReporter implements Reporter {
 
 }
 
+// A retried attempt keeps its screenshots, videos and traces; the rest of its result is dropped.
+function keepAttemptEvidence(from: TestResultData, attempt: AttemptData): void {
+  const { screenshots = [], videos = [], traces = [] } = from.attachments ?? {};
+  if (screenshots.length + videos.length + traces.length > 0) attempt.attachments = { screenshots, videos, traces };
+  if (from.tracePath) attempt.tracePath = from.tracePath;
+}
+
 // The describe blocks around a test: its suites below root > project > file.
 function describePath(test: TestCase): string[] {
   const titles: string[] = [];
@@ -1004,9 +1123,8 @@ export function mergeHistories(
   outputFile: string,
   maxHistoryRuns: number = 10
 ): void {
-  const mergedHistory: TestHistory = { runs: [], tests: {}, summaries: [] };
-
-  // Load and merge all history files
+  const histories: TestHistory[] = [];
+  const runFiles = new Map<string, HistoryRunFile>();
   for (const filePath of historyFiles) {
     if (!fs.existsSync(filePath)) {
       console.warn(`History file not found: ${filePath}`);
@@ -1014,64 +1132,15 @@ export function mergeHistories(
     }
 
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const history: TestHistory = JSON.parse(content);
-
-      // Merge runs metadata
-      if (history.runs) {
-        mergedHistory.runs.push(...history.runs);
-      }
-
-      // Merge test entries
-      if (history.tests) {
-        for (const [testId, entries] of Object.entries(history.tests)) {
-          if (!mergedHistory.tests[testId]) {
-            mergedHistory.tests[testId] = [];
-          }
-          mergedHistory.tests[testId].push(...entries);
-        }
-      }
-
-      // Merge summaries
-      if (history.summaries) {
-        mergedHistory.summaries!.push(...history.summaries);
-      }
+      histories.push(readHistoryFile(filePath));
+      readRunFiles(filePath, runFiles);
     } catch (err) {
       console.error(`Failed to parse history file ${filePath}:`, err);
     }
   }
 
-  // Sort and deduplicate runs by runId
-  const seenRunIds = new Set<string>();
-  mergedHistory.runs = mergedHistory.runs
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .filter(run => {
-      if (seenRunIds.has(run.runId)) return false;
-      seenRunIds.add(run.runId);
-      return true;
-    })
-    .slice(-maxHistoryRuns);
-
-  // Sort test entries by timestamp and keep last N
-  for (const testId of Object.keys(mergedHistory.tests)) {
-    mergedHistory.tests[testId] = mergedHistory.tests[testId]
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .slice(-maxHistoryRuns);
-  }
-
-  // Sort and deduplicate summaries by runId
-  const seenSummaryIds = new Set<string>();
-  mergedHistory.summaries = mergedHistory.summaries!
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .filter(summary => {
-      if (seenSummaryIds.has(summary.runId)) return false;
-      seenSummaryIds.add(summary.runId);
-      return true;
-    })
-    .slice(-maxHistoryRuns);
-
-  // Write merged history
-  fs.writeFileSync(outputFile, JSON.stringify(mergedHistory, null, 2));
+  const merged = rebuildHistory(histories, runFiles.values());
+  fs.writeFileSync(outputFile, JSON.stringify(maxHistoryRuns > 0 ? limitHistory(merged, maxHistoryRuns) : merged, null, 2));
   console.log(`✅ Merged ${historyFiles.length} history files into ${outputFile}`);
 }
 

@@ -1,4 +1,6 @@
 import type { TestResultData } from '../types';
+import { isFailedTest } from '../utils/flakiness';
+import { computeRunStats } from '../utils/run-stats';
 
 /**
  * Sends test failure notifications to Microsoft Teams
@@ -20,16 +22,14 @@ export class TeamsNotifier {
       return;
     }
 
-    const failed = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
-    const passed = results.filter(r => r.status === 'passed').length;
-    const total = results.length;
+    const { failed, passed, total } = computeRunStats(results);
 
     // Only send if there are failures
     if (failed === 0) return;
 
     const summary = `🔴 Test Run Failed: ${failed}/${total} tests failed (${passed} passed)`;
     const failedTests = results
-      .filter(r => r.status === 'failed' || r.status === 'timedOut')
+      .filter(isFailedTest)
       .slice(0, 5) // Limit to first 5 failures
       .map(t => `• ${t.title}`)
       .join('\n');

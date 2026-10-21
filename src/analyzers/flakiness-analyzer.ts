@@ -1,4 +1,23 @@
-import type { TestResultData, TestHistoryEntry, ThresholdConfig } from '../types';
+import type { FlakinessStatus, TestResultData, TestHistoryEntry, ThresholdConfig } from '../types';
+import { isPassedTest } from '../utils/flakiness';
+import { MIN_SAMPLE_RUNS, wilson } from '../utils/stats';
+
+export interface Flakiness {
+  score: number;
+  status: FlakinessStatus;
+  runs: number;
+  interval: [number, number];
+}
+
+const INDICATOR: Record<FlakinessStatus, string> = {
+  stable: '🟢 Stable',
+  unstable: '🟡 Unstable',
+  flaky: '🔴 Flaky',
+  failing: '🔴 Failing',
+  'insufficient-history': '⚪ Insufficient history',
+};
+
+const round2 = (x: number) => Math.round(x * 100) / 100;
 
 /**
  * Analyzes test flakiness based on historical pass/fail patterns
@@ -38,29 +57,50 @@ export class FlakinessAnalyzer {
       return;
     }
 
-    const failures = relevantHistory.filter(e => !e.passed).length;
-    // A run that passed only on a retry failed first, so it is flaky too.
-    const passedOnRetry = relevantHistory.filter(e => e.passed && (e.retry ?? 0) > 0).length;
-    // Round to 2 decimals, but reserve a score of exactly 1 for tests where
-    // EVERY run failed — score-based consumers treat 1 as "consistently
-    // failing", so a 199/200 failure rate must not round up to 1.
-    const rounded = Math.round(((failures + passedOnRetry) / relevantHistory.length) * 100) / 100;
-    const flakinessScore = failures === relevantHistory.length ? 1 : Math.min(rounded, 0.99);
-
-    test.flakinessScore = flakinessScore;
-    test.flakinessIndicator = this.getFlakinessIndicator(flakinessScore, failures, relevantHistory.length);
+    const flakiness = this.classify([...relevantHistory, { passed: isPassedTest(test), retry: test.retry }]);
+    test.flakinessScore = flakiness.score;
+    test.flakinessStatus = flakiness.status;
+    test.flakinessRuns = flakiness.runs;
+    test.flakinessInterval = flakiness.interval;
+    test.flakinessIndicator = INDICATOR[flakiness.status];
   }
 
   /**
-   * Get human-readable flakiness indicator.
-   * A test that fails on every run is consistently failing, not flaky —
-   * flakiness requires mixed pass/fail results.
+   * Score and classify runs, oldest first, with the latest run last. Skipped runs are ignored;
+   * at least one run must remain.
+   *
+   * The score is the share of runs that failed or passed only on a retry. The status measures
+   * instability instead: a test that was broken and then fixed changed result once, which is a
+   * fix, not flakiness. Each later change means the result changed back. Below
+   * MIN_SAMPLE_RUNS runs the status is insufficient-history, unless the latest run passed on a retry.
    */
-  private getFlakinessIndicator(score: number, failures: number, total: number): string {
-    if (failures === total && total > 0) return '🔴 Failing';
-    if (score < this.stableThreshold) return '🟢 Stable';
-    if (score < this.unstableThreshold) return '🟡 Unstable';
-    return '🔴 Flaky';
+  classify(series: Array<Pick<TestHistoryEntry, 'passed' | 'retry' | 'skipped'>>): Flakiness {
+    const runs = series.filter(e => !e.skipped);
+    const n = runs.length;
+    const failures = runs.filter(e => !e.passed).length;
+    const retried = runs.filter(e => e.passed && (e.retry ?? 0) > 0).length;
+    // Round to 2 decimals, but reserve a score of exactly 1 for tests where
+    // EVERY run failed — score-based consumers treat 1 as "consistently
+    // failing", so a 199/200 failure rate must not round up to 1.
+    const rounded = round2((failures + retried) / n);
+    const score = failures === n ? 1 : Math.min(rounded, 0.99);
+    const [low, high] = wilson(failures + retried, n);
+    return { score, status: this.status(runs, failures, retried), runs: n, interval: [round2(low), round2(high)] };
+  }
+
+  private status(runs: Array<Pick<TestHistoryEntry, 'passed' | 'retry'>>, failures: number, retried: number): FlakinessStatus {
+    const n = runs.length;
+    const latest = runs[n - 1];
+    // Playwright calls a test that passed on a retry flaky, whatever its history
+    if (latest.passed && (latest.retry ?? 0) > 0) return 'flaky';
+    if (n < MIN_SAMPLE_RUNS) return 'insufficient-history';
+    if (failures === n) return 'failing';
+    let flips = 0;
+    for (let k = 1; k < n; k++) if (runs[k].passed !== runs[k - 1].passed) flips++;
+    const instability = (Math.max(flips - 1, 0) + retried) / n;
+    if (instability >= this.unstableThreshold) return 'flaky';
+    if (instability >= this.stableThreshold) return 'unstable';
+    return latest.passed ? 'stable' : 'failing';
   }
 
   /**

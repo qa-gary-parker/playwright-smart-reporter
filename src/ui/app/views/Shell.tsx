@@ -4,7 +4,7 @@ import { ACCENT_NAMES } from '../../styles/tokens';
 import { formatDate, formatDuration, outcomeCounts } from '../data';
 import { QUEUES, QUEUE_IDS, type QueueId } from '../queues';
 import { formatRoute, type Route } from '../router';
-import { applyTheme, data, keymapOpen, navigate, paletteOpen, railOpen, route, runTests, theme } from '../store';
+import { applyTheme, data, keymapOpen, multiProject, navigate, paletteOpen, railOpen, route, runTests, theme } from '../store';
 import { ExportMenu } from './Exports';
 
 function ThemeMenu() {
@@ -131,6 +131,7 @@ function Rail() {
         {f.gallery && <RailItem icon="image" label="Gallery" to={{ view: 'gallery', ...run }} active={r.view === 'gallery'} />}
         {f.live && <RailItem icon="radio" label="Live" to={{ view: 'live' }} active={r.view === 'live'} />}
         {data.value.coverage && <RailItem icon="target" label="Coverage" count={Math.floor(data.value.coverage.summary.lines.pct)} to={{ view: 'coverage' }} active={r.view === 'coverage'} />}
+        {multiProject.value && <RailItem icon="table" label="Matrix" count={data.value.environmentInsights?.length} to={{ view: 'matrix' }} active={r.view === 'matrix'} />}
         {data.value.a11y && <RailItem icon="eye" label="Accessibility" count={data.value.a11y.totalViolations} to={{ view: 'a11y' }} active={r.view === 'a11y'} />}
       </div>
       <div class="rail__foot">

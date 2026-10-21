@@ -1,11 +1,12 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { displayStatus, formatDate, formatDuration, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
+import { clusterLabel, displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts, plural, suiteHealth, type ReportData, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
+import { isWarning, ruleLabel } from '../../../gates/quality-gate-reporter';
 
-function Panel({ title, meta, children }: { title: string; meta?: string; children: ComponentChildren }) {
+export function Panel({ title, meta, children }: { title: string; meta?: string; children: ComponentChildren }) {
   return (
     <section class="panel">
       <header class="panel__head">
@@ -34,6 +35,39 @@ function TestLines({ tests, value }: { tests: ReportTest[]; value: (t: ReportTes
   );
 }
 
+function Line({ label, value, children }: { label: string; value: string; children?: ComponentChildren }) {
+  return (
+    <li class="lines__item">
+      <span class="lines__label">{label}</span>
+      {children}
+      <span class="lines__value mono">{value}</span>
+    </li>
+  );
+}
+
+function Efficiency({ e }: { e: NonNullable<ReportData['efficiency']> }) {
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    <Panel title="Efficiency" meta={e.shard ? `shard ${e.shard.current} of ${e.shard.total}` : undefined}>
+      <ul class="lines">
+        <Line label={`Retry waste${e.cost ? `, ${e.cost.retryWaste} at ${e.cost.perMinute}/min` : ''}`} value={formatDuration(e.retryWaste)}>
+          <Sparkline label="Retry waste, recent runs" values={e.retryWasteTrend.flatMap((r) => r.retryWaste ?? [])} width={64} height={20} />
+        </Line>
+        {e.longTail.map((l) => (
+          <Line label={`Slowest ${l.percent}% (${plural(l.tests, 'test')})`} value={`${pct(l.share)} of test time`} />
+        ))}
+        {e.setupGap !== undefined && <Line label="Setup before the first test" value={formatDuration(e.setupGap)} />}
+        {e.shard && <Line label="Shard wall time" value={formatDuration(e.shard.wallTime)} />}
+        {e.workers && <Line label="Worker utilisation" value={pct(e.workers.utilisation)} />}
+        {e.workers?.slots.map((s) => (
+          <Line label={`Worker ${s.slot}, ${plural(s.attempts, 'attempt')}`} value={`${formatDuration(s.busy)} busy, ${formatDuration(s.idle)} idle`} />
+        ))}
+      </ul>
+      {e.merged && <p class="panel__empty">Merged report: merge-reports does not record which shard or worker ran a test.</p>}
+    </Panel>
+  );
+}
+
 export function Insights() {
   const d = data.value;
   const s = d.summary;
@@ -43,7 +77,14 @@ export function Insights() {
   const byId = testsById.value;
   const ids = (list: string[] | undefined) => (list ?? []).map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);
   const failing = tests.filter(isFailing);
-  const newFailures = failing.filter((t) => t.signals.includes('new-failure')).length;
+  // The card names what noNewFailures counts: new failures, failing new tests and failures not in the baseline run.
+  const newTests = new Set(d.comparison?.changes.newTests);
+  const newFailures = failing.filter((t) => t.signals.includes('new-failure') || newTests.has(t.testId)).length;
+  const notInBaseline = new Set(d.comparison?.changes.notInBaseline);
+  const absent = failing.filter((t) => notInBaseline.has(t.testId)).length;
+  const failedSub = [newFailures ? `${newFailures} new` : '', absent ? `${absent} not in baseline` : ''].filter(Boolean).join(', ') || 'none new';
+  // Each recovered test -> the baseline cluster it was in
+  const resolvedIn = new Map((d.resolvedClusters ?? []).flatMap((c) => c.testIds.map((id) => [id, c.id] as const)));
 
   return (
     <div class="page">
@@ -60,12 +101,12 @@ export function Insights() {
           <span class="stat__value" data-tone={failing.length ? 'fail' : undefined}>
             {failing.length}
           </span>
-          <span class="stat__sub">{failing.length === 0 ? 'nothing failed' : newFailures ? `${newFailures} new` : 'none new'}</span>
+          <span class="stat__sub">{failing.length === 0 ? 'nothing failed' : failedSub}</span>
         </a>
         <div class="stat">
           <span class="stat__label">Pass rate</span>
-          <span class="stat__value">{s.passRate}%</span>
-          <Sparkline label="Pass rate, recent runs" values={trends.map((r) => r.passRate)} width={88} />
+          <span class="stat__value">{formatPassRate(s.passRate)}</span>
+          <Sparkline label="Pass rate, recent runs" values={trends.flatMap((r) => r.passRate ?? [])} width={88} />
         </div>
         <div class="stat">
           <span class="stat__label">Duration</span>
@@ -86,7 +127,7 @@ export function Insights() {
           <span class="stat__label">Health</span>
           <span class="stat__value">{health.grade}</span>
           <span class="stat__sub">
-            {health.score} · pass {health.pass} · stability {health.stability} · perf {health.perf}
+            {health.score ?? 'n/a'} · pass {health.pass ?? 'n/a'} · stability {health.stability} · perf {health.perf}
           </span>
         </div>
       </div>
@@ -115,8 +156,8 @@ export function Insights() {
             <ul class="lines">
               {d.gates.rules.map((rule) => (
                 <li class="lines__item">
-                  <StatusGlyph status={rule.skipped ? 'skipped' : rule.passed ? 'passed' : 'failed'} />
-                  <span class="lines__label">{rule.rule}</span>
+                  <StatusGlyph status={rule.skipped ? 'skipped' : rule.passed ? 'passed' : isWarning(rule) ? 'flaky' : 'failed'} decorative={isWarning(rule)} />
+                  <span class="lines__label">{ruleLabel(rule)}{isWarning(rule) && ' (warning)'}</span>
                   <span class="lines__value mono">
                     {rule.actual} / {rule.threshold}
                   </span>
@@ -130,21 +171,35 @@ export function Insights() {
         <Panel title="Failure clusters" meta={d.clusters.length ? plural(d.clusters.length, 'cluster') : undefined}>
           {d.clusters.length ? (
             <ul class="lines">
-              {d.clusters.map((c) => (
-                <li class="lines__item">
-                  <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
-                    {c.errorType}
-                  </a>
-                  <span class="lines__value">
-                    <Count status="failed" value={c.testIds.length} label="" />
-                  </span>
-                </li>
-              ))}
+              {d.clusters.map((c) => {
+                const label = c.tracking && clusterLabel(c.tracking);
+                return (
+                  <li class="lines__item">
+                    <a class="lines__label mono" title={c.errorType} href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
+                      {c.errorType}
+                    </a>
+                    {label && (
+                      <span class="signal" title={label.title}>
+                        {label.text}
+                      </span>
+                    )}
+                    {c.tracking && <Sparkline label={`Tests in this cluster per run: ${c.tracking.trend.join(', ')}`} values={c.tracking.trend} width={48} height={16} />}
+                    <span class="lines__value">
+                      <Count status="failed" value={c.testIds.length} label="" />
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p class="panel__empty">No failures to cluster.</p>
           )}
         </Panel>
+        {d.resolvedClusters && (
+          <Panel title="Resolved clusters" meta={d.resolvedClusters.length ? plural(d.resolvedClusters.length, 'cluster') : undefined}>
+            <TestLines tests={ids([...resolvedIn.keys()])} value={(t) => `cluster ${resolvedIn.get(t.testId)!.slice(0, 8)}`} />
+          </Panel>
+        )}
         {d.forecastSummary && (
           <Panel title="At risk" meta={`passing, trending unstable`}>
             <TestLines
@@ -173,6 +228,7 @@ export function Insights() {
             </ul>
           </Panel>
         )}
+        {d.efficiency && <Efficiency e={d.efficiency} />}
         <Panel title="Regressions">
           <TestLines tests={tests.filter((t) => t.signals.includes('regression')).slice(0, 8)} value={(t) => (t.performanceMetrics ? `+${Math.round(t.performanceMetrics.percentChange)}%` : formatDuration(t.duration))} />
         </Panel>
@@ -181,8 +237,8 @@ export function Insights() {
         </Panel>
         <Panel title="Most flaky">
           <TestLines
-            tests={tests.filter((t) => (t.flakinessScore ?? 0) > 0 && (t.flakinessScore ?? 0) < 1).sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0)).slice(0, 5)}
-            value={(t) => `${Math.round((t.flakinessScore ?? 0) * 100)}%`}
+            tests={tests.filter((t) => t.flakinessStatus === 'flaky' || t.flakinessStatus === 'unstable').sort((a, b) => (b.flakinessScore ?? 0) - (a.flakinessScore ?? 0)).slice(0, 5)}
+            value={(t) => `${Math.round((t.flakinessScore ?? 0) * 100)}% of ${plural(t.flakinessRuns ?? 0, 'run')}`}
           />
         </Panel>
         <Panel title="Fixed">
@@ -199,7 +255,9 @@ export function Insights() {
                   <li class="lines__item">
                     <StatusGlyph status="quarantined" />
                     <span class="lines__label">{e.title}</span>
-                    <span class="lines__value mono">{Math.round(e.flakinessScore * 100)}%</span>
+                    <span class="lines__value mono">
+                      {e.flakinessScore === undefined ? e.source : `${Math.round(e.flakinessScore * 100)}%${e.runs !== undefined ? ` of ${plural(e.runs, 'run')}` : ''}`}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -219,7 +277,7 @@ export function Insights() {
                     {o.owner}
                   </a>
                   <span class="lines__value">
-                    {o.failed > 0 && <Count status="failed" value={o.failed} label="" />} {o.passRate}% of {o.total}
+                    {o.failed > 0 && <Count status="failed" value={o.failed} label="" />} {formatPassRate(o.passRate)} of {o.total}
                   </span>
                 </li>
               ))}

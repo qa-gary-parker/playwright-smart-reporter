@@ -204,55 +204,6 @@ describe('StabilityScorer', () => {
       });
     });
 
-    describe('calculateSuiteStats', () => {
-      it('calculates correct stats for test suite', () => {
-        const results = [
-          createTestResult({ status: 'passed', flakinessScore: 0 }),
-          createTestResult({ status: 'passed', flakinessScore: 0.4 }),
-          createTestResult({ status: 'failed' }),
-          createTestResult({ status: 'skipped' }),
-          createTestResult({ status: 'passed', performanceTrend: '↑ 50% slower' }),
-        ];
-
-        // Score the tests first
-        results.forEach(r => scorer.scoreTest(r));
-
-        const stats = scorer.calculateSuiteStats(results);
-
-        expect(stats.total).toBe(5);
-        expect(stats.passed).toBe(3);
-        expect(stats.failed).toBe(1);
-        expect(stats.skipped).toBe(1);
-        expect(stats.flaky).toBe(1); // One test with flakinessScore >= 0.3
-        expect(stats.slow).toBe(1);
-        expect(stats.passRate).toBe(75); // 3/(3+1) = 75%
-      });
-
-      it('handles empty results', () => {
-        const stats = scorer.calculateSuiteStats([]);
-
-        expect(stats.total).toBe(0);
-        expect(stats.passed).toBe(0);
-        expect(stats.passRate).toBe(0);
-        expect(stats.averageStability).toBe(0);
-      });
-
-      it('calculates average stability correctly', () => {
-        const results = [
-          createTestResult({ status: 'passed', flakinessScore: 0 }),
-          createTestResult({ status: 'passed', flakinessScore: 0.5 }),
-          createTestResult({ status: 'passed' }),
-        ];
-
-        // 100 and 80; the unscored test is left out of the average
-        results.slice(0, 2).forEach(r => scorer.scoreTest(r));
-
-        const stats = scorer.calculateSuiteStats(results);
-
-        expect(stats.averageStability).toBe(90);
-      });
-    });
-
     describe('getProblematicTests', () => {
       it('returns tests that need attention', () => {
         const results = [

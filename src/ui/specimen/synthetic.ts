@@ -66,6 +66,13 @@ const laneSteps = STEPS.map((s) => {
 
 export const SYNTHETIC_ID = 'synthetic::saved-card';
 
+// fingerprintFailure(SYNTHETIC), precomputed: the fingerprint hashes with node:crypto, which the browser bundle lacks.
+export const SYNTHETIC_CLUSTER = {
+  id: 'ec46e12fcc6d2244',
+  errorType: "toHaveText on getByRole('heading', { level: 1 }) at checkout/payments/saved-card.spec.ts:142",
+  testIds: [SYNTHETIC_ID],
+};
+
 export const SYNTHETIC: ReportTest = {
   testId: SYNTHETIC_ID,
   title: 'pays with a saved card and applies the loyalty discount when the basket holds a subscription',
@@ -98,7 +105,10 @@ export const SYNTHETIC: ReportTest = {
     retry: i === 4 ? 1 : 0,
   })),
   tags: ['@payments', '@smoke', '@synthetic'],
-  flakinessScore: 0.15,
+  flakinessScore: 0.27,
+  flakinessStatus: 'failing',
+  flakinessRuns: 11,
+  flakinessInterval: [0.1, 0.57],
   stabilityScore: { overall: 84, flakiness: 85, performance: 70, reliability: 90, grade: 'B', needsAttention: false },
   averageDuration: 1990,
   performanceMetrics: { averageDuration: 1990, currentDuration: 6412, percentChange: 222, absoluteChange: 4422, threshold: 0.2, isRegression: true, isImprovement: false, severity: 'high' },

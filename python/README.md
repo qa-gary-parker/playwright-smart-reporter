@@ -1,17 +1,21 @@
 # Playwright Smart Reporter - Python
 
-Python integration for [Playwright Smart Reporter](https://github.com/qa-gary-parker/playwright-smart-reporter) - brings AI-powered failure analysis, flakiness detection, and beautiful HTML reports to your pytest test suites.
+Python integration for [Playwright Smart Reporter](https://github.com/qa-gary-parker/playwright-smart-reporter) - writes the Smart Reporter HTML report for your pytest test suites.
 
 ## Features
 
-All the features from the main Playwright Smart Reporter, now available for Python/pytest:
-
-- **AI Failure Analysis** - Claude/OpenAI/Gemini powered suggestions
-- **Smart Analytics** - Flakiness detection, performance regression alerts
-- **Trend Charts** - Visual history of test health over time
-- **Stability Scoring** - A+ to F grades for test reliability
-- **Failure Clustering** - Group similar errors automatically
+- **HTML report** - the same single-page report as the Node.js reporter
+- **Test results** - status, duration, error and keywords (as tags) for each pytest test
 - **Modern Dashboard** - Interactive sidebar navigation, light/dark themes
+
+## Limits
+
+The bridge converts the results of one pytest run. It keeps no history and calls no AI provider, so these Node.js reporter features are not available:
+
+- AI failure analysis and the AI suite summary
+- Trend charts across runs (the report shows the current run only)
+- Flakiness detection, performance regression alerts and stability grades
+- Failure clustering
 
 ## Prerequisites
 
@@ -61,15 +65,6 @@ addopts =
     --json-report-file=.pytest-report.json
     --smart-reporter
     --smart-reporter-output=test-reports/smart-report.html
-```
-
-### Environment Variables
-
-```bash
-# AI Analysis (optional)
-export ANTHROPIC_API_KEY="sk-ant-..."
-export OPENAI_API_KEY="sk-..."
-export GEMINI_API_KEY="..."
 ```
 
 ## Usage with Playwright for Python

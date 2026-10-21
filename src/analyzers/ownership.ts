@@ -4,6 +4,7 @@ import * as path from 'path';
 import type { ReportData } from '../report-data/schema';
 import type { SmartReporterOptions, TestResultData } from '../types';
 import { isFlakyTest } from '../utils/flakiness';
+import { computeRunStats } from '../utils/run-stats';
 
 export interface OwnerInfo {
   owners: string[];
@@ -28,7 +29,7 @@ function escapeRegex(ch: string): string {
 
 // gitignore-style pattern -> regex, following GitHub's CODEOWNERS semantics
 // (same rules as github.com/hmarr/codeowners): no negation, no [] classes.
-function compilePattern(pattern: string): RegExp {
+export function compilePattern(pattern: string): RegExp {
   if (pattern === '/') return /^(?!)/;
   let segs = pattern.split('/');
   if (segs[0] === '') {
@@ -247,25 +248,19 @@ export function resolveOwnership(
 export function summarizeOwnership(
   tests: Array<Pick<TestResultData, 'owners' | 'status' | 'outcome' | 'flakinessScore'>>,
 ): ReportData['ownership'] {
-  const stats = new Map<string, { total: number; passed: number; failed: number; flaky: number }>();
+  const byOwner = new Map<string, typeof tests>();
   for (const t of tests) {
     for (const owner of t.owners ?? []) {
-      const s = stats.get(owner) ?? { total: 0, passed: 0, failed: 0, flaky: 0 };
-      s.total++;
-      if (t.status === 'passed' || t.outcome === 'expected' || t.outcome === 'flaky') s.passed++;
-      if (t.outcome === 'unexpected' && (t.status === 'failed' || t.status === 'timedOut')) s.failed++;
-      if (isFlakyTest(t)) s.flaky++;
-      stats.set(owner, s);
+      if (!byOwner.has(owner)) byOwner.set(owner, []);
+      byOwner.get(owner)!.push(t);
     }
   }
-  if (stats.size === 0) return undefined;
-  const owners = [...stats].map(([owner, s]) => ({
-    owner,
-    total: s.total,
-    failed: s.failed,
-    flaky: s.flaky,
-    passRate: Math.round((s.passed / s.total) * 100),
-  }));
+  if (byOwner.size === 0) return undefined;
+  const owners = [...byOwner].map(([owner, owned]) => {
+    const { total, failed, passRate } = computeRunStats(owned);
+    // Flaky by history or on retry: the owner's tests that need a look, not this run's count.
+    return { owner, total, failed, flaky: owned.filter(t => isFlakyTest(t)).length, passRate };
+  });
   owners.sort((a, b) => b.failed - a.failed || b.flaky - a.flaky || (a.owner < b.owner ? -1 : a.owner > b.owner ? 1 : 0));
   return { owners };
 }

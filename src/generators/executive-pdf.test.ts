@@ -49,6 +49,17 @@ function rectFill(content: string, rect: string): string | undefined {
   return rgb && '#' + rgb.split(' ').map(v => Math.round(Number(v) * 255).toString(16).padStart(2, '0')).join('');
 }
 
+// Fill colour of each drawn text equal to `text`: the last colour set before it.
+// Kerning can split one text into several hex strings, so match whole BT…ET blocks as pdfLines reads them.
+function textColors(content: string, text: string): string[] {
+  return [...content.matchAll(/\bBT\b[\s\S]*?\bET\b/g)]
+    .filter(([block]) => [...block.matchAll(/<([0-9a-f]+)>/gi)].map(([, hex]) => winAnsi(Buffer.from(hex, 'hex'))).join('') === text)
+    .map(({ index }) => {
+      const rgb = [...content.slice(0, index).matchAll(/([\d.]+ [\d.]+ [\d.]+) scn/g)].at(-1)![1];
+      return '#' + rgb.split(' ').map(v => Math.round(Number(v) * 255).toString(16).padStart(2, '0')).join('');
+    });
+}
+
 // Segment count of each stroked polyline with 2+ segments: the trend sparklines.
 const sparklines = (content: string) => (content.match(/ m\n(?:[\d.-]+ [\d.-]+ l\n){2,}S\n/g) ?? []).map(p => p.split(' l\n').length - 1);
 
@@ -207,10 +218,10 @@ describe('executive-pdf', () => {
     });
   });
 
-  it('renders an empty run as zero tests on one page', () => {
+  it('renders an empty run as zero tests on one page, with no pass rate', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: [] }), tmpDir));
 
-    expectDrawn(lines, ['0 tests  ·  0% pass rate  ·  5.0s', '0', 'Total Tests', '0%', 'Pass Rate', '0', 'Failed', '0', 'Flaky', '5.0s', 'Duration']);
+    expectDrawn(lines, ['0 tests  ·  n/a pass rate  ·  5.0s', '0', 'Total Tests', 'n/a', 'Pass Rate', '0', 'Failed', '0', 'Flaky', '5.0s', 'Duration']);
     expect(pages(lines)).toEqual(['Page 1']);
   });
 
@@ -263,6 +274,63 @@ describe('executive-pdf', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results }), tmpDir));
     expectDrawn(lines, ['ALL TESTS PASSED', '3 tests  ·  100% pass rate  ·  5.0s', '3', 'Total Tests', '100%', 'Pass Rate', '0', 'Failed', '0', 'Flaky', '5.0s', 'Duration']);
     expect(pages(lines)).toEqual(['Page 1']);
+  });
+
+  it('shows the pass rate in green at 80% or more, from the tests that ran', () => {
+    const results = [
+      createTestResult({ testId: '1', status: 'passed', outcome: 'expected' }),
+      createTestResult({ testId: '2', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const file = generateExecutivePdf(createBasicData({ results }), tmpDir);
+    expectDrawn(pdfLines(file), ['ALL TESTS PASSED', '2 tests  ·  100% pass rate  ·  5.0s', '2', 'Total Tests', '100%', 'Pass Rate']);
+    // The KPI card and the donut centre
+    expect(textColors(contentStreams(file)[0], '100%')).toEqual(['#16a34a', '#16a34a']);
+  });
+
+  it('shows the pass rate as n/a in grey, not 0% in red, when every test was skipped', () => {
+    const results = [
+      createTestResult({ testId: '1', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: '2', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const file = generateExecutivePdf(createBasicData({ results }), tmpDir);
+    const lines = pdfLines(file);
+    expectDrawn(lines, ['2 tests  ·  n/a pass rate  ·  5.0s', '2', 'Total Tests', 'n/a', 'Pass Rate', '0', 'Failed']);
+    expectDrawn(lines, ['Test Distribution', 'n/a', 'pass rate']);
+    expect(textColors(contentStreams(file)[0], 'n/a')).toEqual(['#9ca3af', '#9ca3af']);
+  });
+
+  it('shows a neutral NO TESTS RAN verdict in grey, not ALL TESTS PASSED, when no test ran', () => {
+    const skipped = [
+      createTestResult({ testId: '1', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: '2', status: 'skipped', outcome: 'skipped' }),
+    ];
+    const verdicts = [[], skipped].map((results) => {
+      const file = generateExecutivePdf(createBasicData({ results }), tmpDir);
+      const [page1] = contentStreams(file);
+      const lines = pdfLines(file);
+      // The banner's verdict and subtitle, its text colour, and its accent bar
+      return [lines.slice(0, lines.indexOf('Total Tests') - 1).slice(-2), textColors(page1, 'NO TESTS RAN'), rectFill(page1, '40 108 4 52')];
+    });
+    expect(verdicts).toEqual([
+      [['NO TESTS RAN', '0 tests  ·  n/a pass rate  ·  5.0s'], ['#9ca3af'], '#9ca3af'],
+      [['NO TESTS RAN', '2 tests  ·  n/a pass rate  ·  5.0s'], ['#9ca3af'], '#9ca3af'],
+    ]);
+  });
+
+  it('lists a file whose tests were all skipped last in the file breakdown, as n/a', () => {
+    const results = [
+      createTestResult({ testId: '1', file: 'tests/skipped.spec.ts', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: '2', file: 'tests/cart.spec.ts', status: 'passed', outcome: 'expected' }),
+      createTestResult({ testId: '3', file: 'tests/cart.spec.ts', status: 'failed', outcome: 'unexpected', error: 'Boom' }),
+    ];
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ results }), tmpDir));
+    expectDrawn(lines, ['Breakdown by file', '50%', 'tests/cart.spec.ts', 'n/a', 'tests/skipped.spec.ts']);
+    expectDrawn(lines, [
+      'Suite Breakdown',
+      'File', 'Total', 'Passed', 'Failed', 'Flaky', 'Duration', 'Pass Rate',
+      'tests/cart.spec.ts', '2', '1', '1', '0', '2.0s', '50%',
+      'tests/skipped.spec.ts', '1', '0', '0', '0', '1.0s', 'n/a',
+    ]);
   });
 
   it('handles results with failures and AI suggestions', () => {
@@ -340,8 +408,9 @@ describe('executive-pdf', () => {
       createTestResult({ testId: '4', status: 'passed', outcome: 'flaky' }),
     ];
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results }), tmpDir));
-    expectDrawn(lines, ['1 FAILURE DETECTED', '4 tests  ·  50% pass rate  ·  5.0s', '4', 'Total Tests', '50%', 'Pass Rate', '1', 'Failed', '1', 'Flaky']);
-    expectDrawn(lines, ['Test Distribution', '50%', 'pass rate', '1', 'Passed', '1', 'Flaky', '1', 'Failed', '1', 'Skipped']);
+    // 2 of the 3 that ran; the skipped test is left out
+    expectDrawn(lines, ['1 FAILURE DETECTED', '4 tests  ·  67% pass rate  ·  5.0s', '4', 'Total Tests', '67%', 'Pass Rate', '1', 'Failed', '1', 'Flaky']);
+    expectDrawn(lines, ['Test Distribution', '67%', 'pass rate', '1', 'Passed', '1', 'Flaky', '1', 'Failed', '1', 'Skipped']);
   });
 
   it('handles failure clusters without AI suggestion', () => {
@@ -485,15 +554,32 @@ describe('executive-pdf', () => {
     };
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: twoFileRun(), qualityGateResult }), tmpDir));
 
-    expectDrawn(lines, ['QUALITY GATES FAILED', '2/3 rules passed  ·  5 tests  ·  60% pass rate  ·  5.0s']);
+    expectDrawn(lines, ['QUALITY GATES FAILED', '2/3 rules passed  ·  5 tests  ·  75% pass rate  ·  5.0s']);
     expectDrawn(lines, [
       'Quality Gates',
       'Rule', 'Actual', 'Threshold', 'Status',
-      'Maximum Failures', '1', '0', expect.stringMatching(/ Failed$/),
-      'Minimum Pass Rate', '75%', '70%', expect.stringMatching(/ Passed$/),
+      'Max failures', '1', '0', expect.stringMatching(/ Failed$/),
+      'Min pass rate', '75%', '70%', expect.stringMatching(/ Passed$/),
       'customRule', 'yes', 'yes', expect.stringMatching(/ Passed$/),
       expect.stringMatching(/ Gates failed$/),
       FOOTER,
+    ]);
+  });
+
+  it('names a rule by its id or scope, and marks a breached warn rule as a warning', () => {
+    const qualityGateResult: QualityGateResult = {
+      passed: true,
+      rules: [
+        { rule: 'minPassRate', passed: true, actual: '100%', threshold: '100%', scope: 'tag @critical' },
+        { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '2%', id: 'chromium flaky', severity: 'warn' },
+      ],
+    };
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
+
+    expectDrawn(lines, [
+      'Min pass rate (tag @critical)', '100%', '100%', expect.stringMatching(/ Passed$/),
+      'chromium flaky', '50%', '2%', '! Warning',
+      expect.stringMatching(/ All gates passed$/),
     ]);
   });
 
@@ -505,18 +591,30 @@ describe('executive-pdf', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
 
     expect(lines).toContain('QUALITY GATES PASSED');
-    expectDrawn(lines, ['No New Failures', 'N/A', '0', '- Skipped', expect.stringMatching(/ All gates passed$/)]);
+    expectDrawn(lines, ['No new failures', 'N/A', '0', '- Skipped', expect.stringMatching(/ All gates passed$/)]);
   });
 
-  it('draws the suite breakdown, worst pass rate first', () => {
+  it('names the accessibility, coverage, duration and flaky rules as the terminal and the report do', () => {
+    const rule = (name: string) => ({ rule: name, passed: true, actual: '0', threshold: '0' });
+    const qualityGateResult: QualityGateResult = {
+      passed: true,
+      rules: ['maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky'].map(rule),
+    };
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
+
+    const labels = ['Max a11y violations', 'Max a11y critical', 'Max a11y serious', 'Min line coverage', 'Max duration regression', 'No new flaky tests'];
+    expectDrawn(lines, ['Status', ...labels.flatMap((label) => [label, '0', '0', expect.stringMatching(/ Passed$/)])]);
+  });
+
+  it('draws the suite breakdown, worst pass rate first, with a flaky test counted as passed', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ results: twoFileRun() }), tmpDir));
 
-    expectDrawn(lines, ['Breakdown by file', '33%', 'tests/checkout.spec.ts', '50%', 'tests/cart.spec.ts']);
+    expectDrawn(lines, ['Breakdown by file', '50%', 'tests/checkout.spec.ts', '100%', 'tests/cart.spec.ts']);
     expectDrawn(lines, [
       'Suite Breakdown',
       'File', 'Total', 'Passed', 'Failed', 'Flaky', 'Duration', 'Pass Rate',
-      'tests/checkout.spec.ts', '3', '1', '1', '0', '3.5s', '33%',
-      'tests/cart.spec.ts', '2', '1', '0', '1', '2.0s', '50%',
+      'tests/checkout.spec.ts', '3', '1', '1', '0', '3.5s', '50%',
+      'tests/cart.spec.ts', '2', '1', '0', '1', '2.0s', '100%',
       'Failure Details',
     ]);
   });
@@ -538,5 +636,22 @@ describe('executive-pdf', () => {
       'Slow search', 'tests/search.spec.ts', '42%',
       FOOTER,
     ]);
+  });
+
+  it('draws n/a for a quarantined test without a flakiness score', () => {
+    const quarantineEntries: QuarantineEntry[] = [
+      { testId: 'q1', title: 'Card sandbox', file: 'tests/pay.spec.ts', quarantinedAt: '2026-10-01T00:00:00Z', source: 'manual' },
+    ];
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ quarantineEntries }), tmpDir));
+
+    expectDrawn(lines, ['Card sandbox', 'tests/pay.spec.ts', 'n/a', FOOTER]);
+  });
+
+  it('names flakiness in the quarantine banner only when every entry was quarantined for flakiness', () => {
+    const entry = (testId: string, source?: QuarantineEntry['source']): QuarantineEntry => ({ testId, title: testId, file: 'a.spec.ts', flakinessScore: 0.5, quarantinedAt: '2026-10-01T00:00:00Z', source });
+    const banner = (quarantineEntries: QuarantineEntry[]) => pdfLines(generateExecutivePdf(createBasicData({ quarantineEntries }), tmpDir)).find(l => l.includes('quarantined'));
+
+    expect(banner([entry('a', 'auto'), entry('b')])).toBe('2 tests quarantined due to high flakiness');
+    expect(banner([entry('a', 'auto'), entry('b', 'annotation')])).toBe('2 tests quarantined');
   });
 });

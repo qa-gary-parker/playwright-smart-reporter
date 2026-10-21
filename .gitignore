@@ -22,6 +22,7 @@ example/test-history.json
 example/parallel/smart-report.html
 example/parallel/test-history.json
 example/history-runs/
+example/**/*.runs/
 example/traces/
 example/*.pdf
 example/*.xml

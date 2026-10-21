@@ -361,6 +361,10 @@
   border-radius: var(--radius-sm);
 }
 
+.step[data-trend] {
+  grid-template-columns: 12px minmax(0, 1fr) auto 96px 56px;
+}
+
 .step[data-failed] {
   background: var(--fail-bg);
 }
@@ -916,6 +920,13 @@ a.lines__label {
   gap: var(--space-3);
 }
 
+.attempts__summary {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--flaky-fg);
+  border-radius: var(--radius-sm);
+}
+
 .attempts__list {
   display: grid;
   gap: var(--space-1);
@@ -940,6 +951,11 @@ a.lines__label {
   white-space: nowrap;
 }
 
+.attempts__evidence {
+  flex-basis: 100%;
+  padding-left: calc(14px + var(--space-3));
+}
+
 .retry-diff {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -950,6 +966,10 @@ a.lines__label {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 26px;
+}
+
+.retry-diff--requests .retry-diff__row {
+  grid-template-columns: minmax(0, 1fr) 96px 96px;
 }
 
 .retry-diff__row > span {
@@ -1156,6 +1176,7 @@ a.lines__label {
 }
 
 .heatmap__cell {
+  display: block;
   height: 14px;
   border-radius: var(--radius-sm);
 }

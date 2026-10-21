@@ -1,6 +1,8 @@
 import { spawn } from 'child_process';
 import type { AIConfig, AIProviderName, TestResultData, TestRecommendation, FailureCluster, SuiteStats, RunSummary } from '../types';
-import { isFlakyScore, isConsistentlyFailingScore } from '../utils';
+import { isFlakyTest, isConsistentlyFailingScore } from '../utils';
+import { createRedactor } from '../agent/redact';
+import { formatPassRate } from '../utils/run-stats';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_TOTAL_MS = 300_000;
@@ -161,6 +163,7 @@ const secs = (ms: number) => `${+(ms / 1000).toFixed(1)}s`;
  * subscription via CLAUDE_CODE_OAUTH_TOKEN and the Claude Code CLI, or run a local model
  * through Ollama or any OpenAI-compatible endpoint. See resolveAIProvider for precedence.
  * An unreachable or slow provider skips the remaining analysis with one warning; it never fails the run.
+ * Every prompt is redacted (secret env values, credential pairs, tokens) before it is sent.
  */
 export class AIAnalyzer {
   private provider?: ResolvedAIProvider;
@@ -170,8 +173,10 @@ export class AIAnalyzer {
   private deadline?: number;
   private skipReason?: string;
   private cliUnavailable = false;
+  private redact: (text: string) => string;
 
   constructor(config?: AIConfig, env: NodeJS.ProcessEnv = process.env) {
+    this.redact = createRedactor(env).string;
     this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxTotalMs = config?.maxTotalMs ?? DEFAULT_MAX_TOTAL_MS;
     let resolution: AIProviderResolution;
@@ -267,15 +272,15 @@ export class AIAnalyzer {
 
     console.log('\n   Generating AI suite health summary...');
 
-    const flakyTests = results.filter(r => isFlakyScore(r.flakinessScore));
+    const flakyTests = results.filter(isFlakyTest);
     const slowTests = results.filter(r => r.performanceTrend?.startsWith('↑'));
     const retryTests = results.filter(r => r.retryInfo?.needsAttention);
 
     // Build pass-rate trend from recent history
     const recentRuns = historySummaries.slice(-5);
     const trendLine = recentRuns.length > 0
-      ? recentRuns.map(s => `${s.passRate}%`).join(' → ') + ` → ${stats.passRate}% (current)`
-      : `${stats.passRate}% (no prior history)`;
+      ? recentRuns.map(s => formatPassRate(s.passRate)).join(' → ') + ` → ${formatPassRate(stats.passRate)} (current)`
+      : `${formatPassRate(stats.passRate)} (no prior history)`;
 
     const prompt = this.buildSuiteHealthPrompt(stats, failureClusters, flakyTests, slowTests, retryTests, trendLine);
 
@@ -293,7 +298,7 @@ export class AIAnalyzer {
     const recommendations: TestRecommendation[] = [];
 
     // Flakiness recommendations
-    const flakyTests = results.filter(r => isFlakyScore(r.flakinessScore));
+    const flakyTests = results.filter(isFlakyTest);
     if (flakyTests.length > 0) {
       recommendations.push({
         type: 'flakiness',
@@ -350,7 +355,7 @@ export class AIAnalyzer {
     }
 
     // Suite health recommendations
-    if (stats.passRate < 90) {
+    if (stats.passRate !== null && stats.passRate < 90) {
       recommendations.push({
         type: 'suite',
         priority: 95,
@@ -378,10 +383,11 @@ export class AIAnalyzer {
     return recommendations.sort((a, b) => b.priority - a.priority);
   }
 
-  private async callAI(prompt: string): Promise<string> {
+  private async callAI(rawPrompt: string): Promise<string> {
     const p = this.provider;
     if (!p) return 'AI analysis not available';
     if (this.skipReason) throw new AISkippedError(this.skipReason);
+    const prompt = this.redact(rawPrompt);
 
     const capReason = `the ${secs(this.maxTotalMs)} total analysis cap (ai.maxTotalMs) was reached; remaining items were not analyzed`;
     this.deadline ??= Date.now() + this.maxTotalMs;
@@ -591,7 +597,7 @@ Suite Stats:
 - Total: ${stats.total} tests
 - Passed: ${stats.passed}, Failed: ${stats.failed}, Skipped: ${stats.skipped}
 - Flaky: ${stats.flaky}, Slow: ${stats.slow}
-- Pass Rate: ${stats.passRate}%
+- Pass Rate: ${formatPassRate(stats.passRate)}
 - Average Stability: ${stats.averageStability}/100
 
 Pass Rate Trend: ${trendLine}

@@ -15,13 +15,16 @@ import {
   statusLabel,
   type TestStatus,
 } from '../../components';
-import { displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
+import { commitsLabel, displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
 import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
+import { MIN_SAMPLE_RUNS } from '../../../utils/stats';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
+import { alignSteps, divergenceSummary, pickAttempts } from '../../../analyzers/attempt-compare';
 import { Lightbox, type MediaItem } from './Lightbox';
 import { Violations } from './Accessibility';
 import { Markdown } from './Markdown';
 import { CausalTimeline } from './Timeline';
+import type { CommitRange } from '../../../types';
 
 const SIGNAL_LABEL: Record<string, string> = {
   'new-failure': 'New failure',
@@ -39,6 +42,15 @@ function S({ title, meta, children, defaultOpen = true }: { title: string; meta?
     <Section title={title} meta={meta} open={open} onToggle={(o) => o !== open && setSection(title, o)}>
       {children}
     </Section>
+  );
+}
+
+function Commits({ c }: { c: CommitRange }) {
+  const { text, title } = commitsLabel(c);
+  return (
+    <a class="mono" href={c.url} title={title} target="_blank" rel="noreferrer">
+      {text}
+    </a>
   );
 }
 
@@ -69,33 +81,43 @@ function StackError({ message }: { message: string }) {
 function Steps({ t }: { t: ReportTest }) {
   const failed = failingStepIndex(t);
   const max = Math.max(...t.steps.map((s) => s.duration), 1);
+  const trends = new Map((t.stepTrends ?? []).map((tr) => [tr.title, tr]));
   return (
     <ol class="steps">
-      {t.steps.map((s, i) => (
-        <li class="step" data-failed={i === failed ? '' : undefined}>
-          {i === failed ? <StatusGlyph status="failed" size={12} /> : <span class="step__dot" />}
-          <span class="step__title mono" title={s.title}>
-            {s.title}
-          </span>
-          <span class="step__bar" aria-hidden="true">
-            <span style={{ width: `${(s.duration / max) * 100}%` }} />
-          </span>
-          <span class="step__dur mono">{formatDuration(s.duration)}</span>
-        </li>
-      ))}
+      {t.steps.map((s, i) => {
+        const trend = s.category === 'test.step' ? trends.get(s.title) : undefined;
+        return (
+          <li class="step" data-failed={i === failed ? '' : undefined} data-trend={trend ? '' : undefined}>
+            {i === failed ? <StatusGlyph status="failed" size={12} /> : <span class="step__dot" />}
+            <span class="step__title mono" title={s.title}>
+              {s.title}
+            </span>
+            {trend && (
+              <span class="signal" title={`Median ${formatDuration(trend.median)} in passing runs`}>
+                {trend.ratio.toFixed(1)}× slower
+              </span>
+            )}
+            <span class="step__bar" aria-hidden="true">
+              <span style={{ width: `${(s.duration / max) * 100}%` }} />
+            </span>
+            <span class="step__dur mono">{formatDuration(s.duration)}</span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
 function Attempts({ t }: { t: ReportTest }) {
   const attempts = t.attempts ?? [];
-  // Side by side only makes sense when one attempt failed and a later one passed.
-  const failedAttempt = attempts.find((a) => a.status === 'failed' || a.status === 'timedOut');
-  const passedAttempt = [...attempts].reverse().find((a) => a.status === 'passed');
-  const compare = failedAttempt && passedAttempt ? [failedAttempt, passedAttempt] : undefined;
-  const rows = compare ? Math.max(compare[0].steps.length, compare[1].steps.length) : 0;
+  // Side by side only makes sense when one attempt missed the expected status and another got it.
+  const { missed, met } = pickAttempts(attempts, t.expectedStatus);
+  const compare = missed[0] && met ? [missed[0], met] : undefined;
+  const rows = useMemo(() => (compare ? alignSteps(compare[0].steps, compare[1].steps) : []), [t]);
+  const summary = useMemo(() => divergenceSummary(attempts, t.expectedStatus), [t]);
   return (
     <div class="attempts">
+      {summary && <p class="attempts__summary">{summary}</p>}
       <ol class="attempts__list">
         {attempts.map((a) => (
           <li class="attempts__item">
@@ -104,6 +126,11 @@ function Attempts({ t }: { t: ReportTest }) {
             <span class="faint">{statusLabel(a.status as TestStatus)}</span>
             <span class="mono faint">{formatDuration(a.duration)}</span>
             {a.error && <span class="attempts__error mono">{a.error.split('\n')[0]}</span>}
+            {a.attachments && (
+              <div class="attempts__evidence" role="group" aria-label={`Attempt ${a.retry + 1} attachments`}>
+                <Attachments att={a.attachments} />
+              </div>
+            )}
           </li>
         ))}
       </ol>
@@ -113,28 +140,84 @@ function Attempts({ t }: { t: ReportTest }) {
             <span role="columnheader">Attempt {compare[0].retry + 1} ({statusLabel(compare[0].status as TestStatus)})</span>
             <span role="columnheader">Attempt {compare[1].retry + 1} ({statusLabel(compare[1].status as TestStatus)})</span>
           </div>
-          {Array.from({ length: rows }, (_, i) => {
-            const [a, b] = [compare[0].steps[i], compare[1].steps[i]];
-            const differs = !a || !b || a.title !== b.title || Math.max(a.duration, b.duration) > 2 * Math.max(1, Math.min(a.duration, b.duration));
-            return (
-              <div class="retry-diff__row" role="row" data-differs={differs ? '' : undefined}>
-                {[a, b].map((s) => (
-                  <span role="cell" class="mono">
-                    {s ? (
-                      <>
-                        {s.title} <span class="faint">{formatDuration(s.duration)}</span>
-                      </>
-                    ) : (
-                      <span class="faint">(no step)</span>
-                    )}
-                  </span>
-                ))}
-              </div>
-            );
-          })}
+          {rows.map((r) => (
+            <div class="retry-diff__row" role="row" data-differs={r.differs ? '' : undefined}>
+              {[r.a === undefined ? undefined : compare[0].steps[r.a], r.b === undefined ? undefined : compare[1].steps[r.b]].map((s) => (
+                <span role="cell" class="mono" style={s?.depth ? { paddingLeft: `calc(${s.depth + 1} * var(--space-3))` } : undefined}>
+                  {s ? (
+                    <>
+                      {s.title} <span class="faint">{formatDuration(s.duration)}</span>
+                    </>
+                  ) : (
+                    <span class="faint">(no step)</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          ))}
         </div>
       )}
+      {t.attemptDiff && <TraceDiff d={t.attemptDiff} />}
     </div>
+  );
+}
+
+function TraceDiff({ d }: { d: NonNullable<ReportTest['attemptDiff']> }) {
+  if (d.missingTrace) {
+    const which = d.missingTrace.map((r) => r + 1);
+    return (
+      <p class="muted">
+        {which.length > 1 ? `Attempts ${which.join(' and ')} have` : `Attempt ${which[0]} has`} no trace, so the requests and console messages of
+        attempt {d.failed + 1} and attempt {d.passed + 1} cannot be compared. Set <span class="mono">trace: 'on'</span> in the Playwright config to
+        record a trace of every attempt.
+      </p>
+    );
+  }
+  const network = d.network ?? [];
+  const messages = d.console ?? [];
+  const status = (s?: number) => (s === undefined ? 'not sent' : s > 0 ? String(s) : 'ERR');
+  const compared = `${d.network ? 'requests and ' : ''}console errors and warnings`;
+  const same = network.length === 0 && messages.length === 0;
+  return (
+    <>
+      <p class="muted">
+        {same
+          ? `The traces of attempt ${d.failed + 1} and attempt ${d.passed + 1} have the same ${compared}.`
+          : `The ${compared} that differ between the traces of attempt ${d.failed + 1} and attempt ${d.passed + 1}:`}
+      </p>
+      {network.length > 0 && (
+        <div class="retry-diff retry-diff--requests" role="table" aria-label="Requests by attempt">
+          <div class="retry-diff__row retry-diff__head" role="row">
+            <span role="columnheader">Request</span>
+            <span role="columnheader">Attempt {d.failed + 1}</span>
+            <span role="columnheader">Attempt {d.passed + 1}</span>
+          </div>
+          {network.map((r) => (
+            <div class="retry-diff__row" role="row" title={r.url}>
+              <span role="cell" class="mono">
+                {r.method} {r.url}
+              </span>
+              <span role="cell" class="mono">
+                {status(r.failed)}
+              </span>
+              <span role="cell" class="mono">
+                {status(r.passed)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {messages.length > 0 && (
+        <ul class="console" aria-label={`Console errors and warnings only in attempt ${d.failed + 1}`}>
+          {messages.map((c) => (
+            <li class="console__line mono" data-level={c.level}>
+              <span class="console__level">{c.level}</span>
+              {c.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 
@@ -157,11 +240,22 @@ function History({ t }: { t: ReportTest }) {
           Passed <strong>{passed}</strong> of last {runs.length}
         </span>
         <span>
-          Avg <strong class="mono">{formatDuration(t.averageDuration ?? t.duration)}</strong>
+          Median <strong class="mono">{formatDuration(t.averageDuration ?? t.duration)}</strong>
         </span>
         {t.flakinessScore !== undefined && (
           <span>
-            Flakiness <strong>{Math.round(t.flakinessScore * 100)}%</strong>
+            Flakiness{' '}
+            {t.flakinessStatus === 'insufficient-history' ? (
+              <>
+                <strong>insufficient history</strong> {t.flakinessRuns} of {MIN_SAMPLE_RUNS} runs
+              </>
+            ) : (
+              <>
+                <strong>{Math.round(t.flakinessScore * 100)}%</strong>
+                {t.flakinessInterval && <span class="faint"> {t.flakinessInterval.map((x) => Math.round(x * 100)).join('–')}%</span>} over{' '}
+                {plural(t.flakinessRuns ?? 0, 'run')}
+              </>
+            )}
           </span>
         )}
         {t.stabilityScore && (
@@ -175,15 +269,14 @@ function History({ t }: { t: ReportTest }) {
   );
 }
 
-function Attachments({ t }: { t: ReportTest }) {
-  const att = t.attachments;
+function Attachments({ att }: { att?: Partial<NonNullable<ReportTest['attachments']>> }) {
   const [index, setIndex] = useState<number | null>(null);
   const media: MediaItem[] = useMemo(
     () => [
       ...(att?.screenshots ?? []).map((src, i) => ({ kind: 'image' as const, src: fileHref(src), caption: `Screenshot ${i + 1}` })),
       ...(att?.videos ?? []).map((src, i) => ({ kind: 'video' as const, src: fileHref(src), caption: `Video ${i + 1}` })),
     ],
-    [t.testId],
+    [att],
   );
   const traceViewer = data.value.config.features.traceViewer;
   return (
@@ -279,6 +372,7 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
           {t.signals.map((s) => (
             <span class="signal">{SIGNAL_LABEL[s] ?? s}</span>
           ))}
+          {t.commits && <Commits c={t.commits} />}
           {(t.tags ?? []).map((tag) => (
             <button type="button" class="detail__chip" onClick={() => addFilter('tag', tag)} aria-label={`Filter by ${tag}`}>
               <FilterToken name="tag" value={tag} />
@@ -316,6 +410,15 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
       {snippet && (
         <S title="Source" meta={<span class="mono">{t.errorLocation ? `${t.errorLocation.file}:${t.errorLocation.line}` : location(t)}</span>}>
           <CodeFrame lines={snippet.lines} highlight={snippet.highlight} column={snippet.column} file={t.errorLocation?.file} />
+        </S>
+      )}
+      {t.commits?.suspects && (
+        <S title="Suspects" meta="files changed since the last pass">
+          <ul class="lines">
+            {t.commits.suspects.map((f) => (
+              <li class="lines__item mono">{f}</li>
+            ))}
+          </ul>
         </S>
       )}
       {timeline && (
@@ -383,7 +486,7 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
       )}
       {attachmentCount(t) > 0 && (
         <S title="Attachments" meta={plural(attachmentCount(t), 'file')}>
-          <Attachments t={t} />
+          <Attachments att={t.attachments} />
         </S>
       )}
       {t.history.length > 0 && (

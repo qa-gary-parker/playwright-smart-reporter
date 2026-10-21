@@ -8,8 +8,10 @@ branding:
 # Job permissions:
 #   contents: read         actions/checkout
 #   pull-requests: write   create or update the pull request comment
+#   issues: write          only with issues: true
 # Without pull-requests: write (for example, pull requests from forks) the comment is skipped
 # with a warning; the job summary and annotations are still published and the step passes.
+# The same applies to issues without issues: write.
 # Run the tests with exportJson: true so that smart-report-data.json exists.
 
 inputs:
@@ -25,6 +27,10 @@ inputs:
     description: Token that the gh CLI uses to read and write the pull request comment.
     required: false
     default: ${{ github.token }}
+  issues:
+    description: Set to true to open one GitHub issue per new failure cluster (at most 5 per run), or comment on the cluster's open issue.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -35,17 +41,19 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         SMART_REPORTER_DATA: ${{ inputs.data }}
         SMART_REPORTER_URL: ${{ inputs.report-url }}
+        SMART_REPORTER_ISSUES: ${{ inputs.issues }}
         SMART_REPORTER_LOCAL_CLI: ${{ github.action_path }}/dist/bin/cli.js
         SMART_REPORTER_ACTION_REF: ${{ github.action_ref }}
       run: |
         args=(github --data "$SMART_REPORTER_DATA")
         if [ -n "$SMART_REPORTER_URL" ]; then args+=(--report-url "$SMART_REPORTER_URL"); fi
+        if [ "$SMART_REPORTER_ISSUES" = "true" ]; then args+=(--issues); fi
         # `uses: ./` in this repository runs the freshly built CLI; everyone else gets the package via npx.
         if [ -f "$SMART_REPORTER_LOCAL_CLI" ]; then
           node "$SMART_REPORTER_LOCAL_CLI" "${args[@]}"
         else
-          # Run the package version that matches the action tag (v3.0.0 -> 3.0.0, v3 -> 3), never whatever is latest.
-          version=3
+          # Run the package version that matches the action tag (v4.0.0 -> 4.0.0, v4 -> 4), never whatever is latest.
+          version=4
           if [[ "$SMART_REPORTER_ACTION_REF" =~ ^v([0-9]+(\.[0-9]+){0,2})$ ]]; then version="${BASH_REMATCH[1]}"; fi
           npx --yes "playwright-smart-reporter@$version" "${args[@]}"
         fi

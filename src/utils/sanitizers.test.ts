@@ -101,6 +101,18 @@ describe('stripAnsiCodes', () => {
     expect(stripAnsiCodes(input)).toBe('Bold Red');
   });
 
+  it('removes CSI sequences with non-SGR final bytes', () => {
+    expect(stripAnsiCodes('\x1b[?25l\x1b[1Aprogress\x1b[?25h')).toBe('progress');
+  });
+
+  it('removes CSI erase-line and BEL-terminated OSC 8 hyperlinks', () => {
+    expect(stripAnsiCodes('\x1b[2Kerr\x1b]8;;https://x\x07link\x1b]8;;\x07')).toBe('errlink');
+  });
+
+  it('removes ST-terminated OSC 8 hyperlinks', () => {
+    expect(stripAnsiCodes('\x1b[2Kerr\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\')).toBe('errlink');
+  });
+
   it('returns plain text unchanged', () => {
     expect(stripAnsiCodes('plain text')).toBe('plain text');
   });

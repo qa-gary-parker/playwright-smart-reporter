@@ -7,6 +7,7 @@ import type {
   TestHistoryEntry,
   TestResultData,
 } from '../types';
+import { clamp01, flipRate, mad, median, recency } from '../utils/stats';
 
 /**
  * Flake forecasting: an advisory risk score for tests that passed first time
@@ -110,22 +111,18 @@ interface Strength {
 function outcomeInstability(runs: TestHistoryEntry[]): Strength | undefined {
   const n = runs.length;
   let flips = 0;
-  let flipWeight = 0;
-  let totalWeight = 0;
   let lastFlipAge = -1;
   for (let k = 1; k < n; k++) {
-    const w = recency(n - 1 - k);
-    totalWeight += w;
     if (runs[k].passed !== runs[k - 1].passed) {
       flips++;
-      flipWeight += w;
       lastFlipAge = n - 1 - k;
     }
   }
   if (flips === 0) return undefined;
+  const rate = flipRate(runs.map((e) => e.passed), (age) => recency(age, HALF_LIFE_RUNS));
   return {
     signal: 'outcome-instability',
-    strength: clamp01(flipWeight / totalWeight / FLIP_RATE_FULL),
+    strength: clamp01(rate / FLIP_RATE_FULL),
     detail: `Pass/fail flipped ${flips} ${flips === 1 ? 'time' : 'times'} in the last ${n} runs, most recently ${ago(lastFlipAge)}`,
   };
 }
@@ -137,7 +134,7 @@ function retryTrend(runs: TestHistoryEntry[]): Strength | undefined {
   let totalWeight = 0;
   let lastAge = -1;
   runs.forEach((e, i) => {
-    const w = recency(n - 1 - i);
+    const w = recency(n - 1 - i, HALF_LIFE_RUNS);
     totalWeight += w;
     if ((e.retry ?? 0) > 0) {
       retried++;
@@ -194,25 +191,6 @@ function durationDrift(runs: TestHistoryEntry[]): Strength | undefined {
     strength,
     detail: `Median duration rose ${Math.round(drift * 100)}% from ${Math.round(before)}ms to ${Math.round(after)}ms`,
   };
-}
-
-function recency(age: number): number {
-  return Math.pow(0.5, age / HALF_LIFE_RUNS);
-}
-
-function median(xs: number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = s.length >> 1;
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
-function mad(xs: number[]): number {
-  const m = median(xs);
-  return median(xs.map((x) => Math.abs(x - m)));
-}
-
-function clamp01(x: number): number {
-  return x < 0 ? 0 : x > 1 ? 1 : x;
 }
 
 function round2(x: number): number {

@@ -3,14 +3,98 @@ import type {
   QualityGateConfig,
   QualityGateResult,
   QualityGateRuleResult,
+  QualityGateScope,
   RunComparison,
+  ComparisonChanges,
   A11yImpact,
+  QuarantineFile,
 } from '../types';
-import type { CoverageSummary } from '../report-data/schema';
-import { isFailedTest, isPassedTest } from '../utils/flakiness';
+import type { CoverageSummary, ReportCluster } from '../report-data/schema';
+import { computeRunStats, runStabilityGrade, type RunStats } from '../utils/run-stats';
+import { isFailedTest } from '../utils/flakiness';
+import { compilePattern } from '../analyzers/ownership';
+import { isExpired } from '../quarantine/quarantine-generator';
+
+// The run's failure clusters. The evaluator gets none when clustering is off.
+type GateClusters = Array<Pick<ReportCluster, 'testIds' | 'tracking'>>;
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
+
+export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky', 'noNewClusters', 'noExpiredQuarantine'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
+const SCOPE_KEYS = ['tag', 'project', 'file', 'owner'] as const satisfies ReadonlyArray<keyof QualityGateScope>;
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Throws on a config the evaluator would misread, so a typo cannot pass the gate. */
+export function validateQualityGates(config: QualityGateConfig): void {
+  if (!isObject(config)) throw new Error('quality gate config must be an object.');
+  const isRule = (key: string) => (GATE_RULES as readonly string[]).includes(key);
+  const unknown = Object.keys(config).find((key) => key !== 'rules' && !isRule(key));
+  if (unknown) throw new Error(`unknown quality gate rule "${unknown}". Known rules: ${GATE_RULES.join(', ')}.`);
+  if (config.rules === undefined) return;
+  if (!Array.isArray(config.rules)) throw new Error('quality gate "rules" must be an array.');
+
+  const ids = new Set<string>();
+  config.rules.forEach((entry: unknown, i) => {
+    const at = `quality gate rules[${i}]`;
+    if (!isObject(entry)) throw new Error(`${at} must be an object.`);
+    const { id, scope, severity, ...rule } = entry;
+    const names = Object.keys(rule);
+    const unknownKey = names.find((key) => !isRule(key));
+    if (unknownKey) throw new Error(`unknown key "${unknownKey}" in ${at}. Known keys: id, scope, severity, ${GATE_RULES.join(', ')}.`);
+    if (names.length !== 1) throw new Error(`${at} must name exactly one rule (found ${names.join(', ') || 'none'}).`);
+    if (severity !== undefined && severity !== 'fail' && severity !== 'warn') throw new Error(`${at}.severity must be "fail" or "warn" (got ${JSON.stringify(severity)}).`);
+    if (id !== undefined) {
+      if (typeof id !== 'string') throw new Error(`${at}.id must be a string.`);
+      if (ids.has(id)) throw new Error(`${at}.id "${id}" is already used by another rule.`);
+      ids.add(id);
+    }
+    if (scope === undefined) return;
+    if (!isObject(scope)) throw new Error(`${at}.scope must be an object.`);
+    if (names[0] === 'minCoverage') throw new Error(`${at}: minCoverage cannot be scoped, because coverage is measured for the whole run.`);
+    if (names[0] === 'noExpiredQuarantine') throw new Error(`${at}: noExpiredQuarantine cannot be scoped, because a quarantined test often does not run.`);
+    for (const [key, value] of Object.entries(scope)) {
+      if (!(SCOPE_KEYS as readonly string[]).includes(key)) throw new Error(`unknown key "${key}" in ${at}.scope. Known keys: ${SCOPE_KEYS.join(', ')}.`);
+      if (![value].flat().every((v) => typeof v === 'string')) throw new Error(`${at}.scope.${key} must be a string or an array of strings.`);
+    }
+  });
+}
+
+const valuesOf = (value: string | string[] | undefined) => (value === undefined ? undefined : [value].flat());
+
+function inScope(scope: QualityGateScope): (test: TestResultData) => boolean {
+  const [tags, projects, owners] = [valuesOf(scope.tag), valuesOf(scope.project), valuesOf(scope.owner)];
+  const files = valuesOf(scope.file)?.map(compilePattern);
+  return (t) =>
+    (!tags || tags.some((tag) => t.tags?.includes(tag)))
+    && (!projects || projects.includes(t.project ?? ''))
+    && (!files || files.some((re) => re.test(t.file.replace(/\\/g, '/'))))
+    && (!owners || owners.some((owner) => t.owners?.includes(owner)));
+}
+
+function describeScope(scope: QualityGateScope): string {
+  return SCOPE_KEYS.flatMap((key) => (scope[key] === undefined ? [] : [`${key} ${valuesOf(scope[key])!.join(' or ')}`])).join(', ');
+}
+
+function scopeComparison(comparison: RunComparison | undefined, tests: TestResultData[]): RunComparison | undefined {
+  if (!comparison) return undefined;
+  const ids = new Set(tests.map((t) => t.testId));
+  const changes = Object.fromEntries(Object.entries(comparison.changes).map(([key, list]: [string, TestResultData[]]) => [key, list.filter((t) => ids.has(t.testId))]));
+  return { ...comparison, changes: changes as unknown as ComparisonChanges };
+}
+
+// Sign of (count/total*100 - threshold), in integers so boundaries are exact.
+// The threshold is scaled by its own decimal places, so 99.4 compares as 994/10.
+function compareRate(count: number, total: number, threshold: number): number {
+  const scale = 10 ** (String(threshold).split('.')[1]?.length ?? 0);
+  return count * 100 * scale - Math.round(threshold * scale) * total;
+}
+
+// Whole number when exact, otherwise 1 decimal place rounded towards the failing side.
+function formatRate(count: number, total: number, round: (n: number) => number): string {
+  if ((count * 100) % total === 0) return `${(count * 100) / total}%`;
+  return `${(round((count * 1000) / total) / 10).toFixed(1)}%`;
+}
 
 export class QualityGateEvaluator {
   evaluate(
@@ -18,19 +102,50 @@ export class QualityGateEvaluator {
     results: TestResultData[],
     comparison?: RunComparison,
     coverage?: CoverageSummary,
+    clusters?: GateClusters,
+    quarantine?: QuarantineFile,
   ): QualityGateResult {
+    const { rules: entries = [], ...flat } = config;
+    const rules = this.evaluateRules(flat, results, comparison, coverage, clusters, quarantine);
+
+    for (const { id, scope, severity, ...rule } of entries) {
+      const tests = scope ? results.filter(inScope(scope)) : results;
+      const [result] = this.evaluateRules(rule, tests, scope ? scopeComparison(comparison, tests) : comparison, coverage, clusters, quarantine);
+      if (!result) continue;
+      const scopeText = scope && describeScope(scope);
+      rules.push({
+        ...(scope && tests.length === 0 ? { ...result, passed: true, actual: 'N/A', skipped: true, skipReason: 'no test in scope' } : result),
+        ...(id !== undefined && { id }),
+        ...(scopeText && { scope: scopeText }),
+        ...(severity === 'warn' && { severity }),
+      });
+    }
+
+    const passed = rules.every(r => r.passed || r.severity === 'warn');
+    return { passed, rules };
+  }
+
+  private evaluateRules(
+    config: Omit<QualityGateConfig, 'rules'>,
+    results: TestResultData[],
+    comparison?: RunComparison,
+    coverage?: CoverageSummary,
+    clusters?: GateClusters,
+    quarantine?: QuarantineFile,
+  ): QualityGateRuleResult[] {
     const rules: QualityGateRuleResult[] = [];
+    const stats = computeRunStats(results);
 
     if (config.maxFailures !== undefined) {
-      rules.push(this.evaluateMaxFailures(config.maxFailures, results));
+      rules.push(this.evaluateMaxFailures(config.maxFailures, stats));
     }
 
     if (config.minPassRate !== undefined) {
-      rules.push(this.evaluateMinPassRate(config.minPassRate, results));
+      rules.push(this.evaluateMinPassRate(config.minPassRate, stats));
     }
 
     if (config.maxFlakyRate !== undefined) {
-      rules.push(this.evaluateMaxFlakyRate(config.maxFlakyRate, results));
+      rules.push(this.evaluateMaxFlakyRate(config.maxFlakyRate, stats));
     }
 
     if (config.minStabilityGrade !== undefined) {
@@ -54,63 +169,117 @@ export class QualityGateEvaluator {
     if (config.minCoverage !== undefined) {
       rules.push(this.evaluateMinCoverage(config.minCoverage, coverage));
     }
+    if (config.maxDurationRegression !== undefined) {
+      rules.push(this.evaluateMaxDurationRegression(config.maxDurationRegression, results));
+    }
+    if (config.noNewFlaky === true) {
+      rules.push(this.evaluateNoNewFlaky(comparison));
+    }
+    if (config.noNewClusters === true) {
+      rules.push(this.evaluateNoNewClusters(results, clusters));
+    }
+    if (config.noExpiredQuarantine === true) {
+      rules.push(this.evaluateNoExpiredQuarantine(quarantine));
+    }
 
-    const passed = rules.every(r => r.passed);
-    return { passed, rules };
+    return rules;
   }
 
-  private evaluateMaxFailures(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const failures = results.filter(isFailedTest).length;
+  // The clusters with a test among results, so a scoped rule counts its own. A cluster without tracking
+  // means history had no cluster ids to compare with.
+  private evaluateNoNewClusters(results: TestResultData[], clusters?: GateClusters): QualityGateRuleResult {
+    const skipped = (skipReason: string): QualityGateRuleResult => ({ rule: 'noNewClusters', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason });
+    if (!clusters) return skipped('clustering off');
+    const ids = new Set(results.map(r => r.testId));
+    const inScope = clusters.filter(c => c.testIds.some(id => ids.has(id)));
+    if (inScope.some(c => !c.tracking)) return skipped('no cluster history');
+    const count = inScope.filter(c => c.tracking!.status === 'new').length;
+    return { rule: 'noNewClusters', passed: count === 0, actual: String(count), threshold: '≤ 0' };
+  }
 
+  // As of the run that wrote the quarantine file, so a gate run later gives the same result.
+  private evaluateNoExpiredQuarantine(quarantine?: QuarantineFile): QualityGateRuleResult {
+    if (!quarantine) {
+      return { rule: 'noExpiredQuarantine', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no quarantine data' };
+    }
+    const expired = quarantine.entries.filter(e => isExpired(e, Date.parse(quarantine.generatedAt))).length;
+    return { rule: 'noExpiredQuarantine', passed: expired === 0, actual: String(expired), threshold: '≤ 0' };
+  }
+
+  // The tests the performance analyzer compared: passed now, with enough passing runs for a median.
+  // Summed, so one test's jitter does not decide the gate.
+  private evaluateMaxDurationRegression(threshold: number, results: TestResultData[]): QualityGateRuleResult {
+    const compared = results.flatMap(r => r.performanceMetrics ?? []);
+    if (compared.length === 0) {
+      return { rule: 'maxDurationRegression', passed: true, actual: 'N/A', threshold: `≤ ${threshold}%`, skipped: true, skipReason: 'no duration history' };
+    }
+    const median = compared.reduce((sum, m) => sum + m.averageDuration, 0);
+    const added = compared.reduce((sum, m) => sum + m.currentDuration, 0) - median;
+    return {
+      rule: 'maxDurationRegression',
+      passed: compareRate(added, median, threshold) <= 0,
+      actual: formatRate(added, median, Math.ceil),
+      threshold: `≤ ${threshold}%`,
+    };
+  }
+
+  // Counts a flaky test that did not run in the baseline run, new or not, as noNewFailures counts a failing one.
+  private evaluateNoNewFlaky(comparison?: RunComparison): QualityGateRuleResult {
+    // JSON exported before 4.0.0 has no newFlaky.
+    if (!comparison?.changes.newFlaky) {
+      return { rule: 'noNewFlaky', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no comparison data' };
+    }
+    const absent = [...comparison.changes.newTests, ...(comparison.changes.notInBaseline ?? [])];
+    const count = comparison.changes.newFlaky.length + absent.filter(t => t.outcome === 'flaky').length;
+    return { rule: 'noNewFlaky', passed: count === 0, actual: String(count), threshold: '≤ 0' };
+  }
+
+  private evaluateMaxFailures(threshold: number, { failed }: RunStats): QualityGateRuleResult {
     return {
       rule: 'maxFailures',
-      passed: failures <= threshold,
-      actual: String(failures),
+      passed: failed <= threshold,
+      actual: String(failed),
       threshold: `≤ ${threshold}`,
     };
   }
 
-  private evaluateMinPassRate(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const total = results.length;
-    if (total === 0) {
+  private evaluateMinPassRate(threshold: number, { passed, rated }: RunStats): QualityGateRuleResult {
+    if (rated === 0) {
       return {
         rule: 'minPassRate',
         passed: true,
         actual: 'N/A',
         threshold: `≥ ${threshold}%`,
         skipped: true,
+        skipReason: 'no test ran',
       };
     }
 
-    const passed = results.filter(isPassedTest).length;
-    const rate = Math.round((passed / total) * 100);
-
     return {
       rule: 'minPassRate',
-      passed: rate >= threshold,
-      actual: `${rate}%`,
+      passed: compareRate(passed, rated, threshold) >= 0,
+      actual: formatRate(passed, rated, Math.floor),
       threshold: `≥ ${threshold}%`,
     };
   }
 
-  private evaluateMaxFlakyRate(threshold: number, results: TestResultData[]): QualityGateRuleResult {
-    const total = results.length;
-    if (total === 0) {
+  // Out of the same tests as the pass rate: the ones that ran.
+  private evaluateMaxFlakyRate(threshold: number, { flaky, rated }: RunStats): QualityGateRuleResult {
+    if (rated === 0) {
       return {
         rule: 'maxFlakyRate',
         passed: true,
-        actual: '0%',
+        actual: 'N/A',
         threshold: `≤ ${threshold}%`,
+        skipped: true,
+        skipReason: 'no test ran',
       };
     }
 
-    const flaky = results.filter(r => r.outcome === 'flaky').length;
-    const rate = Math.round((flaky / total) * 100);
-
     return {
       rule: 'maxFlakyRate',
-      passed: rate <= threshold,
-      actual: `${rate}%`,
+      passed: compareRate(flaky, rated, threshold) <= 0,
+      actual: formatRate(flaky, rated, Math.ceil),
       threshold: `≤ ${threshold}%`,
     };
   }
@@ -119,31 +288,22 @@ export class QualityGateEvaluator {
     threshold: 'A' | 'B' | 'C' | 'D',
     results: TestResultData[],
   ): QualityGateRuleResult {
-    const gradedTests = results.filter(r => r.stabilityScore?.grade);
+    const avgGrade = runStabilityGrade(results);
 
-    if (gradedTests.length === 0) {
+    if (!avgGrade) {
       return {
         rule: 'minStabilityGrade',
         passed: true,
         actual: 'N/A',
         threshold: `≥ ${threshold}`,
         skipped: true,
+        skipReason: 'no stability grades',
       };
     }
 
-    const sum = gradedTests.reduce(
-      (acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0),
-      0,
-    );
-    const avgNumeric = Math.round(sum / gradedTests.length);
-    const avgGrade = reverseGradeMap[avgNumeric] || 'F';
-
-    const thresholdNumeric = gradeMap[threshold];
-    const actualNumeric = gradeMap[avgGrade] || 0;
-
     return {
       rule: 'minStabilityGrade',
-      passed: actualNumeric >= thresholdNumeric,
+      passed: gradeMap[avgGrade] >= gradeMap[threshold],
       actual: avgGrade,
       threshold: `≥ ${threshold}`,
     };
@@ -152,7 +312,7 @@ export class QualityGateEvaluator {
   private evaluateMaxA11y(rule: string, threshold: number, results: TestResultData[], impact?: A11yImpact): QualityGateRuleResult {
     const scanned = results.filter(r => r.a11y);
     if (scanned.length === 0) {
-      return { rule, passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
+      return { rule, passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true, skipReason: 'no accessibility scans' };
     }
     const count = scanned.reduce(
       (sum, r) => sum + r.a11y!.violations.filter(v => !impact || v.impact === impact).length, 0,
@@ -168,10 +328,14 @@ export class QualityGateEvaluator {
         actual: 'N/A',
         threshold: '≤ 0',
         skipped: true,
+        skipReason: 'no comparison data',
       };
     }
 
-    const newFailureCount = comparison.changes.newFailures.length;
+    // A failing test that did not run in the baseline run, new or not, counts, so a partial baseline cannot pass it silently.
+    // JSON exported before 4.0.0 has no notInBaseline.
+    const absent = [...comparison.changes.newTests, ...(comparison.changes.notInBaseline ?? [])];
+    const newFailureCount = comparison.changes.newFailures.length + absent.filter(isFailedTest).length;
 
     return {
       rule: 'noNewFailures',

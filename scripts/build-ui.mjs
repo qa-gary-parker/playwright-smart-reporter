@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const OUT = path.join(root, 'dist/ui');
 const SPECIMEN_OUT = path.join(root, '.ui-specimen');
 // Fonts dominate: two Latin-subset variable woff2 files, base64-encoded.
-const BUDGET = { 'report.css': 48 * 1024, 'fonts.css': 80 * 1024, 'app.js': 128 * 1024 };
+const BUDGET = { 'report.css': 48 * 1024, 'fonts.css': 80 * 1024, 'app.js': 136 * 1024 };
 
 async function loadTs(entry) {
   const result = await esbuild.build({

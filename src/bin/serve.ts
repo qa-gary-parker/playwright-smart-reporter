@@ -2,9 +2,11 @@
 
 import * as http from 'http';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
-import { exec, spawn, type ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { buildSseHandler } from '../live/sse-handler';
+import { browserCommand, killTree } from './serve-process';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -156,14 +158,13 @@ function resolveReport(reportPath: string): { dir: string; file: string } {
 }
 
 function openBrowser(url: string): void {
-  const cmd = process.platform === 'darwin' ? 'open'
-    : process.platform === 'win32' ? 'start'
-    : 'xdg-open';
-
-  exec(`${cmd} "${url}"`, (err) => {
-    if (err) {
-      console.log(`  Open manually: ${url}`);
-    }
+  const [command, args] = browserCommand(process.platform, url);
+  const hint = () => console.log(`  Open manually: ${url}`);
+  const opener = spawn(command, args, { stdio: 'ignore' });
+  // A command that cannot start emits 'error' and no 'exit'.
+  opener.on('error', hint);
+  opener.on('exit', (code) => {
+    if (code !== 0) hint();
   });
 }
 
@@ -220,6 +221,15 @@ function main(): void {
   }
 
   let runChild: ChildProcess | null = null;
+  // taskkill ends the run with exit code 1 and no signal, so a cancel is recorded here.
+  let cancelled = false;
+
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.on(signal, () => {
+      if (runChild) killTree(runChild);
+      process.exit(128 + os.constants.signals[signal]);
+    });
+  }
 
   function isLocalhostRequest(req: http.IncomingMessage): boolean {
     const remoteAddr = req.socket.remoteAddress || '';
@@ -292,12 +302,8 @@ function main(): void {
         res.end(JSON.stringify({ error: 'No test run in progress' }));
         return;
       }
-      // Kill entire process group (shell + child processes)
-      try {
-        process.kill(-runChild.pid!, 'SIGTERM');
-      } catch {
-        runChild.kill('SIGTERM');
-      }
+      cancelled = true;
+      killTree(runChild);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'cancelled' }));
       return;
@@ -350,13 +356,17 @@ function main(): void {
 
         options.running = true;
         options.lastExitCode = null;
+        cancelled = false;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'started', command: fullCommand }));
 
+        // On POSIX the run leads its own process group, which killTree signals. Windows has no
+        // process groups, so killTree uses taskkill there.
         runChild = spawn(fullCommand, {
           cwd: options.runCwd,
           shell: true,
-          detached: true,
+          detached: process.platform !== 'win32',
+          windowsHide: true,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 
@@ -372,7 +382,7 @@ function main(): void {
         runChild.on('close', (code, signal) => {
           options.running = false;
           runChild = null;
-          if (signal) {
+          if (signal || cancelled) {
             options.lastExitCode = -1;
             console.log('\n  Test run cancelled');
           } else if (code && code !== 0) {
@@ -496,17 +506,19 @@ function main(): void {
     const addr = server.address();
     const port = typeof addr === 'object' && addr ? addr.port : options.port;
     const url = `http://localhost:${port}`;
+    // Encoded, so file name characters such as & and | do not reach Windows cmd when start opens the URL.
+    const reportUrl = `${url}/${encodeURIComponent(file)}`;
     localOrigins = new Set([url, `http://127.0.0.1:${port}`, `http://[::1]:${port}`]);
 
     console.log(`\n  Serving smart report from: ${dir}`);
     console.log(`  Report file: ${file}`);
     console.log(`\n  Local:   ${url}`);
-    console.log(`  Report:  ${url}/${file}`);
+    console.log(`  Report:  ${reportUrl}`);
     console.log(`\n  Trace viewer is fully functional over HTTP.`);
     console.log(`  Press Ctrl+C to stop.\n`);
 
     if (options.open) {
-      openBrowser(`${url}/${file}`);
+      openBrowser(reportUrl);
     }
   });
 

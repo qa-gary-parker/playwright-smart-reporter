@@ -1,3 +1,5 @@
+import { formatPassRate } from '../utils/run-stats';
+
 export class EmailNotifier {
   private config: Record<string, string>;
 
@@ -5,7 +7,7 @@ export class EmailNotifier {
     this.config = config;
   }
 
-  async send(message: string, context: { total: number; passed: number; failed: number; passRate: number }): Promise<void> {
+  async send(message: string, context: { total: number; passed: number; failed: number; passRate: number | null }): Promise<void> {
     // SendGrid API path
     if (this.config.sendgridApiKey) {
       await this.sendViaSendGrid(message, context);
@@ -17,7 +19,7 @@ export class EmailNotifier {
     console.warn('Email notification: Set sendgridApiKey in notification config, or use a webhook channel for SMTP relay.');
   }
 
-  private async sendViaSendGrid(message: string, context: { total: number; passed: number; failed: number; passRate: number }): Promise<void> {
+  private async sendViaSendGrid(message: string, context: { total: number; passed: number; failed: number; passRate: number | null }): Promise<void> {
     const { sendgridApiKey, from, to } = this.config;
     if (!sendgridApiKey || !from || !to) {
       console.warn('Email notification: sendgridApiKey, from, and to are required');
@@ -25,7 +27,7 @@ export class EmailNotifier {
     }
 
     try {
-      const subject = `Test Report: ${context.passed}/${context.total} passed (${context.passRate}%)`;
+      const subject = `Test Report: ${context.passed}/${context.total} passed (${formatPassRate(context.passRate)})`;
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {

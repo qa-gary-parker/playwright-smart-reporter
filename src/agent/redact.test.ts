@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createRedactor } from './redact';
+import type { NetworkLogEntry, TestResultData } from '../types';
+import { createRedactor, redactTestResult } from './redact';
 
 // Secrets are assembled at runtime so secret scanners never see a literal token in source.
 const t = (...parts: string[]) => parts.join('');
@@ -137,5 +138,68 @@ describe('createRedactor', () => {
     expect(r.string(`${env.DB_PASS} ${env.SMTP_PWD} ${env.STRIPE_KEY} ${env.GITLAB_PAT}`)).toBe('[REDACTED] [REDACTED] [REDACTED] [REDACTED]');
     expect(r.string(`stripe ${stripe} gitlab ${gitlab}`)).toBe('stripe [REDACTED] gitlab [REDACTED]');
     expect(r.string('GET /api?auth=abc123&sid=s1&token=t1&page=2')).toBe('GET /api?auth=[REDACTED]&sid=[REDACTED]&token=[REDACTED]&page=2');
+  });
+
+  it('masks every match of extra patterns, given as regex source strings or RegExps, and still applies the built-in rules', () => {
+    const r = createRedactor({}, ['[\\w.]+@example\\.com', /order-\d+/i]);
+    expect(r.string(`mail qa.user@example.com about ORDER-42 and order-7, password=${S.password}, keep this`))
+      .toBe('mail [REDACTED] about [REDACTED] and [REDACTED], password=[REDACTED], keep this');
+  });
+
+  it('rejects an empty pattern, naming the option and the pattern', () => {
+    expect(() => createRedactor({}, [''])).toThrow(new Error('redact.patterns[0] "" matches an empty string'));
+  });
+
+  it('rejects a pattern that can match an empty string', () => {
+    expect(() => createRedactor({}, ['order-\\d+', /a*/])).toThrow(new Error('redact.patterns[1] /a*/ matches an empty string'));
+  });
+
+  it('rejects a pattern that is not a valid regular expression', () => {
+    expect(() => createRedactor({}, ['order-\\d+', '('])).toThrow(new Error('redact.patterns[1] "(" is not a valid regular expression: /(/: Unterminated group'));
+  });
+});
+
+describe('redactTestResult', () => {
+  const secret = 'tok-unit-12345678';
+  const R = '[REDACTED]';
+  const entry = (urlPath: string): NetworkLogEntry => ({
+    method: 'GET', url: `http://app.test${urlPath}`, urlPath, status: 500, statusText: 'Internal Server Error',
+    duration: 5, timestamp: '2026-10-16T00:00:00.000Z', requestSize: 0, responseSize: 0,
+  });
+  const result = (s: string): TestResultData => ({
+    testId: `a.spec.ts::uses ${secret}`,
+    title: `uses ${secret}`,
+    file: 'a.spec.ts',
+    status: 'failed',
+    duration: 5,
+    retry: 0,
+    history: [],
+    error: `Error: got ${s} back`,
+    errorSnippet: `> 3 | expect(token).toBe('${s}')`,
+    aiPrompt: `# Stdout\n\nlogged ${s}`,
+    steps: [{ title: `Fill "${s}" #password`, duration: 1, category: 'pw:api' }],
+    timeline: {
+      duration: 5,
+      lanes: {
+        steps: [{ title: `Fill "${s}" #password`, start: 0, end: 1, category: 'pw:api' }],
+        network: [{ start: 1, end: 2, method: 'GET', url: `http://app.test/?t=${s}`, status: 500 }],
+        console: [{ at: 3, level: 'error', text: `boom ${s}` }],
+      },
+      firstAnomaly: { kind: 'console-error', at: 3, summary: `Console error: boom ${s}`, ref: { lane: 'console', index: 0 } },
+    },
+    // slowest and errors are not in entries: the collector caps entries after it picks them.
+    networkLogs: {
+      entries: [entry(`/kept?t=${s}`)],
+      totalRequests: 3,
+      totalDuration: 15,
+      summary: { byStatus: { 500: 3 }, byMethod: { GET: 3 }, slowest: entry(`/slowest?t=${s}`), errors: [entry(`/error?t=${s}`)] },
+    },
+  });
+
+  it('redacts the error, snippet, AI prompt, step titles, timeline text and network URLs, and leaves the test id and title exact', () => {
+    const actual = result(secret);
+    redactTestResult(actual, createRedactor({ MY_API_TOKEN: secret }).string);
+
+    expect(actual).toEqual({ ...result(R), testId: `a.spec.ts::uses ${secret}`, title: `uses ${secret}` });
   });
 });

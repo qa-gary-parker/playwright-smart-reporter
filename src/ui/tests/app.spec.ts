@@ -21,9 +21,9 @@ test('j and k move the selection through the list and the hash follows', async (
   const selected = tree.getByRole('treeitem', { selected: true });
   await expect(selected).toContainText('pays with a saved card');
   await page.keyboard.press('j');
-  await expect(selected).toContainText('incorrect text content causes failure');
+  await expect(selected).toContainText('navigation links are present');
   const hashQuery = new URLSearchParams(new URL(page.url()).hash.split('?')[1]);
-  expect(hashQuery.get('test')).toBe('[Desktop Chrome] feature-demo.spec.ts::incorrect text content causes failure');
+  expect(hashQuery.get('test')).toBe('[Mobile Chrome] feature-demo.spec.ts::navigation links are present');
   await page.keyboard.press('k');
   await expect(selected).toContainText('pays with a saved card');
 });
@@ -222,6 +222,91 @@ test('the top bar counts each test once, so the counts add up to the total', asy
   expect(values.map(Number).reduce((a, b) => a + b, 0)).toBe(57);
 });
 
+test('Most flaky lists the tests history classifies as flaky or unstable, with the runs behind each score', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  const panel = page.locator('.panel', { has: page.getByRole('heading', { name: 'Most flaky' }) });
+  await expect(panel.locator('.lines__label')).toHaveText(['flaky network-dependent check', 'flaky network-dependent check', 'flaky behavior - random failure', 'flaky behavior - random failure']);
+  await expect(panel.locator('.lines__value')).toHaveText(['99% of 11 runs', '99% of 11 runs', '64% of 11 runs', '45% of 11 runs']);
+});
+
+test('Failure clusters labels each cluster from history with its trend, and Resolved clusters lists the tests that recovered', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  const clusters = page.locator('.panel', { has: page.getByRole('heading', { name: 'Failure clusters' }) });
+  await expect(clusters.locator('.signal')).toHaveText([...Array(6).fill('Recurring, 4 runs'), 'New']);
+  // Labels are cut to the panel width, so the full label is the tooltip
+  await expect(clusters.locator('.lines__label').last()).toHaveAttribute('title', "toHaveText on getByRole('heading', { level: 1 }) at checkout/payments/saved-card.spec.ts:142");
+  await expect(clusters.locator('.signal').first()).toHaveAttribute('title', 'Since 6 Aug at a1b2c3d4');
+  expect(await clusters.locator('.spark').evaluateAll((sparks) => sparks.map((s) => s.getAttribute('aria-label')))).toEqual([
+    ...[2, 2, 2, 3, 2, 2].map((n) => `Tests in this cluster per run: 0, 0, 0, 0, 0, 0, ${n}, ${n}, ${n}, ${n}`),
+    'Tests in this cluster per run: 0, 0, 0, 0, 0, 0, 0, 0, 0, 1',
+  ]);
+  const resolved = page.locator('.panel', { has: page.getByRole('heading', { name: 'Resolved clusters' }) });
+  await expect(resolved.locator('.lines__label')).toHaveText(['homepage loads and displays heading', 'homepage loads successfully']);
+  await expect(resolved.locator('.lines__value')).toHaveText(['cluster c0ffee01', 'cluster c0ffee01']);
+});
+
+test('a cluster names the commit it last passed at, and a new failure links its commits and lists the files changed', async ({ page }) => {
+  const compare = `https://github.com/acme/shop/compare/${'9f8e7d6c'.repeat(5)}...${'a1b2c3d4'.repeat(5)}`;
+  await page.goto(url('screen=insights&mode=light&commits=on'));
+  const clusters = page.locator('.panel', { has: page.getByRole('heading', { name: 'Failure clusters' }) });
+  await expect(clusters.locator('.signal').first()).toHaveAttribute('title', 'Since 6 Aug at a1b2c3d4, last passed at 9f8e7d6c');
+
+  await page.goto(url('mode=light&commits=on', `#/q/failures?test=${encodeURIComponent('[Desktop Chrome] demo.spec.ts::broken login - element not found')}`));
+  const detail = page.getByRole('article', { name: 'Test detail' });
+  const range = detail.getByRole('link', { name: '9f8e7d6c..a1b2c3d4' });
+  await expect(range).toHaveAttribute('href', compare);
+  await expect(range).toHaveAttribute('title', 'Last passed at 9f8e7d6c, first failed at a1b2c3d4');
+  await expect(detail.locator('details').filter({ hasText: /^Suspects/ }).locator('li')).toHaveText(['src/login/form.tsx', 'tests/demo.spec.ts']);
+});
+
+test('History shows the flakiness interval, or insufficient history below 5 runs', async ({ page }) => {
+  const flakiness = page.locator('.history .statline > span', { hasText: 'Flakiness' });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(flakiness).toHaveText('Flakiness 64% 35–85% over 11 runs');
+
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<Record<string, unknown>> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        Object.assign(flaky, { flakinessScore: 0.33, flakinessStatus: 'insufficient-history', flakinessRuns: 3, flakinessInterval: [0.06, 0.79] });
+        value = d;
+      },
+    });
+  });
+  await page.reload();
+  await expect(flakiness).toHaveText('Flakiness insufficient history 3 of 5 runs');
+});
+
+test('Steps marks a step that ran slower than the median of its passing runs', async ({ page }) => {
+  const id = '[Desktop Chrome] demo.spec.ts::documentation link works';
+  await page.addInitScript((testId) => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<Record<string, unknown>> }) => {
+        d.tests.find((t) => t.testId === testId)!.stepTrends = [{ title: 'Navigate to Playwright homepage', median: 148, current: 459, ratio: 3.1 }];
+        value = d;
+      },
+    });
+  }, id);
+  await page.goto(url('mode=light', `#/q/all?test=${encodeURIComponent(id)}`));
+  const trends = page.locator('.steps .signal');
+  await expect(trends).toHaveText(['3.1× slower']);
+  await expect(trends).toHaveAttribute('title', 'Median 148ms in passing runs');
+  await expect(page.locator('.step', { has: page.locator('.signal') }).locator('.step__title')).toHaveText('Navigate to Playwright homepage');
+});
+
+test('History labels the baseline duration as the median of passing runs', async ({ page }) => {
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.locator('.history .statline > span').nth(1)).toHaveText('Median 737ms');
+});
+
 test('the retry comparison appears for a test that failed and then passed, and not for one that always failed', async ({ page }) => {
   await page.goto(url('screen=flaky&mode=light'));
   await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
@@ -229,6 +314,123 @@ test('the retry comparison appears for a test that failed and then passed, and n
   await page.goto(url('screen=failures&mode=light'));
   await expect(page.getByRole('heading', { level: 2 })).toContainText('pays with a saved card');
   await expect(page.getByRole('table', { name: 'Steps by attempt' })).toHaveCount(0);
+});
+
+test('the retry comparison pairs steps by title path, so a step only the passing attempt ran marks only that row', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; attempts?: Array<{ duration: number; steps: unknown[] }> }> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        const step = (title: string, duration: number, parent?: number) => ({ title, duration, category: 'test.step', ...(parent !== undefined && { parent, depth: 1 }) });
+        Object.assign(flaky.attempts![0], { duration: 4800, steps: [step('open shop', 500), step('log in', 800), step('checkout', 450), step('pay', 400, 2)] });
+        Object.assign(flaky.attempts![1], { duration: 2300, steps: [step('open shop', 500), step('accept cookies', 100), step('log in', 800), step('checkout', 450), step('pay', 400, 3)] });
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  const rows = page.getByRole('table', { name: 'Steps by attempt' }).getByRole('row').filter({ has: page.getByRole('cell') });
+  const marked = await rows.evaluateAll((rs) => rs.map((r) => [[...r.querySelectorAll('[role=cell]')].map((c) => c.textContent), r.hasAttribute('data-differs')]));
+  expect(marked).toEqual([
+    [['open shop 500ms', 'open shop 500ms'], false],
+    [['(no step)', 'accept cookies 100ms'], true],
+    [['log in 800ms', 'log in 800ms'], false],
+    [['checkout 450ms', 'checkout 450ms'], false],
+    [['pay 400ms', 'pay 400ms'], false],
+  ]);
+  const indents = await rows.evaluateAll((rs) => rs.map((r) => getComputedStyle(r.querySelector('[role=cell]:last-child')!).paddingLeft));
+  expect(indents).toEqual(['12px', '12px', '12px', '12px', '24px']);
+  await expect(page.getByRole('article', { name: 'Test detail' }).locator('.attempts__summary')).toHaveText('Attempt 1 failed after 4.8s; attempt 2 passed in 2.3s');
+});
+
+test('for test.fail(), the retry comparison puts the attempt that passed first, against the one that failed as expected', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; expectedStatus?: string; attempts?: Array<{ status: string; duration: number; steps: unknown[] }> }> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        const step = (title: string, duration: number, failed?: boolean) => ({ title, duration, category: 'test.step', ...(failed && { failed }) });
+        flaky.expectedStatus = 'failed';
+        Object.assign(flaky.attempts![0], { status: 'passed', duration: 1200, steps: [step('open shop', 500)] });
+        Object.assign(flaky.attempts![1], { status: 'failed', duration: 900, steps: [step('open shop', 500), step('pay', 300, true)] });
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.getByRole('table', { name: 'Steps by attempt' }).getByRole('columnheader')).toHaveText(['Attempt 1 (passed)', 'Attempt 2 (failed)']);
+  await expect(page.getByRole('article', { name: 'Test detail' }).locator('.attempts__summary')).toHaveText('Attempt 1 passed after 1.2s; attempt 2 failed in 900ms');
+});
+
+test('a failed attempt shows its own screenshot and trace in the Attempts section', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; attempts?: Array<{ attachments?: object }> }> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        flaky.attempts![0].attachments = { screenshots: ['data:image/png;base64,iVBORw0KGgo='], videos: [], traces: ['./traces/flaky-attempt-1-trace-0.zip'] };
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  const evidence = page.getByRole('group', { name: 'Attempt 1 attachments' });
+  await expect(evidence.getByRole('button', { name: 'Open Screenshot 1' })).toBeVisible();
+  expect(await evidence.getByRole('link', { name: 'Download' }).getAttribute('href')).toBe('./traces/flaky-attempt-1-trace-0.zip');
+  await expect(page.getByRole('group', { name: /^Attempt \d+ attachments$/ })).toHaveCount(1);
+});
+
+const withAttemptDiff = (page: import('@playwright/test').Page, attemptDiff: object) =>
+  page.addInitScript((diff) => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; attemptDiff?: object }> }) => {
+        d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!.attemptDiff = diff;
+        value = d;
+      },
+    });
+  }, attemptDiff);
+
+test('the Attempts section lists the requests and console errors that differ between the traces of the two attempts', async ({ page }) => {
+  await withAttemptDiff(page, {
+    failed: 0,
+    passed: 1,
+    network: [
+      { method: 'GET', url: 'http://shop.test/api/cart', failed: 500, passed: 200 },
+      { method: 'GET', url: 'http://shop.test/api/promo', passed: 200 },
+    ],
+    console: [{ level: 'error', text: 'cart failed: 500' }],
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  const rows = page.getByRole('table', { name: 'Requests by attempt' }).getByRole('row');
+  expect(await rows.evaluateAll((rs) => rs.map((r) => [...r.children].map((c) => c.textContent)))).toEqual([
+    ['Request', 'Attempt 1', 'Attempt 2'],
+    ['GET http://shop.test/api/cart', '500', '200'],
+    ['GET http://shop.test/api/promo', 'not sent', '200'],
+  ]);
+  await expect(page.getByRole('list', { name: 'Console errors and warnings only in attempt 1' }).getByRole('listitem')).toHaveText(['errorcart failed: 500']);
+});
+
+test('the Attempts section names the attempt that has no trace and the trace setting that records one', async ({ page }) => {
+  await withAttemptDiff(page, { failed: 0, passed: 1, missingTrace: [1] });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.getByRole('article', { name: 'Test detail' }).getByText(/no trace/)).toHaveText(
+    "Attempt 2 has no trace, so the requests and console messages of attempt 1 and attempt 2 cannot be compared. Set trace: 'on' in the Playwright config to record a trace of every attempt.",
+  );
 });
 
 test('views and tabs for features that are off cannot be opened by URL or shortcut', async ({ page }) => {
@@ -293,4 +495,65 @@ test('attachment links survive a # or % in the file name', async ({ page }) => {
   await page.goto(url('screen=failures&mode=light'));
   const download = page.getByRole('article', { name: 'Test detail' }).getByRole('link', { name: 'Download' });
   expect(await download.getAttribute('href')).toBe('./traces/pays%20%231%20at%20100%25-trace-0.zip');
+});
+
+test('the Compare tab lists tests that did not run in the baseline run in their own group', async ({ page }) => {
+  await page.goto(url('mode=light', '#/history/compare'));
+  const tree = page.getByRole('tree', { name: 'Changes since the baseline run' });
+  await expect(tree.getByRole('treeitem', { level: 1 })).toHaveText([
+    /^New failures\s*0$/,
+    /^Performance regressions\s*3$/,
+    /^Fixed\s*0$/,
+    /^Performance improvements\s*1$/,
+    /^New tests\s*0$/,
+    /^Not in baseline run\s*2$/,
+  ]);
+  await expect(tree.getByRole('treeitem', { level: 2 }).last()).toContainText('homepage loads and displays heading');
+});
+
+test('the Compare tab names the branch and commit of the baseline run', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { comparison: { baselineRun: Record<string, unknown> } }) => {
+        d.comparison.baselineRun.ciInfo = { provider: 'github', branch: 'main', commit: 'abc12345' };
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('mode=light', '#/history/compare'));
+  await expect(page.locator('.compare__base')).toHaveText('Baseline: run of 1 Sept, 10:34 on main @ abc12345');
+});
+
+test('the Quality gate panel names a rule by its id or scope, and marks a breached warn rule as a warning', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light&gates=scoped'));
+  const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Quality gate' }) });
+  await expect(panel.locator('.lines__item')).toHaveText([
+    /^critical paths\s*90% \/ ≥ 100%$/,
+    /^Max flaky rate \(project chromium\) \(warning\)\s*50% \/ ≤ 2%$/,
+  ]);
+  await expect(panel.getByRole('img')).toHaveAccessibleName('failed');
+});
+
+test('the Failed card counts what noNewFailures counts: new failures, failing new tests, and failures not in the baseline run', async ({ page }) => {
+  // One failing test that is not yet a new failure or not in the baseline run becomes a new test, with no history.
+  await page.addInitScript(() => {
+    let value: unknown;
+    type Data = { tests: Array<{ testId: string; outcome?: string; signals: string[] }>; comparison: { changes: Record<string, string[]> } };
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: Data) => {
+        const { notInBaseline } = d.comparison.changes;
+        const failing = d.tests.find((t) => t.outcome === 'unexpected' && !t.signals.includes('new-failure') && !notInBaseline.includes(t.testId));
+        d.comparison.changes.newTests = [failing!.testId];
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=insights&mode=light'));
+  // The fixture's not-in-baseline group holds one failing and one passing test.
+  await expect(page.getByRole('main').getByRole('link', { name: /^Failed/ })).toHaveText(/^Failed\s*14\s*2 new, 1 not in baseline$/);
 });

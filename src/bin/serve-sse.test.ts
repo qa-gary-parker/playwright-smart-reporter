@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { buildSseHandler, type SseClient } from '../live/sse-handler';
+import { afterEach, describe, it, expect } from 'vitest';
+import { buildSseHandler, type SseClient, type SseHandler } from '../live/sse-handler';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -71,9 +72,12 @@ describe('SSE handler: file truncation and recreation', () => {
     fs.writeFileSync(tmpFile, '{"event":"start","totalExpected":3}\n');
     await new Promise(r => setTimeout(r, 700));
 
-    const allEvents = sent.filter(s => s.startsWith('data:'));
-    // Should have the 2 initial + at least 1 new event from the truncated file
-    expect(allEvents.length).toBeGreaterThanOrEqual(3);
+    // The 2 initial events, then the new run's start once
+    expect(sent.filter(s => s.startsWith('data:'))).toEqual([
+      'data: {"event":"start","totalExpected":5}\n\n',
+      'data: {"event":"test","testId":"t1","status":"passed"}\n\n',
+      'data: {"event":"start","totalExpected":3}\n\n',
+    ]);
 
     handler.stop();
     fs.unlinkSync(tmpFile);
@@ -99,11 +103,96 @@ describe('SSE handler: file truncation and recreation', () => {
     fs.writeFileSync(tmpFile, '{"event":"start","totalExpected":2}\n');
     await new Promise(r => setTimeout(r, 700));
 
-    const events = sent.filter(s => s.startsWith('data:'));
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0]).toContain('"start"');
+    expect(sent.filter(s => s.startsWith('data:'))).toEqual(['data: {"event":"start","totalExpected":2}\n\n']);
 
     handler.stop();
     fs.unlinkSync(tmpFile);
   });
+});
+
+describe('SSE handler: line integrity', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  // Longer than the handler's 500 ms poll, so every event still to come has been sent.
+  const settle = () => sleep(700);
+  let handler: SseHandler | undefined;
+  const files: string[] = [];
+  afterEach(() => {
+    handler?.stop();
+    handler = undefined;
+    for (const f of files.splice(0)) fs.rmSync(f, { force: true });
+  });
+
+  function tmp(name: string): string {
+    const file = path.join(os.tmpdir(), `${process.pid}-${Date.now()}-${name}`);
+    files.push(file);
+    return file;
+  }
+  function start(name: string): string {
+    const file = tmp(`${name}.jsonl`);
+    fs.writeFileSync(file, '');
+    handler = buildSseHandler(file);
+    return file;
+  }
+  function listen(): () => string[] {
+    const sent: string[] = [];
+    handler!.addClient({ write: (data: string) => { sent.push(data); return true; }, end: () => {} });
+    return () => sent.filter((s) => s.startsWith('data:'));
+  }
+
+  it('sends a line written in two parts once, when it is whole', async () => {
+    const file = start('sse-half');
+    const events = listen();
+
+    fs.appendFileSync(file, '{"event":"test","testId":"t1"');
+    await settle();
+    expect(events()).toEqual([]);
+
+    fs.appendFileSync(file, ',"status":"passed"}\n');
+    await settle();
+    expect(events()).toEqual(['data: {"event":"test","testId":"t1","status":"passed"}\n\n']);
+  });
+
+  it('sends a character split across two writes as that character', async () => {
+    const file = start('sse-utf8');
+    const events = listen();
+    const line = Buffer.from('{"event":"test","title":"café"}\n');
+    const cut = line.indexOf(0xa9); // between the two bytes of é
+
+    fs.appendFileSync(file, line.subarray(0, cut));
+    await settle();
+    fs.appendFileSync(file, line.subarray(cut));
+    await settle();
+    expect(events()).toEqual(['data: {"event":"test","title":"café"}\n\n']);
+  });
+
+  it('sends a client that connects after lines were written each line once', async () => {
+    const file = start('sse-late');
+    fs.appendFileSync(file, '{"event":"start","totalExpected":1}\n');
+    fs.appendFileSync(file, '{"event":"test","testId":"t1","status":"passed"}\n');
+    await sleep(100);
+
+    const events = listen();
+    await settle();
+    expect(events()).toEqual([
+      'data: {"event":"start","totalExpected":1}\n\n',
+      'data: {"event":"test","testId":"t1","status":"passed"}\n\n',
+    ]);
+  });
+
+  // The reporter writes from another process than serve. On macOS such a burst also raises
+  // 'rename' events for a file that still exists.
+  it('sends each line of a fast burst from another process once, in order', async () => {
+    const file = start('sse-burst');
+    const events = listen();
+    const count = 10000;
+    const line = (i: number) => JSON.stringify({ event: 'test', testId: `t${i}`, pad: 'x'.repeat(200) });
+    const writer = tmp('sse-burst-writer.cjs');
+    fs.writeFileSync(writer, "const fs = require('fs'); const fd = fs.openSync(process.argv[2], 'a'); for (let i = 0; i < Number(process.argv[3]); i++) fs.writeSync(fd, JSON.stringify({ event: 'test', testId: 't' + i, pad: 'x'.repeat(200) }) + '\\n'); fs.closeSync(fd);");
+
+    const child = spawn(process.execPath, [writer, file, String(count)], { stdio: 'inherit' });
+    expect(await new Promise((resolve) => child.on('exit', resolve))).toBe(0);
+    await expect.poll(() => events().length, { timeout: 10_000 }).toBeGreaterThanOrEqual(count);
+    await settle();
+    expect(events()).toEqual(Array.from({ length: count }, (_, i) => `data: ${line(i)}\n\n`));
+  }, 30_000);
 });

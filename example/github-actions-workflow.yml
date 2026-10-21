@@ -39,7 +39,8 @@ jobs:
       #    on your playwright.config.ts reporter configuration.
       #
       #    Optional env vars:
-      #    - OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY: enables AI failure analysis
+      #    - OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY: AI failure analysis
+      #      (only when the reporter options set enableAIRecommendations: true)
       - run: npx playwright test
         env:
           # AI-powered failure analysis (set these in GitHub repo Settings > Secrets)

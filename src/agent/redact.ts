@@ -1,3 +1,5 @@
+import type { TestResultData } from '../types';
+
 export const REDACTED = '[REDACTED]';
 
 // Header and object-key names whose values are credentials.
@@ -50,15 +52,32 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function createRedactor(env: NodeJS.ProcessEnv = process.env): Redactor {
+// Throws rather than run with a pattern that would leak (invalid) or mark every position (empty match).
+function compilePattern(p: string | RegExp, index: number): RegExp {
+  const label = `redact.patterns[${index}] ${typeof p === 'string' ? JSON.stringify(p) : String(p)}`;
+  let re: RegExp;
+  try {
+    // No flags, so the engine message does not depend on them
+    re = new RegExp(p);
+  } catch (err) {
+    throw new Error(`${label} is not a valid regular expression: ${(err as Error).message.replace(/^Invalid regular expression: /, '')}`);
+  }
+  if (re.test('')) throw new Error(`${label} matches an empty string`);
+  return new RegExp(re, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+}
+
+// A string pattern is a regular expression source. Each pattern masks every match.
+export function createRedactor(env: NodeJS.ProcessEnv = process.env, patterns: ReadonlyArray<string | RegExp> = []): Redactor {
   const envValues = Object.entries(env)
     .filter(([name, value]) => SENSITIVE_ENV_NAME.test(name) && typeof value === 'string' && value.length >= MIN_ENV_VALUE_LENGTH)
     .map(([, value]) => value as string)
     .sort((a, b) => b.length - a.length);
   const envPattern = envValues.length > 0 ? new RegExp(envValues.map(escapeRegExp).join('|'), 'g') : undefined;
+  const userPatterns = patterns.map(compilePattern);
 
   const string = (value: string): string => {
     let out = envPattern ? value.replace(envPattern, REDACTED) : value;
+    for (const pattern of userPatterns) out = out.replace(pattern, REDACTED);
     for (const [pattern, replacement] of RULES) {
       out = out.replace(pattern, replacement as string);
     }
@@ -77,4 +96,28 @@ export function createRedactor(env: NodeJS.ProcessEnv = process.env): Redactor {
   };
 
   return { string, deep };
+}
+
+// The text a test produced, redacted in place, so every output built from the result inherits it.
+// Ids, titles and paths stay exact. Not .deep(): it would blank any value under a key like `session`.
+export function redactTestResult(r: TestResultData, redact: (text: string) => string): void {
+  if (r.error) r.error = redact(r.error);
+  if (r.errorSnippet) r.errorSnippet = redact(r.errorSnippet);
+  if (r.aiPrompt) r.aiPrompt = redact(r.aiPrompt);
+  for (const step of r.steps) step.title = redact(step.title);
+  if (r.timeline) {
+    const { lanes, firstAnomaly } = r.timeline;
+    for (const step of lanes.steps) step.title = redact(step.title);
+    for (const request of lanes.network) request.url = redact(request.url);
+    for (const event of lanes.console) event.text = redact(event.text);
+    if (firstAnomaly) firstAnomaly.summary = redact(firstAnomaly.summary);
+  }
+  if (r.networkLogs) {
+    const { entries, summary } = r.networkLogs;
+    // slowest and errors can be entries the entry cap dropped.
+    for (const entry of new Set([...entries, ...summary.errors, ...(summary.slowest ? [summary.slowest] : [])])) {
+      entry.url = redact(entry.url);
+      entry.urlPath = redact(entry.urlPath);
+    }
+  }
 }

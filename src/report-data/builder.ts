@@ -7,6 +7,7 @@ import type {
   FailureCluster,
   QualityGateResult,
   QuarantineEntry,
+  ResolvedCluster,
   RunComparison,
   RunSnapshotFile,
   RunSummary,
@@ -15,7 +16,10 @@ import type {
   TestResultData,
 } from '../types';
 import { summarizeA11y } from '../analyzers/a11y-analyzer';
-import { isFailedTest, isFlakyTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
+import { summarizeEfficiency } from '../analyzers/efficiency';
+import { environmentInsights } from '../analyzers/environment';
+import { isFlakyTest } from '../utils/flakiness';
+import { buildRunSummary, computeRunStats } from '../utils/run-stats';
 import {
   SCHEMA_VERSION,
   type ComparisonKey,
@@ -36,6 +40,7 @@ export interface ReportInput {
   comparison?: RunComparison;
   historyRunSnapshots?: Record<string, RunSnapshotFile>;
   failureClusters?: FailureCluster[];
+  resolvedClusters?: ResolvedCluster[];
   ciInfo?: CIInfo;
   outputBasename?: string;
   // The live results file relative to the report, which is where the Live view fetches it from.
@@ -47,40 +52,40 @@ export interface ReportInput {
   aiSuiteHealthSummary?: string;
   // Phase 6: Code coverage is merged by the reporter before gates run, so it arrives ready-built.
   coverage?: ReportCoverage;
+  shard?: { current: number; total: number };
+  // Playwright's FullResult start and duration, and whether merge-reports replayed the run. Default: startTime, the report duration, not merged.
+  run?: { start: number; duration: number; merged: boolean };
 }
 
-const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements'];
+const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements', 'notInBaseline'];
 
 export function summarize(results: TestResultData[], duration: number): ReportSummary {
-  // Outcome-based counting (issues #16, #17): flaky and expected failures count as passed.
-  const passed = results.filter(isPassedTest).length;
-  const failed = results.filter(isFailedTest).length;
+  // The per-test 'flaky' signal also reads history; the run's flaky count is passed on retry only.
+  const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
   for (const r of results) {
     if (r.stabilityScore) grades[r.stabilityScore.grade]++;
   }
   return {
-    total: results.length,
+    total,
     passed,
     failed,
-    skipped: results.filter(isSkippedTest).length,
-    // Passed on retry this run, as history and the comparison count it; the per-test 'flaky' signal also reads history.
-    flaky: results.filter((r) => r.outcome === 'flaky').length,
+    skipped,
+    flaky,
     slow: results.filter((r) => r.performanceTrend?.startsWith('↑')).length,
     newTests: results.filter((r) => r.flakinessIndicator?.includes('New')).length,
-    passRate: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
+    passRate,
     duration,
     grades,
   };
 }
 
 // History is updated after the report is written, so add this run's summary here.
-function withCurrentRun(input: ReportInput, summary: ReportSummary): RunSummary[] {
+function withCurrentRun(input: ReportInput, duration: number): RunSummary[] {
   const past = input.history.summaries ?? [];
   const runId = runIdOf(input);
   if (past.some((r) => r.runId === runId)) return past;
-  const { total, passed, failed, skipped, flaky, slow, duration, passRate } = summary;
-  return [...past, { runId, timestamp: new Date(input.startTime).toISOString(), total, passed, failed, skipped, flaky, slow, duration, passRate }];
+  return [...past, buildRunSummary(input.results, { runId, timestamp: new Date(input.startTime).toISOString(), duration, ciInfo: input.ciInfo })];
 }
 
 function runIdOf(input: ReportInput): string {
@@ -98,7 +103,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
   const clusterOf = new Map<string, string>();
   const clusters = (input.failureClusters ?? []).map((c) => {
     for (const t of c.tests) clusterOf.set(t.testId, c.id);
-    return { id: c.id, errorType: c.errorType, testIds: c.tests.map((t) => t.testId), aiSuggestion: c.aiSuggestion };
+    return { id: c.id, errorType: c.errorType, testIds: c.tests.map((t) => t.testId), aiSuggestion: c.aiSuggestion, tracking: c.tracking };
   });
 
   const forecast = forecastRun(results, options.forecast);
@@ -119,6 +124,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
   });
 
   const summary = summarize(results, now - input.startTime);
+  const trends = withCurrentRun(input, summary.duration);
+  const run = input.run ?? { start: input.startTime, duration: summary.duration, merged: false };
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
@@ -130,6 +137,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
       ci: input.ciInfo,
       projectName: options.projectName,
       outputBasename: input.outputBasename ?? 'smart-report',
+      ...(input.shard && { shard: input.shard }),
     },
     config: {
       theme: options.theme,
@@ -156,7 +164,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     summary,
     tests,
     clusters,
-    trends: withCurrentRun(input, summary),
+    resolvedClusters: input.resolvedClusters,
+    trends,
     comparison: comparison && {
       baselineRun: comparison.baselineRun,
       currentRun: comparison.currentRun,
@@ -168,12 +177,24 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     ai: {
       suiteHealthSummary: input.aiSuiteHealthSummary,
       ...aiReportInfo(input),
-      ...(options.enableAIRecommendations === false && { analysisOff: true }),
-      ...((options.enableAIRecommendations === false || options.enableAISuiteHealth === false) && { summaryOff: true }),
+      ...(options.enableAIRecommendations !== true && { analysisOff: true }),
+      ...((options.enableAIRecommendations !== true || options.enableAISuiteHealth === false) && { summaryOff: true }),
     },
     ...(forecast && { forecastSummary: forecast.summary }),
     ownership: summarizeOwnership(tests),
     a11y: summarizeA11y(results),
     coverage: input.coverage,
+    efficiency: summarizeEfficiency({
+      results,
+      history: input.history,
+      runIds: trends.map((r) => r.runId),
+      runId: runIdOf(input),
+      runStart: run.start,
+      runDuration: run.duration,
+      shard: input.shard,
+      merged: run.merged,
+      costPerMinute: options.ciCostPerMinute,
+    }),
+    environmentInsights: environmentInsights(results, run.merged),
   };
 }

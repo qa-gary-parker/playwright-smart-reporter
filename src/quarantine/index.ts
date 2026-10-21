@@ -1,2 +1,2 @@
-export { QuarantineGenerator } from './quarantine-generator';
+export { QuarantineGenerator, quarantineEvents, isExpired, describeQuarantineEntry, readQuarantineFile } from './quarantine-generator';
 export { getQuarantinedPattern } from './quarantine-helper';

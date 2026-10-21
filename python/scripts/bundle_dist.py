@@ -5,23 +5,40 @@ Bundle the pre-built Node.js dist/ files into the Python package.
 Run from the python/ directory (or repo root) after `npm run build`:
     python scripts/bundle_dist.py
 """
+import json
 import shutil
 import sys
 from pathlib import Path
 
-# Files required by html-generator.js and its dependency tree
+# report-data/builder.js and writer.js with their require() tree, and the UI
+# assets that loadUiAssets() reads
 REQUIRED_FILES = [
-    "generators/html-generator.js",
-    "generators/card-generator.js",
-    "generators/chart-generator.js",
-    "generators/comparison-generator.js",
-    "generators/gallery-generator.js",
-    "generators/trace-viewer-generator.js",
-    "utils/index.js",
+    "report-data/builder.js",
+    "report-data/schema.js",
+    "report-data/writer.js",
+    "agent/redact.js",
+    "analyzers/a11y-analyzer.js",
+    "analyzers/ai-analyzer.js",
+    "analyzers/efficiency.js",
+    "analyzers/environment.js",
+    "analyzers/flake-forecast.js",
+    "analyzers/ownership.js",
+    "generators/json-exporter.js",
+    "utils/ci-detector.js",
+    "utils/flakiness.js",
     "utils/formatters.js",
+    "utils/index.js",
     "utils/markdown-lite.js",
+    "utils/run-stats.js",
     "utils/sanitizers.js",
-    "vendors/jszip-source.js",
+    "utils/stats.js",
+    "ui/app.js",
+    "ui/fonts.css",
+    "ui/report.css",
+    "ui/trace-viewer.css",
+    "ui/trace-viewer.html",
+    "ui/trace-viewer.js",
+    "ui/OFL-Geist.txt",
 ]
 
 
@@ -51,7 +68,11 @@ def bundle(repo_root: Path) -> None:
         print(f"ERROR: Missing files in dist/: {missing}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Bundled {len(REQUIRED_FILES)} JS files into {dest}")
+    # getReporterVersion() reads ../../package.json from generators/, which is the package dir
+    version = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))["version"]
+    (dest.parent / "package.json").write_text(json.dumps({"version": version}) + "\n", encoding="utf-8")
+
+    print(f"Bundled {len(REQUIRED_FILES)} files into {dest}")
 
 
 def main() -> None:

@@ -62,7 +62,7 @@ The report is a single-page app. The rail on the left holds the queues and views
 |---|---|
 | Failures | Tests that failed this run, grouped by failure cluster. CI links to a failed run open here. |
 | Flaky | Tests that passed on retry this run, or that history marks as flaky |
-| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than their average or the previous run |
+| Regressions | Passed tests that are at least `performanceThreshold` (20%) and 250 ms slower than the median of their passing runs in history, or than the previous run. The median needs at least 4 passing runs; with fewer, the trend is `→ Insufficient history`. |
 | Quarantined | Tests in the quarantine file |
 | All tests | Every test, grouped by file |
 | Insights | The landing view: run metrics, a Failed card that opens Failures, and summary panels |
@@ -89,13 +89,13 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Expected and received | A diff of the expected and received values, when the error has them |
 | Source | Playwright's code frame at the failing line |
 | Timeline | The causal failure timeline (see [Causal Failure Timeline](#causal-failure-timeline)) |
-| AI analysis | The AI suggestion, or a hint to set a provider or use Copy AI prompt |
-| Attempts | Every attempt with status, duration, and first error line. When an attempt failed and a later one passed, a step-by-step comparison of the two. Rows with a different step, or a duration more than 2x apart, are marked. |
-| Steps | Each step with a duration bar. The failing step is marked. |
+| AI analysis | The AI suggestion, or a note that AI is off or has no provider. Copy AI prompt works in both cases. |
+| Attempts | Every attempt with status, duration, and first error line. Above them, one line says where the attempts went different ways, for example `Attempt 1 failed at step 'checkout › pay' after 3.2s; attempt 2 passed it in 400ms`. For a flaky test, each attempt before the last also shows its own screenshots, videos and traces; the last attempt's are under Attachments. When an attempt failed and a later one passed, a step-by-step comparison of the two. Steps are paired by title path (the step's title and the titles of the steps around it), so a step that only one attempt ran marks only its own row. Rows are marked when the step is in one attempt only, failed in one attempt only, or took more than 2x as long in one attempt. Nested steps are indented. For a flaky test, below the steps, what differs between the traces of the first failed attempt that has a trace and the passing attempt: requests sent in one attempt only or with a different status, and console errors and warnings that only the failed attempt logged. At most 50 of each. Requests follow the network log options (`networkLogFilter`, `networkLogExcludeAssets`, no `networkLogMaxEntries` cap) and are not compared with `enableNetworkLogs: false`. Without a trace of both attempts, the section names the attempt that has none; `trace: 'retain-on-failure'` keeps no trace of the passing attempt, so use `trace: 'on'`. |
+| Steps | Each step with a duration bar. The failing step is marked. On a passed test, a `test.step` that took more than `performanceThreshold` (20%) and 100 ms longer than its median in at least 4 passing runs shows the change, for example `3.1× slower`. The step durations come from history (`stepDurations`, kept while `enableCausalTimeline` is on). |
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
 | Console | Console messages from the trace of the failed attempt |
 | Attachments | Screenshots and videos (open in a lightbox), traces (Open or Download), custom attachments (download) |
-| History | Outcome strip for recent runs, pass count, average duration, flakiness, grade, duration sparkline |
+| History | Outcome strip for recent runs, pass count, median duration of passing runs, flakiness with its 95% interval and run count (or "insufficient history" below 5 runs), grade, duration sparkline |
 | Accessibility | axe-core violations for this test |
 | Annotations | Each annotation's type and description |
 
@@ -118,10 +118,11 @@ The filter bar above the list takes free text and filter tokens. The command pal
 
 - Tokens with the same key match any value (OR). Tokens with different keys must all match (AND).
 - Free text matches every word against the title, file, suites, and project.
+- A test's suite path is its file, then each `describe` block. It has this shape for named and unnamed projects.
 - Quote values that contain spaces: `suite:"saved cards"`.
 - Matching is not case-sensitive.
 
-The **Group** menu groups the list by cluster, file, project, suite, tag, status, grade, owner, or none. Failures groups by cluster by default. The other queues group by file. A test with several tags appears under each tag, and a test with several owners appears under each owner. Keyboard navigation visits each test once.
+The **Group** menu groups the list by cluster, file, project, suite, tag, status, grade, owner, worker, shard, or none. Group by suite uses the `describe` blocks without the file, and tests outside a `describe` block go under `(none)`. Group by worker uses the worker slot (`parallelIndex`) of the final attempt. Group by shard uses the `--shard` of the run, so one report has one shard. A report from `merge-reports` has no worker or shard per test. Failures groups by cluster by default. The other queues group by file. A test with several tags appears under each tag, and a test with several owners appears under each owner. Keyboard navigation visits each test once.
 
 Every view, filter, grouping, and selected test is in the URL hash, so you can share a link to it:
 
@@ -130,7 +131,7 @@ Every view, filter, grouping, and selected test is in the URL hash, so you can s
 | `#/q/failures`, `#/q/flaky`, `#/q/regressions`, `#/q/quarantined`, `#/q/all` | A queue. Add `?test=<id>`, `&q=<filter>`, `&g=<group>`. |
 | `#/insights` | Insights |
 | `#/history/trends`, `#/history/heatmap`, `#/history/compare` | A History tab |
-| `#/gallery`, `#/live`, `#/coverage`, `#/a11y` | Gallery, Live, Coverage, Accessibility |
+| `#/gallery`, `#/live`, `#/coverage`, `#/a11y`, `#/matrix` | Gallery, Live, Coverage, Accessibility, Matrix |
 | `#/run/<runId>/...` | A past run, read only (needs `enableHistoryDrilldown`) |
 
 ### Command palette
@@ -181,9 +182,10 @@ Press `?` in the report to see this list.
 
 Insights is the landing view and holds the run metrics:
 
-- A stats row: failed (with the number of new failures; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
+- A stats row: failed (with the number of new failures and of failures that did not run in the baseline run; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
 - An outcome bar: passed, failed, flaky, skipped.
-- Panels: AI summary, Quality gate, Failure clusters, At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
+- The pass rate is the passed tests out of the tests that ran. Skipped tests are left out, so a run with no failures shows 100%. When every test was skipped, the pass rate is `n/a` (`null` in the JSON export and history) and there is no health grade. The report, history, JSON export, PDF, gates and notifications use this same pass rate.
+- Panels: AI summary, Quality gate, Failure clusters (each with its New, Recurring or Regressed label and a trend), Resolved clusters (when there is a baseline run), At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Efficiency (see [CI Efficiency](#ci-efficiency)), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
 
 ### History
 
@@ -192,7 +194,7 @@ Insights is the landing view and holds the run metrics:
 
 - **Trends:** bar charts of pass rate, duration, flaky tests, and slow tests per recorded run, including the current run, which is highlighted. A line shows the three-run average, and a dot marks a run more than two standard deviations from the mean. With `enableHistoryDrilldown: true`, click a bar to open that run read only.
 - **Reliability:** a heatmap of test against run, coloured by outcome. It lists up to 100 tests that did not pass in at least one recorded run, most unstable first.
-- **Compare:** pass rate, duration, test count, and flaky count against the baseline run, then new failures, performance regressions, fixed tests, performance improvements, and new tests. The baseline is the previous run, or `baselineRunId`.
+- **Compare:** pass rate, duration, test count, and flaky count against the baseline run, then new failures, performance regressions, fixed tests, performance improvements, new tests, and tests not in the baseline run. The baseline is the previous run, the latest run on a branch with [`baseline.branch`](#branch-aware-baselines), or `baselineRunId`. The tab names the baseline run's branch and commit when CI recorded them. Each test is compared with its result in that run only. A test that ran in an earlier run but not in the baseline run (for example after a `--grep` or `--shard` run) is listed as not in the baseline run, not as fixed, new, or a new failure.
 
 ![Reliability heatmap](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-history-reliability-dark.png)
 *History, Reliability tab*
@@ -204,9 +206,19 @@ Insights is the landing view and holds the run metrics:
 
 Tabs filter by All, Screenshots, Videos, and Traces, with counts. Screenshots and videos open in a lightbox. Traces open in the trace viewer.
 
+### Matrix
+
+Matrix shows when the run has two or more projects. It lists the tests whose outcome is not the same in every project, with one cell per project (up to 100 tests). Click a cell to open that test.
+
+Environment insights above the matrix name failures that point at an environment, also in `environmentInsights` in the JSON export:
+
+- A test that fails in one project and passes in the others, for example "1 test fails on firefox only".
+- The same by browser, when one browser runs in more than one project.
+- Every failure on one worker slot, for example "All 3 failures ran on worker 2". A report from `merge-reports` has no worker insight.
+
 ### Live
 
-Live shows the progress of a running suite: elapsed time, a progress bar, counters, and a feed of failures. Turn on `live: { enabled: true }` and serve the report with `npx playwright-smart-reporter-serve --live`. Add `--run-command "npx playwright test"` to get the Run and Cancel buttons and an optional filter for the run.
+Live shows the progress of a running suite: elapsed time, a progress bar, counters, and a feed of failures. Turn on `live: { enabled: true }` and serve the report with `npx playwright-smart-reporter-serve --live`. Add `--run-command "npx playwright test"` to get the Run and Cancel buttons and an optional filter for the run. Cancel, or Ctrl+C in the terminal that runs serve, stops the run and every process it started, on Windows too.
 
 ### Themes
 
@@ -253,9 +265,49 @@ The report bundles the Geist Sans and Geist Mono fonts (SIL OFL 1.1). It makes n
 
 ### AI Failure Analysis
 
-Sends each failure's context to an AI provider and shows the suggestion in the test detail. Use your own Anthropic, OpenAI, or Gemini key, the Claude Code CLI, or a local model. See [AI Analysis](#ai-analysis).
+Sends each failure's context to an AI provider and shows the suggestion in the test detail. Use your own Anthropic, OpenAI, or Gemini key, the Claude Code CLI, or a local model. It is off by default: set `enableAIRecommendations: true` to turn it on. See [AI Analysis](#ai-analysis).
 
-Without a provider, every failed test still has **Copy AI prompt**. It copies a prompt with the error, call log, and code frame for use with any AI assistant.
+With AI off or without a provider, every failed test still has **Copy AI prompt**. It copies a prompt with the error, call log, and code frame for use with any AI assistant.
+
+### Failure Clustering
+
+Failures with the same fingerprint form one cluster. The Failures queue groups by cluster, Insights lists the clusters, and AI analysis and the PDF report use them. Expected failures (`test.fail()`) are not clustered. Set `enableFailureClustering: false` to turn clustering off.
+
+The fingerprint has four parts:
+- The error class, or the Playwright matcher, such as `toBeVisible`.
+- The error message without the call log. Digits, UUIDs, hex ids, quoted values, and URLs are masked. Absolute paths keep only their file name.
+- The failing file: the file of Playwright's error location, else the test file. The line is not part of the fingerprint.
+- The first locator in the error, such as `getByRole('button', { name: 'Save' })`.
+
+So two timeouts on different locators give two clusters, and one assertion that fails with different numbers gives one cluster.
+
+The cluster label is the matcher or the masked first message line, then the locator and the location of the first test in the cluster. The location is Playwright's error location, else the line of the test file in the stack, else the test file. For example: `toBeVisible on getByRole('button', { name: 'Save' }) at pages/checkout.page.ts:42`.
+
+The cluster id is the first 16 hex characters of a SHA-256 of the fingerprint. The same failure gets the same id in every run and on every machine. Adding lines above a failure does not change its id.
+
+#### Clusters across runs
+
+History saves the cluster id of each failed test. The reporter compares each cluster with the runs in history, which are the last `maxHistoryRuns` runs (default 10):
+
+- **New:** no run in history has the cluster.
+- **Recurring, N runs:** the cluster failed in the runs before this one. N counts the runs since the cluster last went away, this run included. The label's tooltip gives the start of the first of those runs, and its commit when CI gives one.
+- **Regressed:** the cluster went away in an earlier run and came back in this run.
+
+A cluster went away in a run when one of its tests passed and no test failed with it. A run where none of its tests ran does not count.
+
+A cluster has no label when history cannot tell a new cluster from an old one. That is the first run, and a history with failures but no cluster ids. Runs saved before 4.0.0, or with `enableFailureClustering: false`, save no cluster ids. A history with no failures can tell: every cluster is then New.
+
+Each cluster also has a trend: the number of its tests in each run in history, then this run. **Resolved clusters** lists the clusters of the baseline run that went away, with their tests that passed in this run. The JSON export has the same data in `failureClusters[].tracking` and `resolvedClusters`.
+
+To send a notification only when a run has a new cluster, add the `newClusters` condition:
+
+```ts
+notifications: [
+  { channel: 'slack', config: { webhookUrl: process.env.SLACK_WEBHOOK! }, conditions: { newClusters: true } },
+]
+```
+
+The live first-failure notification runs before clustering, so `newClusters` never sends it.
 
 ### Causal Failure Timeline
 
@@ -320,14 +372,32 @@ Smart Reporter tracks flakiness **across runs**, not within a single run:
 
 | | Playwright HTML Report | Smart Reporter |
 |---|---|---|
-| **Scope** | Single test run | Historical across multiple runs |
-| **Criteria** | Fails then passes on retry | Failed 30%+ of the time historically |
+| **Scope** | Single test run | This run and the runs in history |
+| **Criteria** | Fails then passes on retry | Passes on retry, or results that keep changing between pass and fail |
 | **Use Case** | Immediate retry success | Chronically unreliable tests |
 
-Indicators:
-- **Stable** (<10% failure rate) — **Unstable** (10-30%) — **Flaky** (>30%) — **New** (no history)
+A test with history gets four values. Skipped runs are left out of all of them.
 
-The Flaky queue lists both kinds: tests that passed on retry in this run, and tests that history marks as flaky.
+- `flakinessScore`: the share of runs, this run included, that failed or passed only on a retry (0 to 1). A score of exactly 1 means every run failed.
+- `flakinessRuns`: the number of runs behind the score, this run included.
+- `flakinessInterval`: the 95% Wilson interval of the score, for example `[0.21, 0.72]` for 5 of 11 runs. Fewer runs give a wider interval.
+- `flakinessStatus`: the classification, shown as an indicator. It measures instability, not the failure rate.
+
+Instability is the number of times the result changed between pass and fail from one run to the next, plus the runs that passed only on a retry, divided by the number of runs. The first change is not counted: a test that was broken and then fixed, or that broke and still fails, changed once and is not flaky.
+
+| Indicator | `flakinessStatus` | When |
+|---|---|---|
+| 🔴 Flaky | `flaky` | The test passed on a retry this run, or instability is at least `thresholds.flakinessUnstable` (default 0.3) |
+| 🟡 Unstable | `unstable` | Instability is at least `thresholds.flakinessStable` (default 0.1) |
+| 🟢 Stable | `stable` | Instability is lower, and the test passed this run |
+| 🔴 Failing | `failing` | Every run failed, or instability is lower and the test failed this run |
+| ⚪ Insufficient history | `insufficient-history` | Fewer than 5 runs, this run included, and the test did not pass on a retry this run |
+| ⚪ New | none | The test has no history |
+| ⚪ Skipped | none | The test was skipped this run, or in every run in history |
+
+For example, a test that failed in 5 runs and then passed in 6 has a score of 0.45 and is Stable. Before 4.0.0 it was Flaky with a score of 0.5, because only history was counted.
+
+The Flaky queue lists both kinds: tests that passed on retry in this run, and tests whose status is `flaky`. Quarantine, the AI recommendations and the health digest also use the status. The Most flaky panel in Insights lists `flaky` and `unstable` tests by score, with the run count, for example `45% of 11 runs`.
 
 ### Flake Forecasting
 
@@ -360,9 +430,24 @@ Signals combine so that one strong signal can flag a test on its own, and weak s
 
 A test with fewer than `minRuns` non-skipped runs (this run included) gets `insufficient-history` instead of a score and is never listed as at risk. The duration signals also need at least 8 runs, so one slow run in a short history cannot flag a test. With the default `maxHistoryRuns: 10`, a test can have at most 11 runs, so a `minRuns` above 11 means no test is ever scored.
 
-Forecast risks are recorded per run in the history file under `forecasts` (`runId -> testId -> risk`; risk 0 is omitted) and pruned to `maxHistoryRuns`, so the forecast's accuracy can be checked later. `playwright-smart-reporter-merge-history` does not merge `forecasts` yet.
+Forecast risks are recorded per run in the history file under `forecasts` (`runId -> testId -> risk`; risk 0 is omitted) and pruned to `maxHistoryRuns`, so the forecast's accuracy can be checked later. `playwright-smart-reporter-merge-history` keeps the `forecasts` of every merged run.
 
 To replay the forecast over recorded history from a clone of this repository: `npm run build && node scripts/backtest-forecast.mjs <dir containing test-history.json>`.
+
+### CI Efficiency
+
+The Efficiency panel in Insights, and `efficiency` in the JSON export, show where the CI time of the run went. Times in the JSON are in ms.
+
+| Metric | What it measures |
+|--------|------------------|
+| Retry waste | Time in the attempts that Playwright retried (every attempt but the last). For the run, per test (`retryWasteByTest`), and per recorded run (`retryWasteTrend`). A run saved before 4.0.0 that had retries shows `null`. |
+| Long tail | The share of the test time (every attempt of every test) that the slowest 5% and 10% of the tests take. |
+| Setup gap | Time from the start of the run to the first test start: global setup, web server, and worker start. |
+| Shard wall time | Duration of this shard, in a `--shard` run. |
+| Worker utilisation | Busy time of each worker slot (`parallelIndex`) from the first test start to the last test end, and the idle rest. |
+| Cost | With `ciCostPerMinute`, the minutes of retry waste times that price. Off by default. |
+
+A report from `merge-reports` has no shard or worker data. Playwright does not record which shard ran a test, and the worker numbers repeat in every shard. Retry waste, long tail, and setup gap still show. The setup gap is measured from the start of the earliest shard.
 
 ### Ownership and Routing
 
@@ -525,6 +610,7 @@ The bundle has `format: "playwright-smart-reporter/failures"` and `schemaVersion
 | `callLog` | The `Call log:` lines from the error |
 | `failingStep` | The innermost failed step, from the failure timeline |
 | `attempts` | Status, duration and error message of every retry |
+| `divergence` | With more than one attempt, one line on the step where each attempt failed, for example `Every attempt failed at step 'checkout › pay'`. Absent when no attempt has a failed step. |
 | `network` | Total request count and every failed request (status ≥ 400 or no response) |
 | `console` | Console errors and warnings, from the failure timeline |
 | `anomaly` | The suspected first anomaly, from the failure timeline |
@@ -539,7 +625,7 @@ The bundle is made to be sent to a third-party model, so the reporter redacts it
 - Header values are replaced with `[REDACTED]` for `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`, and any header whose name contains `cookie`, `token`, `secret`, `password`, `session`, `signature`, `credential`, or `api-key`, or has an `auth` segment (for example `X-Auth-User`).
 - These patterns are replaced in every string: JWTs, `sk-` and `sk-ant-` keys, AWS access key IDs, GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), Slack tokens (`xoxb-`, `xoxp-`, ...), bearer tokens, private key blocks, `password=`/`secret=`/`token=`-style pairs, passwords in URLs (`scheme://user:password@`), and `key`/`sig`/`code`/`jwt` query parameters.
 - The value of each environment variable whose name contains `token`, `secret`, `password`, `api_key`, `access_key`, `private_key`, `auth`, `session`, `cookie`, `credential`, `webhook`, `dsn`, or `signature` is replaced wherever it appears (values of 8 characters or more).
-- The AI prompt, which carries an environment snapshot, is never copied.
+- The AI prompt is never copied.
 
 Environment values are redacted from the environment of the process that builds the bundle. Use `exportFailures: true` so that the reporter builds the bundle in the test process.
 
@@ -680,16 +766,51 @@ reporter: [
 
 The result shows in the top bar and in the Quality gate panel in Insights, and is logged at the end of the run. A breached gate fails the Playwright run (exit code `1`), even when every test passed.
 
-The CLI gate checks a finished run again, for example in a later CI step. It reads the JSON export (`exportJson: true`) and a JSON file with the same rules:
+`noNewFailures` counts tests that failed now and passed in the baseline run. It also counts a failing test that did not run in the baseline run, including a new test with no history, so a run compared with a partial baseline does not pass by default.
+
+`noNewFlaky: true` counts tests that passed on a retry now and passed on the first attempt in the baseline run. Like `noNewFailures`, it also counts a flaky test that did not run in the baseline run, including a new test. The CLI skips it for a JSON export from before 4.0.0.
+
+`noNewClusters: true` counts failure clusters that are New: no run in history has them (see [Clusters across runs](#clusters-across-runs)). A recurring or regressed cluster does not count. The history is the last `maxHistoryRuns` runs, so a cluster last seen before them counts as new. A scoped rule counts the clusters with a test in scope. The rule is skipped with `enableFailureClustering: false`, and when history cannot tell a new cluster from an old one. The CLI reads `failureClusters` in the JSON export, which is left out when clustering is off.
+
+`maxDurationRegression: 20` fails the gate when the tests run more than 20% longer than the median of their passing runs. It adds up the tests that passed and have 5 passing runs, this run included (the tests that get a duration trend), so one test's jitter does not decide the gate. It is skipped when no test has that history.
+
+`noExpiredQuarantine: true` fails the gate when a [quarantine](#flaky-test-quarantine) entry was past its `expiresAt` when the run wrote the quarantine file. It is skipped when there is no quarantine data: quarantine is off, or the CLI finds no quarantine file.
+
+`minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
+
+#### Scoped rules and warnings
+
+`rules` holds rules that apply to part of the run, or that warn instead of failing. They are checked after the rules above:
+
+```typescript
+qualityGates: {
+  minPassRate: 95,
+  rules: [
+    { id: 'critical paths', scope: { tag: '@critical' }, minPassRate: 100 },
+    { scope: { project: 'chromium' }, maxFlakyRate: 2, severity: 'warn' },
+    { scope: { file: 'checkout/**', owner: '@shop-team' }, maxFailures: 0 },
+  ],
+}
+```
+
+- Each entry has exactly one rule, with the same name and value as above.
+- `scope` keys: `tag`, `project`, `file` and `owner`. Each takes one value or a list. A test is in scope when it matches every key, and any value of a key. `file` is a CODEOWNERS-style pattern on the test file path shown in the report, such as `checkout/**` or `*.critical.spec.ts`. `owner` matches the owners from [Ownership](#ownership-and-routing).
+- When no test matches the scope, the rule is skipped (`no test in scope`), so a misspelt tag shows up instead of passing. `minCoverage` and `noExpiredQuarantine` cannot be scoped.
+- `severity: 'warn'` shows a breach as a warning in the terminal, the report, the PDF and the GitHub summary, and does not fail the run. The default is `'fail'`.
+- `id` names the rule in the output instead of the rule name and scope. Each `id` must be unique.
+
+An unknown key, a second rule in one entry or an unknown `severity` stops the run with an error before any test runs, so a typo cannot pass the gate. This also applies to the rules above.
+
+The CLI gate checks a finished run again, for example in a later CI step. It reads the JSON export (`exportJson: true`) and a JSON file with the same rules, including `rules`:
 
 ```bash
 echo '{ "minPassRate": 95, "maxFlakyRate": 5 }' > gates.json
 npx playwright-smart-reporter gate --config gates.json --data smart-report-data.json
 ```
 
-`--data` defaults to `smart-report-data.json`. Exit codes: `0` = all gates passed, `1` = a gate failed or the input is missing.
+`--data` defaults to `smart-report-data.json`. `noExpiredQuarantine` reads `.smart-quarantine.json` in the folder of the data file; `--quarantine-file <path>` names another file. Exit codes: `0` = all gates passed, `1` = a gate failed or the input is missing.
 
-To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, and `--min-coverage`.
+To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, `--min-coverage`, `--max-duration-regression`, `--no-new-flaky`, `--no-new-clusters` and `--no-expired-quarantine`, with `--quarantine-file <path>` as above.
 
 ### Flaky Test Quarantine
 
@@ -703,9 +824,57 @@ reporter: [
       enabled: true,
       outputFile: '.smart-quarantine.json',
       threshold: 0.3,  // flakiness score 0-1
+      manualFile: '.smart-quarantine.manual.json', // default
+      expiresAfterDays: 30, // optional; no expiry when not set
     },
   }],
 ]
+```
+
+A test is quarantined when its `flakinessStatus` is `flaky` and its `flakinessScore` is at least `threshold` (see [Flakiness Detection](#flakiness-detection)). A test that fails every run, or that was broken and then fixed, is not quarantined. Each entry records `runs`, the number of runs behind its score. `maxQuarantined` limits only these entries.
+
+You can also quarantine a test yourself:
+- Tag it `@quarantine(<ticket>)`, for example `test('pays by card', { tag: '@quarantine(PAY-14)' }, ...)`. The annotation `{ type: 'quarantine', description: '<ticket>' }` does the same.
+- Add it to the manual file. Each entry needs `testId` (as in the quarantine file) and `title`. `file`, `owners`, `ticket`, `reason`, `expiresAt` and `quarantinedAt` are optional.
+
+```json
+{
+  "entries": [
+    {
+      "testId": "checkout.spec.ts::pays by card",
+      "title": "pays by card",
+      "ticket": "https://jira.example.com/browse/PAY-12",
+      "reason": "Card sandbox times out",
+      "owners": ["@acme/payments"],
+      "expiresAt": "2026-11-30T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+`manualFile` is resolved like `outputFile`, relative to the report folder. A manual file that is not valid JSON stops quarantine for the run with an error that names the file. A `quarantinedAt` or `expiresAt` that is not a date is ignored, with a warning that names the entry and the value.
+
+Each entry in the quarantine file has:
+- `source`: `auto` (flakiness), `annotation` or `manual`. A manual entry replaces an annotation, and an annotation replaces an `auto` entry.
+- `quarantinedAt`: when the test entered quarantine. It does not change while the test stays quarantined.
+- `owners`: from [ownership](#ownership-and-routing), or from the manual file.
+- `ticket` and `reason`: from the tag, the annotation or the manual file.
+- `expiresAt`: from the manual file, else `expiresAfterDays` after `quarantinedAt`.
+
+A test that does not run keeps its entry, because a quarantined test is often left out of the run. A test that runs and no longer qualifies leaves the file. A manual entry stays until you remove it from the manual file. When no test qualifies, the reporter writes the file with no entries.
+
+After each run, the console lists every entry past its `expiresAt`. The `noExpiredQuarantine` [quality gate](#quality-gates) fails the run on such an entry:
+
+```
+   Quarantine expired 2026-11-30T00:00:00.000Z: "pays by card" in checkout.spec.ts, https://jira.example.com/browse/PAY-12, @acme/payments
+```
+
+To send quarantine changes to Slack or Teams, add `quarantineEvents: true` to a notification. A notification with `owners` lists only the tests those owners own. `conditions` and `template` do not apply. One message per run lists each test that entered quarantine, expired since the last run, or left quarantine:
+
+```
+Quarantine changes:
+quarantined: "pays by card" in checkout.spec.ts, PAY-12, @acme/payments
+released: "logs in" in login.spec.ts
 ```
 
 Quarantined tests appear in the Quarantined queue and in the Quarantine panel in Insights.
@@ -756,6 +925,15 @@ reporter: [
 ]
 ```
 
+`exportJunit` names and groups tests the same way as Playwright's own `junit` reporter with `includeProjectInTestName: true`:
+
+- There is one `<testsuite>` for each project and file. Its `name` is the file and its `hostname` is the project name.
+- A testcase `classname` is the file path, relative to the Playwright `rootDir`.
+- A testcase `name` is the describe blocks and the test title, joined with ` › `. When the project has a name, `[project] ` comes first, for example `[chromium] checkout › pays by card`.
+- A test is a `<failure>` when Playwright reports it as failed. So a `test.fail()` test that passes is a failure with the message `Expected to fail, but passed`, and a `test.fail()` test that fails is a pass.
+- A test that passed on a retry gets one `<flakyFailure>` for each failed attempt. A `<flakyFailure>` is not counted as a failure.
+- An interrupted test is an `<error>`.
+
 `exportCtrf` writes a [Common Test Report Format](https://github.com/ctrf-io/ctrf) document (`specVersion` 0.1.0) next to the HTML report, so any CTRF tool can read your results.
 
 | Playwright result | CTRF `status` | Notes |
@@ -772,6 +950,47 @@ reporter: [
 - The Playwright project name is in `extra.project`.
 
 The report's export menu also downloads the current results as JSON or CSV, and opens a **Summary card** (`e`) that copies a Markdown summary of the run. When the run wrote them, the menu also links to the full JSON data, JUnit XML, CTRF JSON, and the failure bundle for agents.
+
+### Metrics Export (Prometheus and OpenTelemetry)
+
+`exportMetrics: true` writes the run's metrics next to the HTML report, so Grafana, Datadog and other tools can keep trends longer than the history window:
+
+- `<name>-metrics.prom`: Prometheus text format.
+- `<name>-metrics.otlp.json`: OTLP JSON (`ExportMetricsServiceRequest`).
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    exportMetrics: true,
+    // Also send one of the files after the run, to a Pushgateway:
+    // exportMetrics: { push: { url: 'http://pushgateway:9091/metrics/job/playwright' } },
+    // or to an OTLP/HTTP receiver:
+    // exportMetrics: { push: { url: 'https://otlp.example.com/v1/metrics', format: 'otlp', headers: { Authorization: 'Bearer <token>' } } },
+  }],
+]
+```
+
+| Metric | Labels | Value |
+|---|---|---|
+| `smart_reporter_tests` | `branch`, `project`, `suite` | Tests |
+| `smart_reporter_tests_passed` | `branch`, `project`, `suite` | Tests that passed, passed on a retry, or failed as `test.fail()` expected |
+| `smart_reporter_tests_failed` | `branch`, `project`, `suite` | Tests that failed, including a `test.fail()` test that passed |
+| `smart_reporter_tests_flaky` | `branch`, `project`, `suite` | Tests that passed on a retry |
+| `smart_reporter_tests_skipped` | `branch`, `project`, `suite` | Tests that did not run: skipped, never started, or interrupted |
+| `smart_reporter_pass_ratio` | `branch`, `project`, `suite` | Passed tests out of the tests that ran, 0 to 1 |
+| `smart_reporter_retry_waste_seconds` | `branch`, `project`, `suite` | Time in the attempts that Playwright retried |
+| `smart_reporter_run_duration_seconds` | `branch` | Duration of the run |
+| `smart_reporter_test_duration_seconds` | `branch`, `project`, `suite`, `test_id` | Duration of the last attempt of each test that ran |
+
+- Every metric is a gauge for this run. The counts and the pass ratio use the same rules as the report.
+- `suite` is the test file. `project` is the Playwright project name, and is left out for a project with no name. `branch` comes from [CI auto-detection](#ci-auto-detection), and is left out when no CI is detected.
+- A suite where no test ran has no `smart_reporter_pass_ratio` sample, so the value is never NaN. The pass ratio of the whole run is `sum(smart_reporter_tests_passed) / (sum(smart_reporter_tests) - sum(smart_reporter_tests_skipped))`.
+- `smart_reporter_test_duration_seconds` has one series for each test that ran.
+- `redact` does not change label values. They are test ids, file paths and project and branch names, which no report file redacts.
+
+`push` sends one `POST` after the run: the Prometheus file as `text/plain; version=0.0.4`, or with `format: 'otlp'` the OTLP file as `application/json`. `headers` are added to the request. The push stops after 10 seconds. A failed push is logged and does not change the result of the run.
+
+A Pushgateway `POST` replaces the metrics with the same names in the group of the URL. To keep runs apart, for example one per branch, add a grouping key to the URL: `/metrics/job/playwright/branch/main`.
 
 ### Custom Branding
 
@@ -793,9 +1012,9 @@ The title shows in the top bar. `logo` replaces the "Smart Reporter" name with a
 
 ### AI Suite Health Summary
 
-An AI-generated summary of the run is the first panel in Insights. It combines failure clusters, flakiness trends, performance regressions, and historical pass rate data. Enabled by default when an AI provider is set (see [AI Analysis](#ai-analysis)).
+An AI-generated summary of the run is the first panel in Insights. It combines failure clusters, flakiness trends, performance regressions, and historical pass rate data. It runs when AI analysis is on (`enableAIRecommendations: true`) and a provider is set (see [AI Analysis](#ai-analysis)).
 
-To disable (e.g., to save one AI request per run):
+To turn off only the summary (e.g., to save one AI request per run):
 
 ```typescript
 reporter: [
@@ -822,7 +1041,7 @@ reporter: [
     // Notifications
     slackWebhook: process.env.SLACK_WEBHOOK_URL,
     teamsWebhook: process.env.TEAMS_WEBHOOK_URL,
-    notifications: [],          // [{ channel, config, conditions?, template?, owners? }]
+    notifications: [],          // [{ channel, config, conditions?, template?, owners?, quarantineEvents? }]
 
     // Feature flags (all default to true unless noted)
     enableRetryAnalysis: true,
@@ -830,11 +1049,11 @@ reporter: [
     enableStabilityScore: true,
     enableGalleryView: true,
     enableComparison: true,
-    enableAIRecommendations: true,
+    enableAIRecommendations: false, // AI analysis; sends failure data to the AI provider
     enableTrendsView: true,
     enableTraceViewer: true,
     enableHistoryDrilldown: false,
-    enableAISuiteHealth: true,      // AI health summary in Insights (uses 1 AI request)
+    enableAISuiteHealth: true,      // AI health summary in Insights; needs enableAIRecommendations (uses 1 AI request)
     enableNetworkLogs: true,
     enableCausalTimeline: true,     // Timeline and first-anomaly suggestion on failed tests
 
@@ -856,6 +1075,7 @@ reporter: [
     stabilityThreshold: 70,
     retryFailureThreshold: 3,
     baselineRunId: 'main-branch-baseline',
+    baseline: { branch: 'target', filterHistory: false }, // not set by default (see Branch-aware Baselines)
     thresholds: {
       flakinessStable: 0.1,
       flakinessUnstable: 0.3,
@@ -876,6 +1096,7 @@ reporter: [
     forecast: {},               // { enabled: true, minRuns: 5, threshold: 0.5 }
     ownership: {},              // { enabled, source: 'auto', codeownersPath }; on when CODEOWNERS exists
     accessibility: undefined,   // { enabled, standard: 'WCAG2AA', include, exclude, selector, failOnSeverity }; opt-in
+    ciCostPerMinute: undefined, // CI price per minute; prices the retry waste in the Efficiency panel; opt-in
 
     // Report customisation & exports
     theme: { preset: 'default' },  // default, light, dark, high-contrast, ocean, sunset, dracula, cyberpunk, forest, rose
@@ -886,8 +1107,11 @@ reporter: [
     exportJunit: false,
     exportCtrf: false,          // <name>-ctrf.json
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
-    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage }
-    quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50 }
+    exportMetrics: false,       // true or { push: { url, format, headers } }: <name>-metrics.prom and .otlp.json (see Metrics Export)
+    redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
+    suspects: false,            // list the files changed since a new failure last passed, with git (see First Failing Commit and Suspects)
+    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine, rules }
+    quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
     live: {},                   // { enabled, outputFile: '.smart-live-results.jsonl', dashboard, notifyOnFirstFailure }
 
@@ -901,7 +1125,17 @@ reporter: [
 
 ### AI Analysis
 
-AI failure analysis uses your own API key or a local model. Set one of the following environment variables:
+AI failure analysis uses your own API key or a local model. It is off by default. A key in the environment does not turn it on. To turn it on, set `enableAIRecommendations: true`:
+
+```ts
+reporter: [
+  ['playwright-smart-reporter', {
+    enableAIRecommendations: true,
+  }],
+],
+```
+
+Then set one of the following environment variables:
 
 ```bash
 export ANTHROPIC_API_KEY=your-key    # Claude
@@ -913,7 +1147,7 @@ When a test fails, the reporter sends the failure context to your chosen provide
 
 **Claude subscription (no API key)?** Claude Pro/Team plans issue OAuth tokens, not API keys — putting one in `ANTHROPIC_API_KEY` fails with a 401. Instead, install [Claude Code](https://claude.com/claude-code) and set `CLAUDE_CODE_OAUTH_TOKEN`: the reporter then routes analysis through the local `claude` CLI, billed to your subscription. API keys take precedence when both are set.
 
-If no provider is set, AI analysis is skipped and everything else works as normal. Every failed test still gets a **Copy AI prompt** button.
+If AI analysis is off or no provider is set, the reporter sends nothing and everything else works as normal. Every failed test still gets a **Copy AI prompt** button.
 
 #### Local models (Ollama and OpenAI-compatible endpoints)
 
@@ -927,11 +1161,12 @@ export OLLAMA_HOST=127.0.0.1:11434   # optional, this is the default
 export OLLAMA_MODEL=llama3.2         # optional, this is the default
 ```
 
-Setting `OLLAMA_HOST` or `OLLAMA_MODEL` turns on local analysis when no cloud key is set. To use Ollama even when a cloud key is set, choose it in the config:
+With `enableAIRecommendations: true`, setting `OLLAMA_HOST` or `OLLAMA_MODEL` selects local analysis when no cloud key is set. To use Ollama even when a cloud key is set, choose it in the config:
 
 ```ts
 reporter: [
   ['playwright-smart-reporter', {
+    enableAIRecommendations: true,
     ai: {
       provider: 'ollama',
       model: 'qwen2.5:7b',
@@ -978,6 +1213,23 @@ The first match wins:
 
 A cloud key wins over `OLLAMA_*`. When that happens, the reporter prints a warning. Set `ai: { provider: 'ollama' }` to use the local model. Each run prints the provider and model it uses, for example `Analyzing 3 failure(s) with AI (ollama, llama3.2)...`. The report data records the same values in `ai.provider` and `ai.model`, and the AI analysis section shows the model.
 
+#### What the provider receives
+
+- One prompt per failed test: the test name and location, the error message and stack, stdout and stderr, the possible first anomaly, each attempt's status, duration and first error line with the step where they failed (when the test ran more than once), the page snapshot from `error-context.md`, and the test source around the failure. The prompt is capped at 200,000 characters.
+- One prompt per failure cluster: the cluster's error type, up to five test titles, and the first test's error.
+- One prompt for the suite health summary: run counts, the pass rate trend, cluster error types, and titles of flaky and slow tests.
+
+The reporter redacts every prompt before it sends it, for every provider:
+
+- The value of each environment variable whose name contains `token`, `secret`, `password`, `api_key`, `access_key`, `private_key`, `auth`, `session`, `cookie`, `credential`, `webhook`, `dsn`, or `signature`, or ends in `_pass`, `_pwd`, `_key`, or `_pat`, is replaced wherever it appears (values of 8 characters or more).
+- `password=`/`secret=`/`token=`/`api_key=`-style pairs, `Authorization` and `Cookie` values, bearer tokens, JWTs, `sk-` keys, AWS, GitHub, Slack, Stripe and GitLab tokens, private key blocks, passwords in URLs, and `key`/`sig`/`token`/`auth`-style query parameters are replaced.
+
+Limits of redaction:
+
+- Redaction does not remove personal data, page text, or values typed into form fields. The page snapshot records typed values (for example `textbox "Email": jane@example.com`). Keep AI analysis off for suites whose pages show data that must not leave your network, or use a local model.
+- Name matching can also mask values that are not secret. For example, `NEXTAUTH_URL=http://localhost:3000` turns every `http://localhost:3000` in the prompt into `[REDACTED]`.
+- The prompt behind **Copy AI prompt** in the report is redacted only when `redact` is set (see [Redacting Report Files](#redacting-report-files)).
+
 #### Limits and failure behaviour
 
 - AI never fails a test run. If the model is unreachable, does not respond within `timeoutMs`, or uses up `maxTotalMs`, the reporter prints one warning. It skips the rest of the analysis and still writes the report. Suggestions made before the stop stay in the report.
@@ -999,6 +1251,48 @@ The reporter writes report data one test at a time. `assetMode` sets where the d
 - The HTML loads the data file with `<script src>`, so the report still opens over `file://`.
 - Keep the data file next to the HTML when you copy, upload, or archive the report. Without it the page shows "report data is missing".
 - Each run logs the data size and location, for example `Report data: 7.0 MB, inline in the HTML`.
+
+### Redacting Report Files
+
+Report files contain error messages, step titles, console messages, page URLs and the **Copy AI prompt** text. Any of these can contain a secret. Set `redact` to mask secrets before the reporter writes a file. It is off by default.
+
+```ts
+reporter: [
+  ['playwright-smart-reporter', {
+    redact: true,
+    // Or add your own regular expressions. A string is the source of a regular expression.
+    // redact: { patterns: ['[\\w.+-]+@example\\.com', /order-\d+/i] },
+  }],
+],
+```
+
+`redact` uses the same rules as the AI prompts (see [What the provider receives](#what-the-provider-receives)): secret environment values, credential pairs, tokens and `key`/`sig`-style query parameters. Each match of a `patterns` entry also becomes `[REDACTED]`.
+
+The reporter checks each pattern when it starts. A pattern that is not a valid regular expression, or that matches an empty string (for example `''` or `/a*/`), stops the run before any test runs. The error names the pattern, for example `redact.patterns[0] "" matches an empty string`.
+
+The reporter redacts these fields of each test when the test ends:
+
+- The error message and stack of every attempt, and the source snippet.
+- Step titles.
+- The **Copy AI prompt** text. It includes stdout and stderr.
+- The failure timeline: step titles, request URLs, console messages and the first-anomaly summary.
+- Network log URLs.
+- The request URLs and console messages of the attempt comparison.
+
+Every output is built from these fields. So the HTML report, the JSON, JUnit and CTRF exports, the PDF, `test-history.json` and its run files, the `history-runs/` snapshots, the failure bundle, the live results file and the AI prompts get the redacted text.
+
+These are not redacted:
+
+- Trace zips, screenshots, videos and other attachments, including base64 attachments in the report.
+- Test titles, test ids, file paths and annotations.
+- Network request bodies and accessibility results.
+- Files and history snapshots that earlier runs wrote without `redact`.
+
+Limits:
+
+- Redaction does not remove personal data, page text or typed values, unless one of your `patterns` matches them.
+- Name matching can also mask values that are not secret. For example, `NEXTAUTH_URL=http://localhost:3000` turns every `http://localhost:3000` in the report into `[REDACTED]`.
+- Environment values come from the process that runs the reporter. With `merge-reports`, set the variables in the merge job.
 
 ## Stability Grades
 
@@ -1026,6 +1320,21 @@ With filtering on, verbose `page.click()`, `page.fill()` steps are hidden — yo
 
 All `expect()` assertion steps (top-level and nested) are shown by default and are kept even when `filterPwApiSteps` is on. Set `showExpectSteps: false` to hide them.
 
+## History Storage
+
+Each run saves two things beside `historyFile`:
+
+- **A run file** in `test-history.runs/`: the run's summary, the result of each test (with the cluster id of a failure), and the forecast risks. The name is `<runId>.json`, or `<runId>.shard-<i>-of-<n>.json` for a shard. The reporter writes each run file once. A run with the same `runId` and shard replaces it, so a CI re-run replaces the earlier attempt.
+- **The index**, `test-history.json`: the last `maxHistoryRuns` runs, rebuilt from the index and the run files. It is complete on its own. Caches, `merge-history` and the `digest` command need only this file.
+
+How the reporter uses them:
+
+- **Shared folder:** runs that share the folder do not lose each other's results. The reporter rebuilds the index under a lock, `test-history.json.lock`. A run waits up to 10 seconds for the lock. A lock older than 30 seconds was left by a run that crashed, so the next run takes it over. When a run cannot get the lock, its run file stays, and the next run adds it to the index.
+- **Copied run files:** when a run starts, it also reads the run files that the index does not list yet. So copying run files from other shards or machines into `test-history.runs/` merges them.
+- **Shards:** the run files of one `runId` combine into one run, with the totals of all shards.
+- **Retention:** `maxHistoryRuns` (default 10) is the only setting. The reporter deletes the run files of older runs. With `enableHistoryDrilldown`, it also deletes their `history-runs/` snapshots.
+- **Folder name:** the folder follows `historyFile` and `projectName`. For example, `reports/{project}/history.json` keeps its run files in `reports/{project}/history.runs/`.
+
 ## Multi-Project History
 
 Isolate history per test suite to prevent metric contamination:
@@ -1044,13 +1353,15 @@ reporter: [
 ### Inline Viewer
 Click **Open trace** in the test detail header, **Open** on a trace attachment, or a trace tile in the Gallery. The built-in viewer has a film strip, actions panel, before/after screenshots, network waterfall, console messages, and errors.
 
+The reporter copies traces to `traces/` next to the report: `<test id>-trace-<i>.zip` for the last attempt, and, for a flaky test, `<test id>-attempt-<n>-trace-<i>.zip` for each attempt before it (`n` is the attempt number, from 1). In the test id, `/`, `\` and `:` become `__`.
+
 Browsers block the viewer from reading trace files over `file://`. There, the viewer offers **Load from file** and **Copy CLI command** (`npx playwright show-trace`). To open traces with one click, serve the report.
 
 ### Local Server
 ```bash
 npx playwright-smart-reporter-serve smart-report.html
 ```
-Serves the report locally with full trace viewer support — no `file://` CORS issues.
+Serves the report locally with full trace viewer support — no `file://` CORS issues. It opens the report in your default browser; add `--no-open` to turn that off.
 
 ### CLI Viewer
 ```bash
@@ -1071,6 +1382,8 @@ use: {
 
 Playwright annotations show in the **Annotations** section of the test detail, with type and description. Tags show in the detail header; click one to add a `tag:` filter.
 
+Tags come from Playwright's `test.tags`, from `tag` annotations, and, for Playwright before 1.42, from `@` words in the title. A title word is a tag only when it starts with `@`, so `user@example.com` does not add an `@example` tag.
+
 ```typescript
 test('payment flow', async ({ page }) => {
   test.slow();
@@ -1082,7 +1395,7 @@ test('payment flow', async ({ page }) => {
 
 ### Persisting History
 
-History must persist between runs for flakiness detection and trends to work.
+History must persist between runs for flakiness detection and trends to work. Caching `test-history.json` is enough for one job. The `test-history.runs/` folder matters only when you [combine shards from separate machines](#sharded-runs).
 
 #### GitHub Actions
 
@@ -1146,11 +1459,74 @@ Upload the HTML file together with the files the reporter wrote next to it: `<na
 
 The reporter automatically detects GitHub Actions, GitLab CI, CircleCI, Jenkins, Azure DevOps, and Buildkite. Branch, commit SHA, and build ID are displayed in the report's top bar.
 
+Each run summary in the history file (`ciInfo`) and the JSON export (`metadata.ci`) also records the full commit SHA, the repository URL, and, for a pull request, its number and target branch. On GitHub Actions, GitLab and Azure DevOps pull request runs, the commit is the head of the pull request, not the merge commit that CI makes for the run. The repository URL never includes credentials from the clone URL.
+
+### Branch-aware Baselines
+
+By default, a run is compared with the previous run in history. On a pull request, that can be the run of another pull request. To compare with the latest run on a branch instead:
+
+```typescript
+baseline: {
+  branch: 'target',     // the branch the pull request merges into, or a branch name such as 'main'
+  filterHistory: true,  // flakiness and performance use only that branch's runs too (default: false)
+},
+```
+
+- The branch of a run is the `ciInfo.branch` that history recorded for it. Runs without a branch, such as local runs and runs saved before 4.0.0, never match. A leading `origin/`, which Jenkins freestyle jobs record in `GIT_BRANCH`, is ignored, so `origin/main` matches `main`.
+- `'target'` takes the target branch from CI: GitHub Actions, GitLab, Jenkins, Azure DevOps and Buildkite. A run without a target branch, such as a push to `main`, is compared with the previous run, and the reporter prints a note.
+- `baselineRunId` takes precedence over `baseline.branch`.
+- When no run in history is on the branch, the run has no comparison, and the reporter prints a note.
+- The Compare tab, the job summary and the pull request comment name the branch and commit of the baseline run.
+
+History keeps the last `maxHistoryRuns` runs, so pull request runs can push the target branch's runs out. Restore the target branch's history in pull request builds, and save history only from branch builds. On GitHub Actions:
+
+```yaml
+- uses: actions/cache/restore@v4
+  with:
+    path: test-history.json
+    key: test-history-${{ github.base_ref || github.ref_name }}-${{ github.run_id }}
+    restore-keys: test-history-${{ github.base_ref || github.ref_name }}-
+
+- run: npx playwright test
+
+- uses: actions/cache/save@v4
+  if: always() && github.event_name != 'pull_request'
+  with:
+    path: test-history.json
+    key: test-history-${{ github.ref_name }}-${{ github.run_id }}
+```
+
+When pull request and branch runs share one history file, raise `maxHistoryRuns` instead.
+
+### First Failing Commit and Suspects
+
+For each new failure, the reporter finds the last run it passed in and the first run it failed in after that. The commits come from the CI info in history. Each failure cluster gets the same range, from the runs its tests ran in.
+
+- The test detail shows the range, such as `9f8e7d6c..a1b2c3d4`. On GitHub and GitLab it links to the compare page. When no run in history passed, it shows the first failed commit only.
+- When the test passed and failed at the same commit, the range shows as **no code change** and links to that commit. With `suspects`, it runs no git call and lists no files.
+- In Insights, the tooltip of a cluster's label names the commit it last passed at.
+- The job summary and the pull request comment show the range under each new failure.
+- The JSON export has the range in `tests[].commits` and `failureClusters[].tracking.commits`.
+
+A run without CI info has no commit, so a local run gets no range.
+
+To also list the files that changed in the range, set `suspects`:
+
+```typescript
+suspects: true,  // default: false
+```
+
+- The reporter runs `git diff --name-only <last passed>..<first failed>` once for each range, in the Playwright `rootDir` (the current directory with `relativeToCwd`). This git call is why `suspects` is off by default.
+- The test detail lists the files under **Suspects**. The job summary and the pull request comment list the first five.
+- `redact` also applies to the file names.
+- A shallow clone does not have the older commit, so it gets no suspects. The range still shows, and the reporter prints a note. On GitHub Actions, check out with `fetch-depth: 0`.
+- Without git, or outside a git repository, the range shows without suspects.
+
 ### GitHub Pull Requests
 
 Show the run where reviewers already look:
 
-- **Job summary:** pass rate, quality gate result, failures (new failures first), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
+- **Job summary:** pass rate, the branch and commit of the baseline run, quality gate result, failures (new failures and failing new tests first, and failures that did not run in the baseline run marked), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
 - **Annotations:** an error on the line of each failing assertion, not on the test declaration.
 - **Pull request comment:** the same summary as one comment. Each run updates that comment, so re-runs do not add more comments.
 
@@ -1181,7 +1557,7 @@ jobs:
           name: smart-report
           path: smart-report.html
 
-      - uses: qa-gary-parker/playwright-smart-reporter@v3.0.0
+      - uses: qa-gary-parker/playwright-smart-reporter@v4.0.0
         if: always()
         with:
           data: smart-report-data.json
@@ -1193,6 +1569,7 @@ jobs:
 | `data` | `smart-report-data.json` | Path to the JSON export |
 | `report-url` | workflow run page | Link to the uploaded report |
 | `github-token` | `github.token` | Token for the pull request comment |
+| `issues` | `false` | Open one issue per new failure cluster. See [GitHub Issues](#github-issues) |
 
 - The comment is written only for `pull_request` and `pull_request_target` events. Other events get the summary and annotations.
 - `pull_request` runs from forks get a read-only token. The action skips the comment and still writes the summary and annotations. A 403 response does the same and shows a warning. The step does not fail.
@@ -1206,6 +1583,35 @@ npx playwright-smart-reporter github --data smart-report-data.json --report-url 
 ```
 
 It needs the `gh` CLI and `GH_TOKEN` for the comment. Outside GitHub Actions it prints the summary to stdout.
+
+### GitHub Issues
+
+The `github` command can open one GitHub issue for each New failure cluster (see [Clusters across runs](#clusters-across-runs)). It is off by default. Turn it on with `issues: true` on the action, or `--issues` on the command, and give the job `issues: write`:
+
+```yaml
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # ...
+      - uses: qa-gary-parker/playwright-smart-reporter@v4.0.0
+        if: always() && github.ref == 'refs/heads/main'
+        with:
+          data: smart-report-data.json
+          issues: true
+```
+
+```bash
+npx playwright-smart-reporter github --data smart-report-data.json --issues
+```
+
+- Only New clusters get an issue. Recurring and Regressed clusters, and clusters without a label because history cannot tell, get none. Keep the history file between CI runs, or every run has no labels.
+- The issue has the cluster label, the affected tests and their location, the error message, the commit range and the changed files when known, and a link to the report or the run.
+- The error message gets the same redaction as the annotations. With `redact` on, the JSON export is already redacted with your patterns.
+- The body starts with a hidden marker that holds the cluster id. When an open issue has the marker of a cluster, a later run adds a comment to that issue instead of opening a second one. A closed issue does not count, so a cluster that comes back as New gets a new issue.
+- One run files at most 5 clusters, largest first. The log says how many it left out.
+- Without `issues: write`, the command logs a warning and exits with 0, as for the pull request comment. It needs `GITHUB_REPOSITORY`, which GitHub Actions sets.
+- Run it on your default branch. On a pull request, a new cluster is often caused by the change under review.
 
 ### Azure DevOps
 
@@ -1255,7 +1661,7 @@ steps:
 
 ### Sharded Runs
 
-For consistent history across parallel shards, set `runId`:
+Set `runId`, so the shards of one CI run record one run. Without it, each shard saves its own run, so after the histories are merged the next run compares with one shard only, and the tests of the other shards show as not in the baseline run:
 
 ```typescript
 reporter: [
@@ -1264,6 +1670,13 @@ reporter: [
   }],
 ]
 ```
+
+Each shard writes its own run file, `test-history.runs/<runId>.shard-<i>-of-<n>.json`. The history counts one run with the totals of all shards.
+
+- **Shards on one machine or on a shared volume:** nothing more to do.
+- **Shards on separate machines:** the reporter cannot merge two CI caches saved by different jobs. Use one of these:
+  - Upload each shard's `test-history.runs/` folder as an artifact. In a later job, copy the run files into one `test-history.runs/` folder beside the restored `test-history.json`, and cache both. The next run reads the run files.
+  - Merge the history files with `merge-history` (below), and cache the merged file.
 
 ### Merging History from Multiple Machines
 
@@ -1274,6 +1687,10 @@ npx playwright-smart-reporter-merge-history \
   -o merged-history.json \
   --max-runs 10
 ```
+
+- The command also reads the run files in the `.runs` folder beside each input file, for example `shard1/test-history.runs/`.
+- It keeps a run that several inputs restored from one cache once, and combines the shards of one run.
+- It writes one complete history file. `-n` is short for `--max-runs`.
 
 ## CSP-Safe Mode
 
@@ -1337,8 +1754,9 @@ export default defineConfig({
 - `cspSafe: true` now writes `<name>-data.js` as well as `<name>.css` and `<name>.js`.
 - The executive PDF variants are links in the export menu. The PDF files are unchanged.
 - A breached quality gate in the reporter options now fails the Playwright run (exit code `1`). In 2.x it was only logged.
-- New options are opt-in, except three that are on by default: `enableCausalTimeline`, `forecast`, and `ownership` (only when a CODEOWNERS file exists). Opt-in: `ai`, `accessibility`, `exportCtrf`, `exportFailures`, and code coverage (import `test` from `playwright-smart-reporter/coverage`). `assetMode` defaults to `'auto'`.
-- The history file gains `stepDurations` per test entry and `forecasts` per run.
+- New options are opt-in, except three that are on by default: `enableCausalTimeline`, `forecast`, and `ownership` (only when a CODEOWNERS file exists). Opt-in: `accessibility`, `exportCtrf`, `exportFailures`, and code coverage (import `test` from `playwright-smart-reporter/coverage`). `assetMode` defaults to `'auto'`.
+- From 4.0.0, AI analysis is off by default. A provider key in the environment no longer turns it on. Set `enableAIRecommendations: true` to turn it on. The `ai` options only choose the provider.
+- The history file gains `stepDurations` and `retryWaste` (ms spent in attempts that were retried) per test entry, and `forecasts` per run.
 - `maxEmbeddedSize` has no effect. Traces are copied to `traces/` next to the report and are never embedded. The option is kept so existing configs still type-check.
 
 ## FAQ
@@ -1367,6 +1785,7 @@ They use different methodologies — see [Flakiness Detection](#flakiness-detect
 - With `assetMode: 'auto'` (default), data above 32 MB goes to `<name>-data.js`, so the browser does not parse one very large HTML document. See [Report Size and Asset Mode](#report-size-and-asset-mode).
 - The test list renders through a virtual list. The UI tests scroll 10,000 rows.
 - Screenshots are embedded as data URIs. `cspSafe: true` saves them as files instead.
+- Only flaky tests (a later attempt passed) keep the screenshots, videos and traces of their earlier attempts. A test that fails every attempt keeps only its final attempt's evidence.
 - Reduce `maxHistoryRuns` to keep less history in the report.
 
 ## Troubleshooting
@@ -1375,7 +1794,7 @@ They use different methodologies — see [Flakiness Detection](#flakiness-detect
 |---|---|---|
 | No history data | History file missing or wrong path | Check `historyFile` path, use CI caching |
 | No network logs | Tracing not enabled | Add `trace: 'retain-on-failure'` to config |
-| No AI suggestions | No AI provider set | Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` with Claude Code installed, or `OLLAMA_HOST`/`ai.provider` for a local model |
+| No AI suggestions | AI analysis is off (the default), or no AI provider set | Set `enableAIRecommendations: true`, then set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` with Claude Code installed, or `OLLAMA_HOST`/`ai.provider` for a local model |
 | `Anthropic API error: 401` | Claude subscription OAuth token used as API key | Unset `ANTHROPIC_API_KEY`; set `CLAUDE_CODE_OAUTH_TOKEN` to use the Claude Code CLI |
 | Ollama set but a cloud provider is used | A cloud key is also set and wins | Set `ai: { provider: 'ollama' }` |
 | Page says "report data is missing" | `<name>-data.js` was not kept next to the HTML | Copy or upload the companion files with the HTML |

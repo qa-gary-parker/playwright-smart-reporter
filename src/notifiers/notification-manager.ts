@@ -1,10 +1,12 @@
-import type { TestResultData, NotificationConfig, NotificationCondition, RunComparison } from '../types';
+import type { TestResultData, NotificationConfig, NotificationCondition, QuarantineEvent, RunComparison } from '../types';
+import { describeQuarantineEntry } from '../quarantine/quarantine-generator';
 import { SlackNotifier } from './slack-notifier';
 import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
 import { EmailNotifier } from './email-notifier';
 import { CustomWebhookNotifier } from './custom-webhook-notifier';
-import { runStabilityGrade } from '../analyzers/stability-scorer';
+import { isFailedTest } from '../utils/flakiness';
+import { computeRunStats, formatPassRate, runStabilityGrade } from '../utils/run-stats';
 
 interface NotificationContext {
   total: number;
@@ -12,41 +14,34 @@ interface NotificationContext {
   failed: number;
   skipped: number;
   flaky: number;
-  passRate: number;
+  passRate: number | null;
   duration: number;
   grade: string;
   failedTests: string;
 }
 
 function buildContext(results: TestResultData[], startTime: number): NotificationContext {
-  const passed = results.filter(r => r.status === 'passed' || r.outcome === 'expected' || r.outcome === 'flaky').length;
-  const failed = results.filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut')).length;
-  const skipped = results.filter(r => r.status === 'skipped').length;
-  const flaky = results.filter(r => r.outcome === 'flaky').length;
+  const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   const duration = Date.now() - startTime;
-  const passRate = results.length > 0 ? Math.round((passed / results.length) * 100) : 0;
 
   const grade = runStabilityGrade(results) ?? 'N/A';
 
   const failedTests = results
-    .filter(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))
+    .filter(isFailedTest)
     .slice(0, 10)
     .map(t => t.title)
     .join(', ');
 
-  return { total: results.length, passed, failed, skipped, flaky, passRate, duration, grade, failedTests };
+  return { total, passed, failed, skipped, flaky, passRate, duration, grade, failedTests };
 }
 
 function evaluateConditions(conditions: NotificationCondition, ctx: NotificationContext, results: TestResultData[], comparison?: RunComparison): boolean {
   if (results.length === 0) return false;
   if (conditions.minFailures !== undefined && ctx.failed < conditions.minFailures) return false;
-  if (conditions.maxPassRate !== undefined && ctx.passRate > conditions.maxPassRate) return false;
+  // A run where every test was skipped has no pass rate, so it cannot be at or below maxPassRate.
+  if (conditions.maxPassRate !== undefined && (ctx.passRate === null || ctx.passRate > conditions.maxPassRate)) return false;
   if (conditions.tags && conditions.tags.length > 0) {
-    const hasTagFailure = results.some(r =>
-      r.outcome === 'unexpected' &&
-      (r.status === 'failed' || r.status === 'timedOut') &&
-      r.tags?.some(t => conditions.tags!.includes(t))
-    );
+    const hasTagFailure = results.some(r => isFailedTest(r) && r.tags?.some(t => conditions.tags!.includes(t)));
     if (!hasTagFailure) return false;
   }
   if (conditions.stabilityGradeDrop) {
@@ -55,6 +50,7 @@ function evaluateConditions(conditions: NotificationCondition, ctx: Notification
     // A lower grade is a later letter: A < B < C < D < F.
     if (ctx.grade <= baselineGrade) return false;
   }
+  if (conditions.newClusters && !results.some(r => isFailedTest(r) && r.failureCluster?.tracking?.status === 'new')) return false;
   return true;
 }
 
@@ -66,10 +62,25 @@ function renderTemplate(template: string, ctx: NotificationContext, escape: (val
     .replace(/\{\{failed\}\}/g, String(ctx.failed))
     .replace(/\{\{skipped\}\}/g, String(ctx.skipped))
     .replace(/\{\{flaky\}\}/g, String(ctx.flaky))
-    .replace(/\{\{passRate\}\}/g, String(ctx.passRate))
+    .replace(/\{\{passRate\}\}/g, String(ctx.passRate ?? 'n/a'))
     .replace(/\{\{duration\}\}/g, String(Math.round(ctx.duration / 1000)))
     .replace(/\{\{grade\}\}/g, () => escape(ctx.grade))
     .replace(/\{\{failedTests\}\}/g, () => escape(ctx.failedTests));
+}
+
+function ownedBy(config: NotificationConfig): ((test: { owners?: string[] }) => boolean) | undefined {
+  if (!config.owners?.length) return undefined;
+  const owners = new Set(config.owners.map(o => o.toLowerCase()));
+  return test => !!test.owners?.some(o => owners.has(o.toLowerCase()));
+}
+
+export function firstFailureMessage(test: Pick<TestResultData, 'title' | 'file'>): string {
+  return `First failure detected: "${test.title}" in ${test.file}`;
+}
+
+function quarantineMessage(events: QuarantineEvent[]): string {
+  const lines = events.map(({ kind, entry }) => `${kind === 'expired' ? `expired ${entry.expiresAt}` : kind}: ${describeQuarantineEntry(entry)}`);
+  return ['Quarantine changes:', ...lines].join('\n');
 }
 
 export class NotificationManager {
@@ -79,18 +90,52 @@ export class NotificationManager {
     this.configs = configs;
   }
 
+  /** Sends firstFailureMessage to the Slack and Teams channels that this failure routes to. */
+  async notifyFirstFailure(test: TestResultData): Promise<void> {
+    const message = firstFailureMessage(test);
+    for (const config of this.configs) {
+      if (config.channel !== 'slack' && config.channel !== 'teams') continue;
+      try {
+        const owned = ownedBy(config);
+        if (owned && !owned(test)) continue;
+        // Conditions see only this test, before clustering, so minFailures above 1, stabilityGradeDrop and newClusters never pass
+        if (config.conditions && !evaluateConditions(config.conditions, buildContext([test], Date.now()), [test])) continue;
+        const notifier = config.channel === 'slack' ? new SlackNotifier(config.config.webhookUrl) : new TeamsNotifier(config.config.webhookUrl);
+        await notifier.sendMessage(message);
+      } catch (err) {
+        console.error(`Failed to send ${config.channel} notification: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  /** Sends quarantine changes to the Slack and Teams channels with quarantineEvents on, scoped by owners. */
+  async notifyQuarantine(events: QuarantineEvent[]): Promise<void> {
+    for (const config of this.configs) {
+      if (!config.quarantineEvents || (config.channel !== 'slack' && config.channel !== 'teams')) continue;
+      try {
+        const owned = ownedBy(config);
+        const scoped = owned ? events.filter(e => owned(e.entry)) : events;
+        if (scoped.length === 0) continue;
+        const notifier = config.channel === 'slack' ? new SlackNotifier(config.config.webhookUrl) : new TeamsNotifier(config.config.webhookUrl);
+        await notifier.sendMessage(quarantineMessage(scoped));
+      } catch (err) {
+        console.error(`Failed to send ${config.channel} notification: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
   async notify(results: TestResultData[], startTime: number, comparison?: RunComparison): Promise<void> {
     const runCtx = buildContext(results, startTime);
 
     for (const config of this.configs) {
       try {
         // Owner routing: scope counts, conditions and the failure list to tests these owners own
-        const owners = config.owners?.length ? new Set(config.owners.map(o => o.toLowerCase())) : undefined;
-        const scoped = owners ? results.filter(r => r.owners?.some(o => owners.has(o.toLowerCase()))) : results;
-        if (owners && !scoped.some(r => r.outcome === 'unexpected' && (r.status === 'failed' || r.status === 'timedOut'))) {
+        const owned = ownedBy(config);
+        const scoped = owned ? results.filter(owned) : results;
+        if (owned && !scoped.some(isFailedTest)) {
           continue;
         }
-        const ctx = owners ? buildContext(scoped, startTime) : runCtx;
+        const ctx = owned ? buildContext(scoped, startTime) : runCtx;
 
         // Evaluate conditions
         if (config.conditions && !evaluateConditions(config.conditions, ctx, scoped, comparison)) {
@@ -100,8 +145,8 @@ export class NotificationManager {
         // Render message
         const message = config.template
           ? renderTemplate(config.template, ctx)
-          : `Test Run: ${ctx.passed}/${ctx.total} passed (${ctx.passRate}%) — ${ctx.failed} failures` +
-            (owners ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
+          : `Test Run: ${ctx.passed}/${ctx.total} passed (${formatPassRate(ctx.passRate)}) — ${ctx.failed} failures` +
+            (owned ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
 
         // Dispatch to channel
         switch (config.channel) {
@@ -117,7 +162,7 @@ export class NotificationManager {
           }
           case 'pagerduty': {
             const notifier = new PagerDutyNotifier(config.config.routingKey);
-            await notifier.trigger(message, ctx.failed, ctx.total);
+            await notifier.trigger(message, ctx);
             break;
           }
           case 'email': {

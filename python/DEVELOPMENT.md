@@ -116,7 +116,7 @@ Or use GitHub Actions (see `.github/workflows/` when created).
 
 ## Troubleshooting
 
-### "Cannot find module '../dist/generators/html-generator'"
+### "Cannot find the compiled Smart Reporter JS files"
 
 **Fix**: Run `npm run build` from repository root.
 

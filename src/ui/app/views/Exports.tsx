@@ -1,5 +1,5 @@
 import { Button, Dialog, Icon, Menu, MiniBar } from '../../components';
-import { csvCell, displayStatus, formatDate, formatDuration, isFailing, outcomeCounts } from '../data';
+import { csvCell, displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts } from '../data';
 import { data, runTests, summaryOpen } from '../store';
 import { copyText } from './Detail';
 
@@ -44,7 +44,7 @@ export function summaryMarkdown(): string {
   const failing = runTests.value.filter(isFailing);
   const lines = [
     `**Test run ${formatDate(d.meta.startTime, true)}**${d.meta.ci?.branch ? ` on \`${d.meta.ci.branch}\`` : ''}`,
-    `${s.passed} passed · ${s.failed} failed · ${s.flaky} flaky · ${s.skipped} skipped · ${s.passRate}% pass rate · ${formatDuration(s.duration)}`,
+    `${s.passed} passed · ${s.failed} failed · ${s.flaky} flaky · ${s.skipped} skipped · ${formatPassRate(s.passRate)} pass rate · ${formatDuration(s.duration)}`,
   ];
   if (d.gates) lines.push(`Quality gate: ${d.gates.passed ? 'passed' : 'failed'}`);
   if (failing.length) {

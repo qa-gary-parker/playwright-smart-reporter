@@ -6,12 +6,19 @@ import type {
   SmartReporterOptions,
   RunComparison,
   FailureCluster,
+  ClusterTracking,
+  ResolvedCluster,
   A11yResult,
   CausalTimeline,
   QualityGateResult,
+  CIInfo,
+  StabilityScore,
+  EnvironmentInsight,
+  RunEfficiency,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
-import { isFailedTest, isPassedTest, isSkippedTest } from '../utils/flakiness';
+import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
+import { detectCIInfo } from '../utils/ci-detector';
 
 export function getReporterVersion(): string {
   try {
@@ -30,6 +37,7 @@ export interface JsonExportData {
     projectName?: string;
     // Phase 5: CI surface integrations — absolute directory that test `file` paths are relative to
     rootDir?: string;
+    ci?: CIInfo;
   };
   summary: {
     total: number;
@@ -38,11 +46,13 @@ export interface JsonExportData {
     skipped: number;
     flaky: number;
     duration: number;
-    passRate: number;
+    // Passed out of the tests that ran; null when every test was skipped.
+    passRate: number | null;
     stabilityGrade?: string;
   };
   tests: JsonTestEntry[];
   failureClusters?: JsonClusterEntry[];
+  resolvedClusters?: ResolvedCluster[];
   comparison?: RunComparison;
   history?: {
     runCount: number;
@@ -56,6 +66,10 @@ export interface JsonExportData {
     summary: CoverageSummary;
     files: Array<CoverageSummary & { path: string }>;
   };
+  // Phase 31: CI efficiency
+  efficiency?: RunEfficiency;
+  // Phase 32: failures that occur in one project, browser or worker slot only
+  environmentInsights?: EnvironmentInsight[];
 }
 
 export interface JsonTestEntry {
@@ -68,11 +82,15 @@ export interface JsonTestEntry {
   retry: number;
   outcome?: string;
   flakinessScore?: number;
+  flakinessStatus?: TestResultData['flakinessStatus'];
+  flakinessRuns?: number;
+  flakinessInterval?: [number, number];
   stabilityScore?: {
     overall: number;
     grade: string;
   };
   performanceTrend?: string;
+  performanceMetrics?: TestResultData['performanceMetrics'];
   tags?: string[];
   suite?: string;
   browser?: string;
@@ -88,14 +106,46 @@ export interface JsonTestEntry {
   line?: number;
   column?: number;
   errorLocation?: TestResultData['errorLocation'];
+  commits?: TestResultData['commits'];
 }
 
-interface JsonClusterEntry {
+/** A test read back from the JSON export, with the fields the quality gates use. */
+export function toTestResultData(entry: JsonTestEntry): TestResultData {
+  return {
+    testId: entry.testId,
+    title: entry.title,
+    file: entry.file,
+    status: entry.status as TestResultData['status'],
+    duration: entry.duration,
+    error: entry.error,
+    retry: entry.retry,
+    outcome: entry.outcome as TestResultData['outcome'],
+    flakinessScore: entry.flakinessScore,
+    stabilityScore: entry.stabilityScore && {
+      overall: entry.stabilityScore.overall,
+      flakiness: 0,
+      performance: 0,
+      reliability: 0,
+      grade: entry.stabilityScore.grade as StabilityScore['grade'],
+      needsAttention: false,
+    },
+    steps: [],
+    history: [],
+    a11y: entry.a11y,
+    tags: entry.tags,
+    project: entry.project,
+    owners: entry.owners,
+    performanceMetrics: entry.performanceMetrics,
+  };
+}
+
+export interface JsonClusterEntry {
   id: string;
   errorType: string;
   count: number;
   testIds: string[];
   aiSuggestion?: string;
+  tracking?: ClusterTracking;
 }
 
 export function exportJsonData(
@@ -110,6 +160,9 @@ export function exportJsonData(
   qualityGateResult?: QualityGateResult,
   rootDir?: string,
   coverage?: ReportCoverage,
+  resolvedClusters?: ResolvedCluster[],
+  efficiency?: RunEfficiency,
+  environmentInsights?: EnvironmentInsight[],
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -119,21 +172,8 @@ export function exportJsonData(
   const filename = `${basename ?? 'smart-report'}-data.json`;
   const outputPath = path.resolve(baseDir, filename);
 
-  const passed = results.filter(isPassedTest).length;
-  const failed = results.filter(isFailedTest).length;
-  const skipped = results.filter(isSkippedTest).length;
-  const flaky = results.filter(r => r.outcome === 'flaky').length;
+  const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   const duration = Date.now() - startTime;
-
-  // Calculate average stability grade
-  const gradedTests = results.filter(r => r.stabilityScore?.grade);
-  const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
-  const reverseGradeMap: Record<number, string> = { 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'F' };
-  let avgGrade: string | undefined;
-  if (gradedTests.length > 0) {
-    const sum = gradedTests.reduce((acc, r) => acc + (gradeMap[r.stabilityScore!.grade] || 0), 0);
-    avgGrade = reverseGradeMap[Math.round(sum / gradedTests.length)] || 'C';
-  }
 
   const tests: JsonTestEntry[] = results.map(r => ({
     testId: r.testId,
@@ -145,11 +185,15 @@ export function exportJsonData(
     retry: r.retry,
     outcome: r.outcome,
     flakinessScore: r.flakinessScore,
+    flakinessStatus: r.flakinessStatus,
+    flakinessRuns: r.flakinessRuns,
+    flakinessInterval: r.flakinessInterval,
     stabilityScore: r.stabilityScore ? {
       overall: r.stabilityScore.overall,
       grade: r.stabilityScore.grade,
     } : undefined,
     performanceTrend: r.performanceTrend,
+    performanceMetrics: r.performanceMetrics,
     tags: r.tags,
     suite: r.suite,
     browser: r.browser,
@@ -162,6 +206,7 @@ export function exportJsonData(
     line: r.line,
     column: r.column,
     errorLocation: r.errorLocation,
+    commits: r.commits,
   }));
 
   const clusters: JsonClusterEntry[] | undefined = failureClusters?.map(c => ({
@@ -170,6 +215,7 @@ export function exportJsonData(
     count: c.count,
     testIds: c.tests.map(t => t.testId),
     aiSuggestion: c.aiSuggestion,
+    tracking: c.tracking,
   }));
 
   const data: JsonExportData = {
@@ -178,19 +224,21 @@ export function exportJsonData(
       reporterVersion: getReporterVersion(),
       projectName: options.projectName,
       rootDir,
+      ci: detectCIInfo(),
     },
     summary: {
-      total: results.length,
+      total,
       passed,
       failed,
       skipped,
       flaky,
       duration,
-      passRate: results.length > 0 ? Math.round((passed / results.length) * 100) : 0,
-      stabilityGrade: avgGrade,
+      passRate,
+      stabilityGrade: runStabilityGrade(results),
     },
     tests,
     failureClusters: clusters,
+    resolvedClusters,
     comparison,
     history: {
       runCount: history.runs.length,
@@ -202,6 +250,8 @@ export function exportJsonData(
       summary: coverage.summary,
       files: coverage.files.map(({ path, lines, functions, branches }) => ({ path, lines, functions, branches })),
     },
+    efficiency,
+    environmentInsights,
   };
 
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));

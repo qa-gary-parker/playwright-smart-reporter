@@ -1,7 +1,11 @@
-import type { TestResultData, TestHistoryEntry, PerformanceMetrics } from '../types';
+import type { TestResultData, TestHistoryEntry, PerformanceMetrics, StepTrend } from '../types';
+import { MIN_SAMPLE_RUNS, median } from '../utils/stats';
+import { stepDurationsOf } from './causal-timeline';
 
 // A change also has to be this many ms, so jitter in short tests is not a trend.
 export const MIN_DURATION_CHANGE_MS = 250;
+// Steps are shorter than tests; 100ms is also the flake forecast's floor for duration drift.
+const MIN_STEP_CHANGE_MS = 100;
 
 /**
  * Analyzes test performance trends and regressions
@@ -27,22 +31,22 @@ export class PerformanceAnalyzer {
       return;
     }
 
-    // Filter out skipped runs for performance calculation
-    const relevantHistory = history.filter(e => !e.skipped);
+    // A failed run times the failure, not the test, so only passing runs form the baseline.
+    const relevantHistory = history.filter(e => e.passed && !e.skipped);
 
     if (relevantHistory.length === 0) {
       test.performanceTrend = '→ Baseline';
       return;
     }
 
-    // Calculate average duration from history (rounded to whole ms)
-    const avgDuration = Math.round(relevantHistory.reduce((sum, e) => sum + e.duration, 0) / relevantHistory.length);
-    // A 0ms average has no percentage change to report.
-    if (avgDuration === 0) {
+    // The median keeps one slow outlier from moving the baseline (rounded to whole ms).
+    const baseline = Math.round(median(relevantHistory.map(e => e.duration)));
+    // A 0ms baseline has no percentage change to report.
+    if (baseline === 0) {
       test.performanceTrend = '→ Baseline';
       return;
     }
-    test.averageDuration = avgDuration;
+    test.averageDuration = baseline;
 
     // A failed run's duration is mostly time spent waiting on the failure, not a speed change.
     if (test.status !== 'passed') {
@@ -50,11 +54,36 @@ export class PerformanceAnalyzer {
       return;
     }
 
+    // MIN_SAMPLE_RUNS counts this run, so history needs one passing run fewer.
+    if (relevantHistory.length < MIN_SAMPLE_RUNS - 1) {
+      test.performanceTrend = '→ Insufficient history';
+      return;
+    }
+
     // Calculate performance trend
-    test.performanceTrend = this.getPerformanceTrend(test.duration, avgDuration);
+    test.performanceTrend = this.getPerformanceTrend(test.duration, baseline);
 
     // Add detailed performance metrics
-    test.performanceMetrics = this.calculateMetrics(test.duration, avgDuration);
+    test.performanceMetrics = this.calculateMetrics(test.duration, baseline);
+
+    const stepTrends = this.slowerSteps(test, relevantHistory);
+    if (stepTrends.length > 0) test.stepTrends = stepTrends;
+  }
+
+  /**
+   * This run's test.step titles that took longer than the median of the same step in passing
+   * runs, by more than the threshold and at least MIN_STEP_CHANGE_MS.
+   */
+  private slowerSteps(test: TestResultData, passing: TestHistoryEntry[]): StepTrend[] {
+    const trends: StepTrend[] = [];
+    for (const [title, current] of Object.entries(stepDurationsOf(test.steps) ?? {})) {
+      const samples = passing.flatMap(e => e.stepDurations?.[title] ?? []);
+      if (samples.length < MIN_SAMPLE_RUNS - 1) continue;
+      const baseline = median(samples);
+      if (baseline === 0 || (current - baseline) / baseline <= this.performanceThreshold || current - baseline < MIN_STEP_CHANGE_MS) continue;
+      trends.push({ title, median: Math.round(baseline), current, ratio: Math.round((current / baseline) * 10) / 10 });
+    }
+    return trends;
   }
 
   /**
@@ -125,23 +154,5 @@ export class PerformanceAnalyzer {
     if (trend.startsWith('↑')) return 'slow';
     if (trend.startsWith('↓')) return 'fast';
     return 'stable';
-  }
-
-  /**
-   * Calculate smart thresholds based on test duration
-   * Shorter tests should have tighter thresholds
-   */
-  calculateSmartThreshold(duration: number): number {
-    // For very fast tests (<100ms), use tighter threshold
-    if (duration < 100) return 0.5; // 50% variance allowed
-
-    // For fast tests (<1s), use moderate threshold
-    if (duration < 1000) return 0.3; // 30% variance allowed
-
-    // For normal tests (<10s), use default threshold
-    if (duration < 10000) return this.performanceThreshold;
-
-    // For slow tests (>10s), use looser threshold
-    return 0.15; // 15% variance allowed
   }
 }

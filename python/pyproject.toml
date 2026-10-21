@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "playwright-smart-reporter-python"
-version = "1.0.8"
+version = "1.1.0"
 description = "Python bridge for Playwright Smart Reporter - AI-powered test analysis and reporting"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -60,7 +60,11 @@ include = ["playwright_smart_reporter_python*"]
 [tool.setuptools.package-data]
 playwright_smart_reporter_python = [
     "py.typed",
+    "package.json",
     "_bundled_dist/**/*.js",
+    "_bundled_dist/**/*.css",
+    "_bundled_dist/**/*.html",
+    "_bundled_dist/**/*.txt",
 ]
 
 [tool.pytest.ini_options]

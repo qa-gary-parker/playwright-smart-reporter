@@ -17,7 +17,7 @@ export function reachable(r: Route): Route {
   const d = data.value;
   if (!d) return r;
   const f = d.config.features;
-  if ((r.view === 'gallery' && !f.gallery) || (r.view === 'live' && !f.live) || (r.view === 'coverage' && !d.coverage) || (r.view === 'a11y' && !d.a11y)) {
+  if ((r.view === 'gallery' && !f.gallery) || (r.view === 'live' && !f.live) || (r.view === 'coverage' && !d.coverage) || (r.view === 'a11y' && !d.a11y) || (r.view === 'matrix' && !hasMultipleProjects(d.tests))) {
     return { view: 'insights' };
   }
   if (r.view === 'history' && ((r.tab === 'trends' && !f.trends) || (r.tab === 'compare' && !f.comparison))) return { ...r, tab: 'heatmap' };
@@ -60,7 +60,7 @@ export const runTests = computed<ReportTest[]>(() => {
   if (!snapshot) return data.value.tests;
   return Object.values(snapshot.tests).map((s) => ({
     ...s,
-    outcome: s.status === 'failed' || s.status === 'timedOut' ? ('unexpected' as const) : ('expected' as const),
+    outcome: s.status === 'failed' || s.status === 'timedOut' ? ('unexpected' as const) : s.status === 'skipped' || s.status === 'interrupted' ? ('skipped' as const) : ('expected' as const),
     history: [],
     signals: [],
   }));

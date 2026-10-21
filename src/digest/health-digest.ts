@@ -1,4 +1,6 @@
 import type { TestHistory, RunSummary, TestHistoryEntry, DigestOptions } from '../types';
+import { FlakinessAnalyzer } from '../analyzers/flakiness-analyzer';
+import { median } from '../utils/stats';
 
 export interface DigestData {
   period: string;
@@ -6,7 +8,7 @@ export interface DigestData {
   endDate: string;
   runsAnalyzed: number;
   passRateTrend: { direction: 'up' | 'down' | 'stable'; from: number; to: number } | null;
-  newFlakyTests: Array<{ testId: string; flakinessScore: number }>;
+  newFlakyTests: Array<{ testId: string; flakinessScore: number; runs: number }>;
   recoveredTests: Array<{ testId: string; stableForRuns: number }>;
   performanceTrends: Array<{ testId: string; percentChange: number }>;
   summary: string;
@@ -23,6 +25,8 @@ const PERFORMANCE_THRESHOLD = 20;
 const MIN_STABLE_RUNS = 3;
 
 export class HealthDigest {
+  private flakiness = new FlakinessAnalyzer();
+
   analyze(history: TestHistory, options: DigestOptions): DigestData {
     const now = Date.now();
     const periodMs = PERIOD_MS[options.period] ?? PERIOD_MS.weekly;
@@ -49,7 +53,9 @@ export class HealthDigest {
       };
     }
 
-    const passRateTrend = this.calculatePassRateTrend(inPeriod);
+    // Runs where every test was skipped have no pass rate to trend.
+    const rated = inPeriod.filter((s): s is RunSummary & { passRate: number } => s.passRate !== null);
+    const passRateTrend = rated.length > 0 ? this.calculatePassRateTrend(rated) : null;
     const newFlakyTests = this.findNewFlakyTests(history.tests, periodStart);
     const recoveredTests = this.findRecoveredTests(history.tests, periodStart);
     const performanceTrends = this.findPerformanceTrends(history.tests, periodStart);
@@ -86,7 +92,7 @@ export class HealthDigest {
       lines.push('None');
     } else {
       for (const t of data.newFlakyTests) {
-        lines.push(`- \`${t.testId}\` (flakiness: ${t.flakinessScore.toFixed(2)})`);
+        lines.push(`- \`${t.testId}\` (flakiness: ${t.flakinessScore.toFixed(2)}, ${t.runs} runs)`);
       }
     }
     lines.push('');
@@ -142,7 +148,7 @@ export class HealthDigest {
       lines.push('None');
     } else {
       for (const t of data.newFlakyTests) {
-        lines.push(`- ${t.testId} (flakiness: ${t.flakinessScore.toFixed(2)})`);
+        lines.push(`- ${t.testId} (flakiness: ${t.flakinessScore.toFixed(2)}, ${t.runs} runs)`);
       }
     }
     lines.push('');
@@ -185,7 +191,7 @@ export class HealthDigest {
   }
 
   private calculatePassRateTrend(
-    summaries: RunSummary[],
+    summaries: Array<RunSummary & { passRate: number }>,
   ): { direction: 'up' | 'down' | 'stable'; from: number; to: number } {
     const first = summaries[0];
     const last = summaries[summaries.length - 1];
@@ -206,8 +212,8 @@ export class HealthDigest {
   private findNewFlakyTests(
     tests: Record<string, TestHistoryEntry[]>,
     periodStart: number,
-  ): Array<{ testId: string; flakinessScore: number }> {
-    const result: Array<{ testId: string; flakinessScore: number }> = [];
+  ): Array<{ testId: string; flakinessScore: number; runs: number }> {
+    const result: Array<{ testId: string; flakinessScore: number; runs: number }> = [];
 
     for (const [testId, entries] of Object.entries(tests)) {
       const inPeriod = entries.filter(
@@ -219,21 +225,12 @@ export class HealthDigest {
 
       if (inPeriod.length === 0) continue;
 
-      const currentScore = inPeriod.filter(e => !e.passed).length / inPeriod.length;
-      // Flaky requires mixed results — a test failing every run in the period
-      // is consistently failing, not newly flaky.
-      if (currentScore < FLAKY_THRESHOLD || currentScore >= 1) continue;
+      // The report's classification: a test that fails every run, broke, or was fixed is not flaky.
+      const current = this.flakiness.classify(inPeriod);
+      if (current.status !== 'flaky') continue;
+      if (beforePeriod.length > 0 && this.flakiness.classify(beforePeriod).status === 'flaky') continue; // Already flaky, not new
 
-      // Check if was already flaky before the period
-      if (beforePeriod.length > 0) {
-        const previousScore = beforePeriod.filter(e => !e.passed).length / beforePeriod.length;
-        if (previousScore >= FLAKY_THRESHOLD) continue; // Already flaky, not new
-      }
-
-      result.push({
-        testId,
-        flakinessScore: Math.round(currentScore * 100) / 100,
-      });
+      result.push({ testId, flakinessScore: current.score, runs: current.runs });
     }
 
     return result;
@@ -281,23 +278,19 @@ export class HealthDigest {
     const result: Array<{ testId: string; percentChange: number }> = [];
 
     for (const [testId, entries] of Object.entries(tests)) {
-      const inPeriod = entries.filter(
-        e => !e.skipped && new Date(e.timestamp).getTime() >= periodStart,
-      );
-      const beforePeriod = entries.filter(
-        e => !e.skipped && new Date(e.timestamp).getTime() < periodStart,
-      );
+      // As in PerformanceAnalyzer: a failed run times the failure, and the median ignores one slow pass.
+      const passed = entries.filter(e => e.passed && !e.skipped);
+      const inPeriod = passed.filter(e => new Date(e.timestamp).getTime() >= periodStart).map(e => e.duration);
+      const beforePeriod = passed.filter(e => new Date(e.timestamp).getTime() < periodStart).map(e => e.duration);
 
       if (inPeriod.length === 0 || beforePeriod.length === 0) continue;
 
-      const avgBefore =
-        beforePeriod.reduce((sum, e) => sum + e.duration, 0) / beforePeriod.length;
-      const avgInPeriod =
-        inPeriod.reduce((sum, e) => sum + e.duration, 0) / inPeriod.length;
+      const medianBefore = median(beforePeriod);
+      const medianInPeriod = median(inPeriod);
 
-      if (avgBefore === 0) continue;
+      if (medianBefore === 0) continue;
 
-      const percentChange = ((avgInPeriod - avgBefore) / avgBefore) * 100;
+      const percentChange = ((medianInPeriod - medianBefore) / medianBefore) * 100;
 
       if (percentChange > PERFORMANCE_THRESHOLD) {
         result.push({

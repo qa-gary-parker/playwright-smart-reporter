@@ -37,6 +37,7 @@ export interface NotificationCondition {
   maxPassRate?: number;
   tags?: string[];
   stabilityGradeDrop?: boolean;
+  newClusters?: boolean;  // a failed test is in a cluster that no run in history had
 }
 
 export interface NotificationConfig {
@@ -47,6 +48,8 @@ export interface NotificationConfig {
   // Phase 9: Ownership and routing
   // Fire only for failures owned by one of these owners (CODEOWNERS handles or git author emails)
   owners?: string[];
+  // Slack and Teams only: also send quarantine changes, scoped by owners
+  quarantineEvents?: boolean;
 }
 
 // ============================================================================
@@ -54,7 +57,8 @@ export interface NotificationConfig {
 // ============================================================================
 
 export interface ThresholdConfig {
-  // Flakiness thresholds (0-1 scale, where 0 = never fails, 1 = always fails)
+  // Flakiness status thresholds on instability, 0-1: changes between pass and fail after the first,
+  // plus passes on a retry, per run
   flakinessStable?: number;        // Default: 0.1 (below this = stable)
   flakinessUnstable?: number;      // Default: 0.3 (below this = unstable, above = flaky)
 
@@ -83,14 +87,14 @@ export interface SmartReporterOptions {
   slackWebhook?: string;
   teamsWebhook?: string;
 
-  // NEW: Feature flags (all default to true)
+  // NEW: Feature flags (default to true unless noted)
   enableRetryAnalysis?: boolean;
   enableFailureClustering?: boolean;
   enableStabilityScore?: boolean;
   enableGalleryView?: boolean;
   enableComparison?: boolean;
-  enableAIRecommendations?: boolean;
-  enableAISuiteHealth?: boolean;   // Default: true (AI health summary in Overview tab, uses AI quota)
+  enableAIRecommendations?: boolean; // Default: false (sends failure data to the AI provider)
+  enableAISuiteHealth?: boolean;   // Default: true, needs enableAIRecommendations (AI health summary in Insights, uses AI quota)
   enableTrendsView?: boolean;
   enableTraceViewer?: boolean; // Enable "View trace" links
   enableHistoryDrilldown?: boolean; // Default: false (stores per-run snapshots for dot-click drilldown)
@@ -104,6 +108,9 @@ export interface SmartReporterOptions {
 
   // NEW: Comparison
   baselineRunId?: string;          // Compare against specific run
+  // Issue #78: compare with the latest run on a branch. 'target' is the branch a pull request merges into.
+  // filterHistory: flakiness and performance use only that branch's runs too (default: false)
+  baseline?: { branch: string; filterHistory?: boolean };
 
   // CSP Compliance - Use system fonts and avoid base64 data URIs
   cspSafe?: boolean;               // Default: false (for backwards compatibility)
@@ -185,6 +192,21 @@ export interface SmartReporterOptions {
   exportFailures?: boolean;        // Write redacted <name>-failures.json for coding agents (default: false)
   // Phase 5: CI surface integrations
   exportCtrf?: boolean;            // Write <name>-ctrf.json (Common Test Report Format) alongside HTML
+  // Mask secrets in test text before any report file is written (default: false). patterns adds regular expressions.
+  redact?: boolean | { patterns?: Array<string | RegExp> };
+  // Phase 31: CI price per minute; with it, the efficiency panel prices the retry waste (default: off)
+  ciCostPerMinute?: number;
+  // Phase 36: write <name>-metrics.prom (Prometheus text) and <name>-metrics.otlp.json (OTLP JSON) (default: false).
+  // push also sends one of them to an endpoint.
+  exportMetrics?: boolean | { push?: MetricsPushConfig };
+  // #73: list the files changed between the last pass and the first failure, from git in the local clone (default: false)
+  suspects?: boolean;
+}
+
+export interface MetricsPushConfig {
+  url: string;                      // e.g. a Pushgateway's /metrics/job/<job>, or an OTLP/HTTP receiver's /v1/metrics
+  format?: 'prometheus' | 'otlp';   // Default: 'prometheus'
+  headers?: Record<string, string>; // e.g. Authorization
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
@@ -211,6 +233,8 @@ export interface TestHistoryEntry {
 
   // Phase 4: Causal failure timeline
   stepDurations?: Record<string, number>;  // test.step title -> duration (ms), the slow-step baseline
+  clusterId?: string;  // the failure cluster of a failed test
+  retryWaste?: number;  // ms spent in the attempts Playwright retried; absent when it retried none
 }
 
 export interface RunSummary {
@@ -223,7 +247,8 @@ export interface RunSummary {
   flaky: number;
   slow: number;
   duration: number;
-  passRate: number;
+  // Passed out of the tests that ran; null when every test was skipped.
+  passRate: number | null;
   ciInfo?: CIInfo;  // NEW: CI metadata
   stabilityGrade?: StabilityScore['grade'];
 }
@@ -242,6 +267,14 @@ export interface TestHistory {
   runFiles?: Record<string, string>; // runId -> relative JSON snapshot path
   // Phase 7: runId -> testId -> forecast risk recorded that run (risk 0 omitted), pruned to maxHistoryRuns
   forecasts?: Record<string, Record<string, number>>;
+}
+
+// One run, or one shard of it, in `<history base>.runs/`. Written once; the history index is rebuilt from these.
+export interface HistoryRunFile {
+  version: 1;
+  summary: RunSummary;
+  tests: Record<string, TestHistoryEntry>;
+  forecasts?: Record<string, number>; // testId -> forecast risk
 }
 
 export interface TestResultSnapshot {
@@ -268,8 +301,12 @@ export interface RunSnapshotFile {
 export interface CIInfo {
   provider: string;  // 'github' | 'gitlab' | 'circleci' | 'jenkins' | 'azure'
   branch?: string;
-  commit?: string;
+  commit?: string;  // short form of sha, for display
   buildId?: string;
+  sha?: string;  // the full commit; for a pull request, its head where CI names it
+  repoUrl?: string;
+  prNumber?: number;
+  targetBranch?: string;  // the branch a pull request merges into
 }
 
 // ============================================================================
@@ -285,6 +322,18 @@ export interface StepData {
   // Phase 4: Causal failure timeline
   startTime?: number;  // ms offset from the attempt's start
   failed?: boolean;
+
+  // Steps are in pre-order. Both are absent on a top-level step.
+  parent?: number;     // index in the same list of the nearest enclosing step that is kept
+  depth?: number;      // number of kept steps that enclose this one
+}
+
+// A test.step that ran slower than the median of its passing runs in history
+export interface StepTrend {
+  title: string;
+  median: number;   // ms
+  current: number;  // ms, this run
+  ratio: number;    // current / median, 1 decimal
 }
 
 // Test annotation (beyond tags) - captures @slow, @fixme, custom annotations
@@ -299,7 +348,32 @@ export interface AttemptData {
   duration: number;
   error?: string;
   steps: StepData[];
+  // Where and when the attempt ran (Playwright's TestResult); absent for a test that never started
+  workerIndex?: number;
+  parallelIndex?: number;
+  startTime?: number;  // epoch ms
+  // Set on attempts before the final one of a flaky test; the final attempt's evidence is on the test itself.
+  attachments?: Pick<AttachmentData, 'screenshots' | 'videos' | 'traces'>;
+  tracePath?: string;
 }
+
+// Phase 34: what differs between the traces of a flaky test's failed attempt and its passing attempt
+export interface AttemptDiff {
+  failed: number;                   // retry of the first attempt that missed the expected status and has a trace (for test.fail(), one that passed)
+  passed: number;                   // retry of the last attempt that got the expected status
+  missingTrace?: number[];          // retries without a trace; network and console are then absent
+  network?: AttemptRequestDiff[];   // absent with enableNetworkLogs: false
+  console?: Array<{ level: string; text: string }>; // errors and warnings only the failed attempt logged
+}
+
+export interface AttemptRequestDiff {
+  method: string;
+  url: string;
+  failed?: number;                  // status in the failed attempt, -1 for no response; absent when that attempt did not send it
+  passed?: number;                  // status in the passing attempt; absent when that attempt did not send it
+}
+
+export type FlakinessStatus = 'stable' | 'unstable' | 'flaky' | 'failing' | 'insufficient-history';
 
 export interface TestResultData {
   testId: string;
@@ -319,8 +393,12 @@ export interface TestResultData {
   aiPrompt?: string;         // NEW: Playwright-style prompt sent to AI (no binaries)
   flakinessScore?: number;
   flakinessIndicator?: string;
+  flakinessStatus?: FlakinessStatus;
+  flakinessRuns?: number;    // Non-skipped runs behind the score and status, this run included
+  flakinessInterval?: [number, number]; // 95% Wilson interval of flakinessScore
   performanceTrend?: string;
   averageDuration?: number;
+  stepTrends?: StepTrend[];
   aiSuggestion?: string;
   steps: StepData[];
   screenshot?: string;
@@ -350,6 +428,7 @@ export interface TestResultData {
   performanceMetrics?: PerformanceMetrics;
   networkLogs?: NetworkLogData;        // NEW: Network logs from trace
   attempts?: AttemptData[];            // Every attempt in retry order, final attempt last
+  attemptDiff?: AttemptDiff;           // Flaky tests only
 
   // Phase 9: Ownership and routing
   owners?: string[];
@@ -358,6 +437,20 @@ export interface TestResultData {
   a11y?: A11yResult;
   // Phase 4: Causal failure timeline
   timeline?: CausalTimeline;           // Failed attempts only
+  commits?: CommitRange;               // #73: new failures only
+}
+
+// #73: where a failure started, from the CI info history saved: the newest run before it that passed, and its first failed run
+export interface CommitRange {
+  lastPassed?: CommitRef;     // absent when no run in history passed, or that run had no commit
+  firstFailed: CommitRef;
+  url?: string;               // GitHub or GitLab page of the range, or of the first failed commit
+  suspects?: string[];        // files changed in the range, with suspects: true; absent for a range of one commit, or when git could not tell
+}
+
+export interface CommitRef {
+  commit: string;             // short, for display
+  sha?: string;
 }
 
 // NEW: Retry Analysis
@@ -376,6 +469,23 @@ export interface FailureCluster {
   count: number;              // Number of tests in this cluster
   tests: TestResultData[];
   aiSuggestion?: string;      // Single suggestion for the cluster
+  tracking?: ClusterTracking;
+}
+
+// How a cluster of this run relates to the runs in history. A cluster went away in a run when one of its tests passed and none failed with it.
+export interface ClusterTracking {
+  status: 'new' | 'recurring' | 'regressed'; // regressed: it went away in a run after it was last seen
+  runs: number;               // runs it failed in since it last went away, this run included; 1 unless recurring
+  since: string;              // start of the first of those runs
+  sinceCommit?: string;       // short commit of that run, when CI gave one
+  trend: number[];            // tests in the cluster per run in history, oldest first, this run last
+  commits?: CommitRange;      // absent when the first of those runs has no commit
+}
+
+// A cluster of the baseline run that went away this run
+export interface ResolvedCluster {
+  id: string;
+  testIds: string[];          // its tests in the baseline run that passed this run
 }
 
 // NEW: Stability Scoring
@@ -429,6 +539,8 @@ export interface ComparisonChanges {
   newTests: TestResultData[];
   regressions: TestResultData[];  // Got slower
   improvements: TestResultData[]; // Got faster
+  notInBaseline: TestResultData[]; // Has history, but did not run in the baseline run
+  newFlaky: TestResultData[];      // Passed on a retry now, and on the first attempt in the baseline run
 }
 
 // NEW: AI Recommendations
@@ -491,6 +603,33 @@ export interface NetworkLogData {
 }
 
 // ============================================================================
+// Phase 31: CI efficiency (all times in ms)
+// ============================================================================
+
+export interface RunEfficiency {
+  retryWaste: number;                                         // time in the attempts Playwright retried
+  retryWasteByTest: Array<{ testId: string; waste: number }>; // most first
+  retryWasteTrend: Array<{ runId: string; retryWaste: number | null }>; // null: history cannot tell
+  testTime: number;                                           // every attempt of every test
+  // The slowest percent of the tests that ran, by their time over every attempt, and their share of testTime
+  longTail: Array<{ percent: number; tests: number; time: number; share: number; testIds: string[] }>;
+  setupGap?: number;                                          // run start to the first attempt start
+  shard?: { current: number; total: number; wallTime: number };
+  // Worker slots (parallelIndex) from the first attempt start to the last attempt end
+  workers?: { span: number; utilisation: number; slots: Array<{ slot: number; attempts: number; busy: number; idle: number }> };
+  merged?: true;                                              // merge-reports: shard and workers are unknown
+  cost?: { perMinute: number; retryWaste: number };           // ciCostPerMinute × minutes of retry waste
+}
+
+// Phase 32: a failure pattern that points at a project, browser or worker slot
+export interface EnvironmentInsight {
+  dimension: 'project' | 'browser' | 'worker';
+  value: string;
+  testIds: string[];  // the failed results
+  text: string;       // e.g. "1 test fails on firefox only"
+}
+
+// ============================================================================
 // Internal Types
 // ============================================================================
 
@@ -502,7 +641,7 @@ export interface SuiteStats {
   flaky: number;
   slow: number;
   needsRetry: number;
-  passRate: number;
+  passRate: number | null;
   averageStability: number;
 }
 
@@ -523,6 +662,31 @@ export interface QualityGateConfig {
   maxA11ySerious?: number;
   // Phase 6: Code coverage (minimum line coverage percentage)
   minCoverage?: number;
+  // #70: max % the tests run longer than the median of their passing runs, summed over the tests that have one
+  maxDurationRegression?: number;
+  // #70: fail on a test that passed on a retry now and on the first attempt in the baseline run
+  noNewFlaky?: boolean;
+  // #74: fail on a failure cluster that no run in history had
+  noNewClusters?: boolean;
+  // #77: fail on a quarantine entry past its expiresAt when the quarantine file was written
+  noExpiredQuarantine?: boolean;
+
+  // #70: rules with a scope or a severity, evaluated after the rules above
+  rules?: QualityGateRule[];
+}
+
+/** One rule key per entry. A test is in scope when it matches every scope key, and any value of a key. */
+export type QualityGateRule = Omit<QualityGateConfig, 'rules'> & {
+  id?: string;                  // Names the rule in the output; unique
+  scope?: QualityGateScope;
+  severity?: 'fail' | 'warn';   // Default: 'fail'. A breached 'warn' rule is reported but passes the gate.
+};
+
+export interface QualityGateScope {
+  tag?: string | string[];
+  project?: string | string[];
+  file?: string | string[];     // CODEOWNERS-style pattern on the test file path, e.g. 'checkout/**'
+  owner?: string | string[];
 }
 
 export interface QualityGateRuleResult {
@@ -531,6 +695,11 @@ export interface QualityGateRuleResult {
   actual: string;
   threshold: string;
   skipped?: boolean;
+  skipReason?: string;
+  // Set from a `rules` entry
+  id?: string;
+  scope?: string;
+  severity?: 'warn';
 }
 
 export interface QualityGateResult {
@@ -547,14 +716,28 @@ export interface QuarantineConfig {
   threshold?: number;
   maxQuarantined?: number;
   outputFile?: string;
+  manualFile?: string;        // Default: .smart-quarantine.manual.json, resolved like outputFile
+  expiresAfterDays?: number;  // Sets expiresAt this many days after quarantinedAt, unless the manual file gives one
 }
 
 export interface QuarantineEntry {
   testId: string;
   title: string;
   file: string;
-  flakinessScore: number;
-  quarantinedAt: string;
+  flakinessScore?: number;  // Missing for a manual or annotation entry of a test without a score
+  runs?: number;            // Runs behind flakinessScore; missing in files written before 4.0.0
+  quarantinedAt: string;    // When the test entered quarantine; kept while it stays
+  // The fields below are missing in files written before 4.0.0
+  source?: 'auto' | 'manual' | 'annotation';
+  owners?: string[];
+  ticket?: string;
+  reason?: string;
+  expiresAt?: string;
+}
+
+export interface QuarantineEvent {
+  kind: 'quarantined' | 'expired' | 'released';
+  entry: QuarantineEntry;
 }
 
 export interface QuarantineFile {

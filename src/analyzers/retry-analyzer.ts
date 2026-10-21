@@ -77,7 +77,7 @@ export class RetryAnalyzer {
     }
 
     if (retry.passedOnRetry >= 0) {
-      return `Passed on retry ${retry.passedOnRetry + 1}/${retry.totalRetries + 1}`;
+      return `Passed on attempt ${retry.passedOnRetry + 1} of ${retry.totalRetries + 1}`;
     }
 
     return `Failed after ${retry.totalRetries + 1} attempts`;

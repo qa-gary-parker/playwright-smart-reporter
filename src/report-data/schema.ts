@@ -2,17 +2,21 @@ import type {
   A11ySummary,
   BrandingConfig,
   CIInfo,
+  ClusterTracking,
+  EnvironmentInsight,
   FlakeForecast,
   ForecastSummary,
   QualityGateResult,
   QuarantineEntry,
+  ResolvedCluster,
+  RunEfficiency,
   RunSnapshotFile,
   RunSummary,
   TestResultData,
   ThemeConfig,
 } from '../types';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export type Signal = 'new-failure' | 'regression' | 'flaky' | 'quarantined' | 'slow' | 'fixed' | 'new';
 
@@ -28,6 +32,7 @@ export interface ReportCluster {
   errorType: string;
   testIds: string[];
   aiSuggestion?: string;
+  tracking?: ClusterTracking;
 }
 
 export interface ReportSummary {
@@ -38,12 +43,13 @@ export interface ReportSummary {
   flaky: number;
   slow: number;
   newTests: number;
-  passRate: number;
+  // Passed out of the tests that ran; null when every test was skipped.
+  passRate: number | null;
   duration: number;
   grades: Record<'A' | 'B' | 'C' | 'D' | 'F', number>;
 }
 
-export type ComparisonKey = 'newFailures' | 'fixedTests' | 'newTests' | 'regressions' | 'improvements';
+export type ComparisonKey = 'newFailures' | 'fixedTests' | 'newTests' | 'regressions' | 'improvements' | 'notInBaseline';
 
 export interface ReportComparison {
   baselineRun: RunSummary;
@@ -72,6 +78,7 @@ export interface ReportData {
     ci?: CIInfo;
     projectName?: string;
     outputBasename: string;
+    shard?: { current: number; total: number };  // Playwright's config.shard; absent unsharded and under merge-reports
   };
   config: {
     theme?: ThemeConfig;
@@ -83,6 +90,8 @@ export interface ReportData {
   summary: ReportSummary;
   tests: ReportTest[];
   clusters: ReportCluster[];
+  // Clustering on and a baseline run only
+  resolvedClusters?: ResolvedCluster[];
   trends: RunSummary[];
   comparison?: ReportComparison;
   historySnapshots?: Record<string, RunSnapshotFile>;
@@ -100,11 +109,15 @@ export interface ReportData {
   // Phase 7: Flake forecasting
   forecastSummary?: ForecastSummary;
   // Phase 9: Ownership and routing (per-test owners/ownerSource come from TestResultData)
-  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number }> };
+  ownership?: { owners: Array<{ owner: string; total: number; failed: number; flaky: number; passRate: number | null }> };
   // Phase 10: Accessibility (per-test results ride on ReportTest.a11y)
   a11y?: A11ySummary;
   // Phase 6: Code coverage
   coverage?: ReportCoverage;
+  // Phase 31: CI efficiency (absent in reports written before 4.0.0)
+  efficiency?: RunEfficiency;
+  // Phase 32: failures that occur in one project, browser or worker slot only
+  environmentInsights?: EnvironmentInsight[];
 }
 
 // Percentages follow Istanbul: floored to 2 decimals, 100 when total is 0.

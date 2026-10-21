@@ -3,7 +3,7 @@ import { NotificationManager } from './notification-manager';
 import { SlackNotifier } from './slack-notifier';
 import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
-import type { TestResultData, NotificationConfig, RunComparison, RunSummary, StabilityScore } from '../types';
+import type { TestResultData, NotificationConfig, QuarantineEvent, RunComparison, RunSummary, StabilityScore, ClusterTracking } from '../types';
 
 const NOW = 1_700_000_000_000;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -97,6 +97,20 @@ describe('NotificationManager', () => {
       expect(urls()).toEqual(['https://hooks.slack.com/50']);
     });
 
+    it('maxPassRate: does not notify when every test was skipped, since there is no pass rate', async () => {
+      const skipped = (testId: string) => createTestResult({ testId, status: 'skipped', outcome: 'skipped' });
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/max-50' }, conditions: { maxPassRate: 50 } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/all' } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/template' }, template: 'pass rate {{passRate}}' },
+      ]).notify([skipped('1'), skipped('2')], NOW);
+
+      expect(requests()).toEqual([
+        slackPost('https://hooks.slack.com/all', 'Test Run: 0/2 passed (n/a) — 0 failures'),
+        slackPost('https://hooks.slack.com/template', 'pass rate n/a'),
+      ]);
+    });
+
     it('tags: only notifies when tagged tests fail', async () => {
       await new NotificationManager([
         { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/test' }, conditions: { tags: ['@critical'] } },
@@ -119,7 +133,7 @@ describe('NotificationManager', () => {
     const comparedTo = (stabilityGrade?: StabilityScore['grade']): RunComparison => ({
       baselineRun: createRunSummary({ passRate: 100, stabilityGrade }),
       currentRun: createRunSummary({ passRate: 100 }),
-      changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [] },
+      changes: { newFailures: [], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [], newFlaky: [] },
     });
     const dropOrAll = () => new NotificationManager([
       { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/drop' }, conditions: { stabilityGradeDrop: true } },
@@ -165,6 +179,25 @@ describe('NotificationManager', () => {
     });
   });
 
+  describe('newClusters', () => {
+    const inCluster = (title: string, status: ClusterTracking['status'], owners?: string[]) => failing({
+      testId: title, title, owners, failureCluster: { id: title, errorType: title, count: 1, tests: [], tracking: { status, runs: 1, since: '', trend: [1] } },
+    });
+
+    it('notifies only when a failed test is in a cluster that no run in history had, among the owned tests with owners', async () => {
+      const manager = new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/new' }, conditions: { newClusters: true }, template: '{{failedTests}}' },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/pay' }, conditions: { newClusters: true }, template: '{{failedTests}}', owners: ['@pay'] },
+      ]);
+
+      await manager.notify([inCluster('recurs', 'recurring'), inCluster('came back', 'regressed')], NOW);
+      await manager.notify([inCluster('recurs', 'recurring', ['@pay']), inCluster('first time', 'new', ['@search'])], NOW);
+      await manager.notify([failing({ title: 'not clustered' })], NOW);
+
+      expect(requests().map(r => [r.url, r.body.text])).toEqual([['https://hooks.slack.com/new', 'recurs, first time']]);
+    });
+  });
+
   describe('template rendering', () => {
     it('renders template with all variables', async () => {
       await new NotificationManager([{
@@ -180,7 +213,7 @@ describe('NotificationManager', () => {
 
       expect(requests()).toEqual([slackPost(
         'https://hooks.slack.com/test',
-        '4 tests, 2 passed, 1 failed, 1 skipped, 1 flaky, 50% pass rate, 4s, grade B, failures: Failing Test',
+        '4 tests, 2 passed, 1 failed, 1 skipped, 1 flaky, 67% pass rate, 4s, grade B, failures: Failing Test',
       )]);
     });
   });
@@ -259,7 +292,7 @@ describe('NotificationManager', () => {
     it('sets severity from the failure share: >50% critical, >20% error, else warning', async () => {
       const notifier = new PagerDutyNotifier('rk');
 
-      for (const failures of [6, 5, 3, 2]) await notifier.trigger('s', failures, 10);
+      for (const failures of [6, 5, 3, 2]) await notifier.trigger('s', { failed: failures, total: 10, passRate: 100 - failures * 10 });
 
       expect(requests().map(r => [r.body.payload.custom_details.failures, r.body.payload.severity])).toEqual([
         [6, 'critical'], [5, 'error'], [3, 'error'], [2, 'warning'],
@@ -270,8 +303,8 @@ describe('NotificationManager', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       fetchMock.mockResolvedValueOnce(new Response('Invalid routing key', { status: 400 }));
 
-      await new PagerDutyNotifier('').trigger('s', 1, 1);
-      await new PagerDutyNotifier('bad').trigger('s', 1, 1);
+      await new PagerDutyNotifier('').trigger('s', { failed: 1, total: 1, passRate: 0 });
+      await new PagerDutyNotifier('bad').trigger('s', { failed: 1, total: 1, passRate: 0 });
 
       expect(urls()).toEqual(['https://events.pagerduty.com/v2/enqueue']);
       expect(warn.mock.calls).toEqual([['PagerDuty alert failed: 400 Invalid routing key']]);
@@ -477,6 +510,33 @@ describe('NotificationManager', () => {
       const sent = await sentBySlack([{ channel: 'slack', config: { webhookUrl: 'https://hooks/all' }, template: '{{failedTests}}' }]);
 
       expect(sent).toEqual([['https://hooks/all', 'checkout fails, search fails, unowned fails']]);
+    });
+  });
+
+  describe('quarantine events', () => {
+    const at = '2026-10-01T00:00:00.000Z';
+    const events: QuarantineEvent[] = [
+      { kind: 'quarantined', entry: { testId: 'a', title: 'pays by card', file: 'checkout.spec.ts', quarantinedAt: at, owners: ['@org/payments'], ticket: 'PAY-12' } },
+      { kind: 'expired', entry: { testId: 'b', title: 'searches', file: 'search.spec.ts', quarantinedAt: at, expiresAt: '2026-10-15T00:00:00.000Z', owners: ['@org/search'] } },
+      { kind: 'released', entry: { testId: 'c', title: 'logs in', file: 'login.spec.ts', quarantinedAt: at } },
+    ];
+
+    it('sends the events each opted-in Slack or Teams channel owns, in one message', async () => {
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/payments' }, owners: ['@Org/Payments'], quarantineEvents: true },
+        { channel: 'teams', config: { webhookUrl: 'https://hooks/all' }, quarantineEvents: true },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/not-opted-in' } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/nobody' }, owners: ['@org/nobody'], quarantineEvents: true },
+        { channel: 'webhook', config: { url: 'https://hooks/webhook' }, quarantineEvents: true },
+      ]).notifyQuarantine(events);
+
+      expect(requests().map(r => [r.url, r.body.text])).toEqual([
+        ['https://hooks/payments', 'Quarantine changes:\nquarantined: "pays by card" in checkout.spec.ts, PAY-12, @org/payments'],
+        ['https://hooks/all', 'Quarantine changes:\n' +
+          'quarantined: "pays by card" in checkout.spec.ts, PAY-12, @org/payments\n' +
+          'expired 2026-10-15T00:00:00.000Z: "searches" in search.spec.ts, @org/search\n' +
+          'released: "logs in" in login.spec.ts'],
+      ]);
     });
   });
 

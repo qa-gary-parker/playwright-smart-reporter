@@ -31,21 +31,23 @@ const SKIPPED = result({ testId: 's1', status: 'skipped', outcome: 'skipped' });
 describe('buildReportData', () => {
   it('counts outcomes the way the 2.x report did', () => {
     const data = buildReportData(input([FAILED, FLAKY, EXPECTED_FAIL, SKIPPED, result({ testId: 'p1' })]), 6_000);
-    expect(data.summary).toMatchObject({ total: 5, passed: 3, failed: 1, skipped: 1, flaky: 1, passRate: 60, duration: 5_000 });
+    // The skipped test is left out of the pass rate: 3 of 4.
+    expect(data.summary).toMatchObject({ total: 5, passed: 3, failed: 1, skipped: 1, flaky: 1, passRate: 75, duration: 5_000 });
     expect(data.meta.duration).toBe(5_000);
-    expect(data.schemaVersion).toBe(3);
+    expect(data.schemaVersion).toBe(4);
   });
 
   it('derives signals, cluster ids, and comparison ids', () => {
     const regressed = result({ testId: 'r1', performanceTrend: '↑ 40% slower', performanceMetrics: { averageDuration: 100, currentDuration: 140, percentChange: 40, absoluteChange: 40, threshold: 0.2, isRegression: true, isImprovement: false, severity: 'medium' } });
+    const notRunInBaseline = result({ testId: 'n1' });
     const data = buildReportData(
-      input([FAILED, FLAKY, regressed], {
+      input([FAILED, FLAKY, regressed, notRunInBaseline], {
         failureClusters: [{ id: 'c1', errorType: 'Timeout', count: 1, tests: [FAILED] }],
         quarantinedTestIds: new Set(['k1']),
         comparison: {
           baselineRun: { runId: 'b', timestamp: '', total: 3, passed: 3, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 1, passRate: 100 },
           currentRun: { runId: 'c', timestamp: '', total: 3, passed: 2, failed: 1, skipped: 0, flaky: 1, slow: 1, duration: 1, passRate: 66 },
-          changes: { newFailures: [FAILED], fixedTests: [], newTests: [], regressions: [regressed], improvements: [] },
+          changes: { newFailures: [FAILED], fixedTests: [], newTests: [], regressions: [regressed], improvements: [], notInBaseline: [notRunInBaseline], newFlaky: [] },
         },
       }),
       2_000,
@@ -55,9 +57,20 @@ describe('buildReportData', () => {
     expect(byId.f1.clusterId).toBe('c1');
     expect(byId.k1.signals).toEqual(['flaky', 'quarantined']);
     expect(byId.r1.signals).toEqual(['regression', 'slow']);
+    expect(byId.n1.signals).toEqual([]);
     expect(data.clusters).toEqual([{ id: 'c1', errorType: 'Timeout', testIds: ['f1'], aiSuggestion: undefined }]);
-    expect(data.comparison?.changes).toEqual({ newFailures: ['f1'], fixedTests: [], newTests: [], regressions: ['r1'], improvements: [] });
+    expect(data.comparison?.changes).toEqual({ newFailures: ['f1'], fixedTests: [], newTests: [], regressions: ['r1'], improvements: [], notInBaseline: ['n1'] });
     expect(data.config.features.comparison).toBe(true);
+  });
+
+  it('carries the tracking of each cluster and the clusters of the baseline run that went away', () => {
+    const tracking = { status: 'recurring' as const, runs: 2, since: '2026-10-01T12:00:00.000Z', sinceCommit: 'c1', trend: [1, 1] };
+    const data = buildReportData(input([FAILED], {
+      failureClusters: [{ id: 'c1', errorType: 'Timeout', count: 1, tests: [FAILED], tracking }],
+      resolvedClusters: [{ id: 'c0', testIds: ['p1'] }],
+    }));
+    expect(data.clusters).toEqual([{ id: 'c1', errorType: 'Timeout', testIds: ['f1'], tracking }]);
+    expect(data.resolvedClusters).toEqual([{ id: 'c0', testIds: ['p1'] }]);
   });
 
   it('drops the circular cluster back-reference and embedded trace data', () => {
@@ -76,17 +89,18 @@ describe('buildReportData', () => {
   });
 
   it('records which provider and model produced the AI output', () => {
-    const data = buildReportData(input([{ ...FAILED, aiSuggestion: 'Wait for the selector' }], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
+    const data = buildReportData(input([{ ...FAILED, aiSuggestion: 'Wait for the selector' }], { options: { enableAIRecommendations: true, ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
     expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined, provider: 'ollama', model: 'qwen2.5:7b' });
   });
 
   it('records AI switched off by the options, so the report can say so instead of "not configured"', () => {
+    expect(buildReportData(input([FAILED], { options: {} })).ai).toStrictEqual({ suiteHealthSummary: undefined, analysisOff: true, summaryOff: true });
     expect(buildReportData(input([FAILED], { options: { enableAIRecommendations: false } })).ai).toStrictEqual({ suiteHealthSummary: undefined, analysisOff: true, summaryOff: true });
-    expect(buildReportData(input([FAILED], { options: { enableAISuiteHealth: false } })).ai).toStrictEqual({ suiteHealthSummary: undefined, summaryOff: true });
+    expect(buildReportData(input([FAILED], { options: { enableAIRecommendations: true, enableAISuiteHealth: false } })).ai).toStrictEqual({ suiteHealthSummary: undefined, summaryOff: true });
   });
 
   it('leaves provider and model out when the report has no AI output', () => {
-    const data = buildReportData(input([FAILED], { options: { ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
+    const data = buildReportData(input([FAILED], { options: { enableAIRecommendations: true, ai: { provider: 'ollama', model: 'qwen2.5:7b' } } }));
     expect(data.ai).toStrictEqual({ suiteHealthSummary: undefined });
   });
 
@@ -112,6 +126,11 @@ describe('buildReportData', () => {
     const coverage = { summary: { lines: totals, functions: totals, branches: totals }, files: [] };
     expect(buildReportData(input([], { coverage })).coverage).toBe(coverage);
     expect(buildReportData(input([])).coverage).toBeUndefined();
+  });
+
+  it('records the shard the run covered', () => {
+    expect(buildReportData(input([], { shard: { current: 2, total: 3 } })).meta.shard).toEqual({ current: 2, total: 3 });
+    expect('shard' in buildReportData(input([])).meta).toBe(false);
   });
 
   it('adds the current run to the trend once', () => {

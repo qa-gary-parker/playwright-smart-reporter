@@ -1,14 +1,14 @@
 import type { ReportData } from '../../report-data/schema';
 import fixture from './report-fixture.json';
 import { summarizeA11y } from '../../analyzers/a11y-analyzer';
-import { SYNTHETIC, SYNTHETIC_COVERAGE } from './synthetic';
+import { SYNTHETIC, SYNTHETIC_CLUSTER, SYNTHETIC_COVERAGE } from './synthetic';
 
 const params = new URLSearchParams(location.search);
 const screen = params.get('screen') ?? 'failures';
 const data = JSON.parse(JSON.stringify(fixture)) as ReportData;
-const textCluster = data.clusters.find((c) => /toHaveText/.test(c.errorType));
-data.tests = [{ ...SYNTHETIC, clusterId: textCluster?.id }, ...data.tests];
-if (textCluster) textCluster.testIds = [SYNTHETIC.testId, ...textCluster.testIds];
+const syntheticCluster = { ...SYNTHETIC_CLUSTER, testIds: [...SYNTHETIC_CLUSTER.testIds] };
+data.tests = [{ ...SYNTHETIC, clusterId: syntheticCluster.id }, ...data.tests];
+data.clusters = [...data.clusters, syntheticCluster];
 data.a11y = summarizeA11y(data.tests);
 data.coverage = SYNTHETIC_COVERAGE;
 
@@ -22,6 +22,31 @@ if (screen === 'green') {
     }
   }
   data.clusters = [];
+} else {
+  // Cluster tracking as history gives it: the synthetic cluster is new, the others failed in the last 4 runs,
+  // and a cluster of the baseline run went away.
+  const runs = data.trends;
+  for (const c of data.clusters) {
+    const n = c.testIds.length;
+    c.tracking = c === syntheticCluster
+      ? { status: 'new', runs: 1, since: runs[runs.length - 1].timestamp, trend: runs.map((_, i) => (i === runs.length - 1 ? n : 0)) }
+      : { status: 'recurring', runs: 4, since: runs[runs.length - 4].timestamp, sinceCommit: 'a1b2c3d4', trend: runs.map((_, i) => (i < runs.length - 4 ? 0 : n)) };
+  }
+  const recovered = data.tests.filter((t) => t.status === 'passed' && t.outcome === 'expected').slice(0, 2);
+  data.resolvedClusters = [{ id: 'c0ffee0123456789', testIds: recovered.map((t) => t.testId) }];
+}
+
+// ?commits=on: where the recurring cluster and a new failure started, with the files changed in between for the failure.
+if (params.get('commits') === 'on') {
+  const range = {
+    lastPassed: { commit: '9f8e7d6c', sha: '9f8e7d6c'.repeat(5) },
+    firstFailed: { commit: 'a1b2c3d4', sha: 'a1b2c3d4'.repeat(5) },
+    url: `https://github.com/acme/shop/compare/${'9f8e7d6c'.repeat(5)}...${'a1b2c3d4'.repeat(5)}`,
+  };
+  for (const c of data.clusters) if (c.tracking?.status === 'recurring') c.tracking.commits = range;
+  const failure = data.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::broken login - element not found')!;
+  failure.signals = [...failure.signals, 'new-failure'];
+  failure.commits = { ...range, suspects: ['src/login/form.tsx', 'tests/demo.spec.ts'] };
 }
 
 // ?off=gallery,trends turns those features off, as the reporter options would.
@@ -33,6 +58,17 @@ if (params.get('base')) data.meta.outputBasename = params.get('base')!;
 
 // ?ai=off: AI was switched off by enableAIRecommendations: false.
 if (params.get('ai') === 'off') data.ai = { ...data.ai, analysisOff: true, summaryOff: true };
+
+// ?gates=scoped: a named rule that failed and a scoped warn rule that was breached.
+if (params.get('gates') === 'scoped') {
+  data.gates = {
+    passed: false,
+    rules: [
+      { rule: 'minPassRate', passed: false, actual: '90%', threshold: '≥ 100%', id: 'critical paths', scope: 'tag @critical' },
+      { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '≤ 2%', scope: 'project chromium', severity: 'warn' },
+    ],
+  };
+}
 
 // ?scale=N clones the fixture up to N tests to exercise virtualization.
 const scale = Number(params.get('scale') ?? 0);

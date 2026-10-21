@@ -1,12 +1,14 @@
 import type { ReportData, ReportTest } from '../../report-data/schema';
+import type { ClusterTracking, CommitRange } from '../../types';
+import { isFailedTest } from '../../utils/flakiness';
+import { computeRunStats } from '../../utils/run-stats';
 import type { TestStatus } from '../components';
 
 export type { ReportData, ReportTest };
+export { formatPassRate } from '../../utils/run-stats';
 
 // Playwright's verdict: a test.fail() test that passed is a failure.
-export function isFailing(t: ReportTest): boolean {
-  return t.outcome ? t.outcome === 'unexpected' : t.status === 'failed' || t.status === 'timedOut';
-}
+export const isFailing: (t: ReportTest) => boolean = isFailedTest;
 
 export function displayStatus(t: ReportTest): TestStatus {
   if (t.outcome === 'flaky') return 'flaky';
@@ -20,10 +22,13 @@ export function isFlaky(t: ReportTest): boolean {
   return displayStatus(t) === 'flaky' || t.signals.includes('flaky');
 }
 
-// Playwright's suite path starts with the file; the row already shows it as file:line.
+// Playwright's suite path starts with the file, which is not a suite name; the row already shows it as file:line.
+export function suiteNames(t: ReportTest): string[] {
+  return (t.suites ?? []).filter((s, i) => !(i === 0 && (s === t.file || t.file.endsWith(s))));
+}
+
 export function titlePath(t: ReportTest, multiProject: boolean): string[] {
-  const suites = (t.suites ?? []).filter((s, i) => !(i === 0 && (s === t.file || t.file.endsWith(s))));
-  return [...(multiProject && t.project ? [t.project] : []), ...suites, t.title];
+  return [...(multiProject && t.project ? [t.project] : []), ...suiteNames(t), t.title];
 }
 
 export function location(t: ReportTest): string {
@@ -47,10 +52,11 @@ export function formatDate(iso: string | number, withTime = false): string {
   return d.toLocaleString('en-GB', withTime ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short' });
 }
 
-// Same weights and grade bands as the 2.x suite health gauge.
-export function suiteHealth(s: { total: number; passRate: number; flaky: number; slow: number }) {
+// Same weights and grade bands as the 2.x suite health gauge. With no pass rate (no test ran) there is no grade.
+export function suiteHealth(s: { total: number; passRate: number | null; flaky: number; slow: number }) {
   const stability = s.total > 0 ? Math.max(0, 100 - (s.flaky / s.total) * 200) : 100;
   const perf = s.total > 0 ? Math.max(0, 100 - (s.slow / s.total) * 200) : 100;
+  if (s.passRate === null) return { score: null, grade: 'n/a', pass: null, stability: Math.round(stability), perf: Math.round(perf) };
   const score = Math.round(s.passRate * 0.5 + stability * 0.3 + perf * 0.2);
   const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
   return { score, grade, pass: s.passRate, stability: Math.round(stability), perf: Math.round(perf) };
@@ -60,6 +66,21 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+export function commitsLabel(c: CommitRange): { text: string; title: string } {
+  const from = c.lastPassed?.commit;
+  const to = c.firstFailed.commit;
+  if (from === to) return { text: 'no code change', title: `No code change: last passed and first failed at ${to}` };
+  return from ? { text: `${from}..${to}`, title: `Last passed at ${from}, first failed at ${to}` } : { text: to, title: `First failed at ${to}` };
+}
+
+export function clusterLabel(t: ClusterTracking): { text: string; title?: string } {
+  const range = t.commits && commitsLabel(t.commits).title;
+  if (t.status === 'new') return { text: 'New', title: range };
+  if (t.status === 'regressed') return { text: 'Regressed', title: range };
+  const lastPassed = t.commits?.lastPassed ? `, last passed at ${t.commits.lastPassed.commit}` : '';
+  return { text: `Recurring, ${plural(t.runs, 'run')}`, title: `Since ${formatDate(t.since)}${t.sinceCommit ? ` at ${t.sinceCommit}` : ''}${lastPassed}` };
+}
+
 // Quote separators and line breaks; prefix formula characters so spreadsheets show them as text.
 export function csvCell(v: unknown): string {
   const raw = String(v ?? '');
@@ -67,24 +88,23 @@ export function csvCell(v: unknown): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// Each test lands in exactly one bucket, so the buckets add up to the total.
+// Each test lands in exactly one bucket, so the buckets add up to the total: passed leaves out flaky.
 export function outcomeCounts(tests: ReportTest[]) {
-  const c = { failed: 0, flaky: 0, passed: 0, skipped: 0 };
-  for (const t of tests) {
-    if (isFailing(t)) c.failed++;
-    else if (t.status === 'skipped' || t.status === 'interrupted') c.skipped++;
-    else if (displayStatus(t) === 'flaky') c.flaky++;
-    else c.passed++;
-  }
-  return c;
+  const { failed, flaky, passed, skipped } = computeRunStats(tests);
+  return { failed, flaky, passed: passed - flaky, skipped };
 }
 
 // Three-run moving average, and runs more than two standard deviations from the mean.
-export function trendStats(values: number[]): { average: Array<number | null>; anomalies: boolean[] } {
-  const average = values.map((_, i) => (i < 2 ? null : (values[i] + values[i - 1] + values[i - 2]) / 3));
-  const mean = values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1);
-  const sd = Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(values.length, 1));
-  const anomalies = values.map((v) => values.length >= 5 && sd > 0 && Math.abs(v - mean) > 2 * sd);
+// A null value (a run with no pass rate) has neither, and is left out of the window and the mean.
+export function trendStats(values: Array<number | null>): { average: Array<number | null>; anomalies: boolean[] } {
+  const average = values.map((_, i) => {
+    const w = values.slice(Math.max(0, i - 2), i + 1);
+    return i < 2 || w.some((v) => v === null) ? null : (w[2]! + w[1]! + w[0]!) / 3;
+  });
+  const known = values.filter((v): v is number => v !== null);
+  const mean = known.reduce((a, b) => a + b, 0) / Math.max(known.length, 1);
+  const sd = Math.sqrt(known.reduce((a, v) => a + (v - mean) ** 2, 0) / Math.max(known.length, 1));
+  const anomalies = values.map((v) => v !== null && known.length >= 5 && sd > 0 && Math.abs(v - mean) > 2 * sd);
   return { average, anomalies };
 }
 

@@ -1,14 +1,4 @@
-import type { TestResultData, StabilityScore, SuiteStats, ThresholdConfig } from '../types';
-import { isFlakyScore } from '../utils';
-
-const GRADES = ['F', 'D', 'C', 'B', 'A'] as const;
-
-/** The run's grade: its tests' grades averaged as F=1 to A=5, rounded. */
-export function runStabilityGrade(results: TestResultData[]): StabilityScore['grade'] | undefined {
-  const scores = results.flatMap(r => r.stabilityScore ? [GRADES.indexOf(r.stabilityScore.grade) + 1] : []);
-  if (scores.length === 0) return undefined;
-  return GRADES[Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length) - 1];
-}
+import type { TestResultData, StabilityScore, ThresholdConfig } from '../types';
 
 /**
  * Calculates comprehensive stability scores for tests and test suites
@@ -133,44 +123,6 @@ export class StabilityScorer {
     if (score >= this.gradeC) return 'C';
     if (score >= this.gradeD) return 'D';
     return 'F';
-  }
-
-  /**
-   * Calculate suite-wide statistics
-   */
-  calculateSuiteStats(results: TestResultData[]): SuiteStats {
-    const total = results.length;
-    const passed = results.filter(r => r.status === 'passed').length;
-    const failed = results.filter(r => r.status === 'failed' || r.status === 'timedOut').length;
-    const skipped = results.filter(r => r.status === 'skipped').length;
-    const flaky = results.filter(r => isFlakyScore(r.flakinessScore)).length;
-    const slow = results.filter(r => r.performanceTrend?.startsWith('↑')).length;
-    const needsRetry = results.filter(r => r.retryInfo?.needsAttention).length;
-
-    const passRate = (passed + failed) > 0
-      ? Math.round((passed / (passed + failed)) * 100)
-      : 0;
-
-    // Calculate average stability from tests that have scores
-    const testsWithScores = results.filter(r => r.stabilityScore);
-    const averageStability = testsWithScores.length > 0
-      ? Math.round(
-          testsWithScores.reduce((sum, r) => sum + r.stabilityScore!.overall, 0) /
-          testsWithScores.length
-        )
-      : 0;
-
-    return {
-      total,
-      passed,
-      failed,
-      skipped,
-      flaky,
-      slow,
-      needsRetry,
-      passRate,
-      averageStability,
-    };
   }
 
   /**

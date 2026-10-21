@@ -2,7 +2,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { QualityGateConfig } from '../types';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -16,7 +15,7 @@ Commands:
   digest    Generate a test health digest from history
   failures  Print the redacted failure bundle for coding agents
   mcp       Serve the failure bundle to coding agents over MCP (stdio)
-  github    Publish a JSON export to GitHub (job summary, annotations, PR comment)
+  github    Publish a JSON export to GitHub (job summary, annotations, PR comment, opt-in issues)
 
 Run playwright-smart-reporter <command> --help for command-specific help.
 `);
@@ -32,8 +31,6 @@ function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
 
-const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
-
 async function runGate(): Promise<void> {
   if (hasFlag('--help')) {
     console.log(`
@@ -44,6 +41,7 @@ Evaluate quality gates against a JSON export file.
 Options:
   --config <path>    Path to gates config JSON file (required)
   --data <path>      Path to smart-report-data.json (default: smart-report-data.json)
+  --quarantine-file <path>  Quarantine file for noExpiredQuarantine (default: .smart-quarantine.json in the folder of --data)
   --help             Show this help
 `);
     return;
@@ -72,7 +70,7 @@ Options:
     return;
   }
 
-  const { QualityGateEvaluator, formatGateReport } = await import('../gates');
+  const { QualityGateEvaluator, formatGateReport, validateQualityGates } = await import('../gates');
 
   const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
@@ -82,39 +80,29 @@ Options:
     process.exitCode = 1;
     return;
   }
-  const unknown = Object.keys(config ?? {}).find((key) => !(GATE_RULES as readonly string[]).includes(key));
-  if (unknown) {
-    console.error(`Error: unknown quality gate rule "${unknown}". Known rules: ${GATE_RULES.join(', ')}.`);
+  try {
+    validateQualityGates(config);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
     process.exitCode = 1;
     return;
   }
 
-  // Reconstruct minimal TestResultData from JSON export
-  const results = (data.tests || []).map((t: any) => ({
-    testId: t.testId,
-    title: t.title,
-    file: t.file,
-    status: t.status,
-    duration: t.duration,
-    outcome: t.outcome,
-    flakinessScore: t.flakinessScore,
-    stabilityScore: t.stabilityScore ? {
-      overall: t.stabilityScore.overall,
-      grade: t.stabilityScore.grade,
-      flakiness: 0,
-      performance: 0,
-      reliability: 0,
-      needsAttention: false,
-    } : undefined,
-    error: t.error,
-    retry: t.retry,
-    steps: [],
-    history: [],
-    a11y: t.a11y,
-  }));
+  const { toTestResultData } = await import('../generators/json-exporter');
+  const results = data.tests.map(toTestResultData);
+
+  const { readQuarantineFile } = await import('../quarantine/quarantine-generator');
+  let quarantine;
+  try {
+    quarantine = readQuarantineFile(parseFlag('--quarantine-file') ?? path.join(path.dirname(dataPath), '.smart-quarantine.json'));
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
 
   const evaluator = new QualityGateEvaluator();
-  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary);
+  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary, data.failureClusters, quarantine);
 
   console.log(formatGateReport(result));
 
@@ -222,6 +210,9 @@ and annotations only. Requires the gh CLI with GH_TOKEN set for the comment.
 Options:
   --data <path>         Path to smart-report-data.json (default: smart-report-data.json)
   --report-url <url>    Link to the uploaded report (default: the workflow run page)
+  --issues              Open one GitHub issue per new failure cluster (at most 5 per run,
+                        largest first), or comment on the cluster's open issue. Needs
+                        \`issues: write\`; a 403 logs a warning and the exit code stays 0.
   --help                Show this help
 `);
     return;
@@ -231,6 +222,7 @@ Options:
   process.exitCode = runGithubCommand({
     dataPath: parseFlag('--data') ?? 'smart-report-data.json',
     reportUrl: parseFlag('--report-url'),
+    issues: hasFlag('--issues'),
   });
 }
 

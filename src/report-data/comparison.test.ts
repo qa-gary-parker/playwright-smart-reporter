@@ -91,4 +91,34 @@ describe('buildComparison', () => {
     expect(comparison.changes.newTests).toHaveLength(1);
     expect(comparison.changes.newTests[0].testId).toBe('new-test');
   });
+
+  it('puts a test that passed on a retry now and on the first attempt in the baseline run in newFlaky', () => {
+    const flaky = { status: 'passed', outcome: 'flaky', retry: 1 } as const;
+    const current = ['was-stable', 'was-flaky', 'was-failing', 'still-stable'].map((testId) =>
+      createMinimalTestResult({ testId, ...(testId === 'still-stable' ? { outcome: 'expected' } : flaky) }));
+    const baseline = new Map<string, TestResultData>([
+      ['was-stable', createMinimalTestResult({ testId: 'was-stable', outcome: 'expected', retry: 0 })],
+      ['was-flaky', createMinimalTestResult({ testId: 'was-flaky', outcome: 'flaky', retry: 1 })],
+      ['was-failing', createMinimalTestResult({ testId: 'was-failing', status: 'failed', outcome: 'unexpected', retry: 1 })],
+      ['still-stable', createMinimalTestResult({ testId: 'still-stable', outcome: 'expected', retry: 0 })],
+    ]);
+
+    const { changes } = buildComparison(current, createRunSummary(), createRunSummary(), baseline);
+
+    expect(changes.newFlaky.map((t) => t.testId)).toEqual(['was-stable']);
+  });
+
+  it('puts a test with history that did not run in the baseline run in notInBaseline, not in newTests', () => {
+    const currentTests = [
+      createMinimalTestResult({ testId: 'ran-before', status: 'passed' }),
+      createMinimalTestResult({ testId: 'never-ran', status: 'passed' }),
+    ];
+    const withHistory = new Set(['ran-before']);
+
+    const { changes } = buildComparison(currentTests, createRunSummary(), createRunSummary(), new Map(), 0.2, withHistory);
+
+    expect(changes.notInBaseline.map((t) => t.testId)).toEqual(['ran-before']);
+    expect(changes.newTests.map((t) => t.testId)).toEqual(['never-ran']);
+    expect(changes.fixedTests).toEqual([]);
+  });
 });

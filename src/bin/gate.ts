@@ -2,10 +2,12 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison, A11yResult } from '../types';
-import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
+import type { QualityGateConfig, QuarantineFile, RunComparison } from '../types';
+import { GATE_RULES, QualityGateEvaluator, validateQualityGates } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
+import { toTestResultData, type JsonClusterEntry, type JsonTestEntry } from '../generators/json-exporter';
 import type { CoverageSummary } from '../report-data/schema';
+import { readQuarantineFile } from '../quarantine/quarantine-generator';
 
 interface GateOptions {
   inputPath: string;
@@ -17,6 +19,11 @@ interface GateOptions {
   noNewFailures?: boolean;
   maxA11yViolations?: number;
   minCoverage?: number;
+  maxDurationRegression?: number;
+  noNewFlaky?: boolean;
+  noNewClusters?: boolean;
+  noExpiredQuarantine?: boolean;
+  quarantinePath?: string;
 }
 
 function printUsage(): void {
@@ -35,6 +42,11 @@ Options:
   --no-new-failures           Fail if new failures detected (requires comparison data)
   --max-a11y-violations <n>   Maximum accessibility violations (skipped when no test was scanned)
   --min-coverage <n>          Minimum line coverage percentage (fails when no coverage was collected)
+  --max-duration-regression <n>  Maximum % the tests run longer than the median of their passing runs
+  --no-new-flaky              Fail if a test that passed first time in the baseline run passed on a retry now
+  --no-new-clusters           Fail if a failure cluster is new: no run in history had it
+  --no-expired-quarantine     Fail if a quarantine entry was past its expiresAt when the quarantine file was written
+  --quarantine-file <path>    Quarantine file (default: .smart-quarantine.json in the folder of --input)
   -h, --help                  Show this help message
 
 Examples:
@@ -105,6 +117,21 @@ function parseArgs(argv: string[]): GateOptions {
       case '--max-a11y-violations':
         options.maxA11yViolations = number(arg, ++i);
         break;
+      case '--max-duration-regression':
+        options.maxDurationRegression = number(arg, ++i);
+        break;
+      case '--no-new-flaky':
+        options.noNewFlaky = true;
+        break;
+      case '--no-new-clusters':
+        options.noNewClusters = true;
+        break;
+      case '--no-expired-quarantine':
+        options.noExpiredQuarantine = true;
+        break;
+      case '--quarantine-file':
+        options.quarantinePath = path.resolve(process.cwd(), value(arg, ++i));
+        break;
       case '--min-coverage':
         options.minCoverage = number(arg, ++i);
         break;
@@ -139,70 +166,26 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   if (options.noNewFailures !== undefined) config.noNewFailures = options.noNewFailures;
   if (options.maxA11yViolations !== undefined) config.maxA11yViolations = options.maxA11yViolations;
   if (options.minCoverage !== undefined) config.minCoverage = options.minCoverage;
+  if (options.maxDurationRegression !== undefined) config.maxDurationRegression = options.maxDurationRegression;
+  if (options.noNewFlaky !== undefined) config.noNewFlaky = options.noNewFlaky;
+  if (options.noNewClusters !== undefined) config.noNewClusters = options.noNewClusters;
+  if (options.noExpiredQuarantine !== undefined) config.noExpiredQuarantine = options.noExpiredQuarantine;
 
   return config;
-}
-
-interface JsonTestEntry {
-  testId: string;
-  title: string;
-  file: string;
-  status: string;
-  duration: number;
-  error?: string;
-  retry: number;
-  outcome?: string;
-  flakinessScore?: number;
-  stabilityScore?: {
-    overall: number;
-    grade: string;
-  };
-  a11y?: A11yResult;
-}
-
-function toTestResultData(entry: JsonTestEntry): TestResultData {
-  const stabilityScore: StabilityScore | undefined = entry.stabilityScore
-    ? {
-        overall: entry.stabilityScore.overall,
-        flakiness: 0,
-        performance: 0,
-        reliability: 0,
-        grade: entry.stabilityScore.grade as StabilityScore['grade'],
-        needsAttention: false,
-      }
-    : undefined;
-
-  return {
-    testId: entry.testId,
-    title: entry.title,
-    file: entry.file,
-    status: entry.status as TestResultData['status'],
-    duration: entry.duration,
-    error: entry.error,
-    retry: entry.retry,
-    outcome: entry.outcome as TestResultData['outcome'],
-    flakinessScore: entry.flakinessScore,
-    stabilityScore,
-    steps: [],
-    history: [],
-    a11y: entry.a11y,
-  };
 }
 
 function main(): void {
   const options = parseArgs(process.argv);
   const config = buildConfig(options);
 
-  // Check if any rules are configured
-  const hasRules = config.maxFailures !== undefined
-    || config.minPassRate !== undefined
-    || config.maxFlakyRate !== undefined
-    || config.minStabilityGrade !== undefined
-    || config.noNewFailures !== undefined
-    || config.maxA11yViolations !== undefined
-    || config.maxA11yCritical !== undefined
-    || config.maxA11ySerious !== undefined
-    || config.minCoverage !== undefined;
+  try {
+    validateQualityGates(config);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
+
+  const hasRules = GATE_RULES.some((rule) => config[rule] !== undefined) || (config.rules?.length ?? 0) > 0;
 
   if (!hasRules) {
     console.error('Error: No quality gate rules configured. Use --config or inline flags.');
@@ -230,9 +213,18 @@ function main(): void {
   const results = tests.map(toTestResultData);
   const comparison = report.comparison as RunComparison | undefined;
   const coverage = (report.coverage as { summary?: CoverageSummary } | undefined)?.summary;
+  const clusters = report.failureClusters as JsonClusterEntry[] | undefined;
+
+  let quarantine: QuarantineFile | undefined;
+  try {
+    quarantine = readQuarantineFile(options.quarantinePath ?? path.join(path.dirname(options.inputPath), '.smart-quarantine.json'));
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
 
   const evaluator = new QualityGateEvaluator();
-  const gateResult = evaluator.evaluate(config, results, comparison, coverage);
+  const gateResult = evaluator.evaluate(config, results, comparison, coverage, clusters, quarantine);
 
   console.log(formatGateReport(gateResult));
 

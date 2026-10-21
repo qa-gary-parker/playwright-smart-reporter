@@ -31,7 +31,7 @@ const data: JsonExportData = {
   comparison: {
     baselineRun: run,
     currentRun: run,
-    changes: { newFailures: [timedOut], fixedTests: [], newTests: [], regressions: [], improvements: [] },
+    changes: { newFailures: [timedOut], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [], newFlaky: [] },
   },
   qualityGates: {
     passed: false,
@@ -88,6 +88,28 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('names a rule by its id or scope, and shows a breached warn rule as a warning, not a failure', () => {
+    const qualityGates = {
+      passed: true,
+      rules: [
+        { rule: 'minPassRate', passed: true, actual: '100%', threshold: '≥ 100%', id: 'critical paths' },
+        { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '≤ 2%', scope: 'project chromium', severity: 'warn' as const },
+        { rule: 'maxFailures', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no test in scope', scope: 'tag @x' },
+      ],
+    };
+    const lines = renderSummary({ ...data, qualityGates }, { workspace: WORKSPACE }).split('\n');
+    const at = lines.findIndex((l) => l.startsWith('**Quality gates'));
+    expect(lines.slice(at, at + 7)).toEqual([
+      '**Quality gates: passed with 1 warning** (1 of 2 rules passed)',
+      '',
+      '| Rule | Actual | Threshold | Result |',
+      '|---|---|---|---|',
+      '| critical paths | 100% | ≥ 100% | Passed |',
+      '| Max flaky rate (project chromium) | 50% | ≤ 2% | Warning |',
+      '| Max failures (tag @x) | N/A | ≤ 0 | Skipped |',
+    ]);
+  });
+
   it('renders a passing run without gate, failure or flaky sections or a link', () => {
     const passing: JsonExportData = {
       metadata: { generatedAt: '2026-10-08T10:00:00.000Z', reporterVersion: '3.0.0' },
@@ -122,11 +144,75 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('marks a failure that did not run in the baseline run and counts it in the heading', () => {
+    const checkout = { testId: 'a', title: 'checkout @smoke', file: 'cart.spec.ts', status: 'failed', duration: 4200, retry: 1, steps: [], history: [] } as TestResultData;
+    const comparison = { ...data.comparison!, changes: { ...data.comparison!.changes, notInBaseline: [checkout] } };
+    const out = renderSummary({ ...data, comparison }, { workspace: WORKSPACE });
+    expect(out).toContain(`### Failures (2, 1 new, 1 not in baseline)
+
+| Test | Location |
+|---|---|
+| **New** \`totals \\| tax\` | \`e2e/tests/cart.spec.ts:27\` |
+| **Not in baseline** \`checkout @smoke [Desktop Chrome]\` | \`e2e/tests/cart.spec.ts:6\` |
+`);
+  });
+
+  it('marks a failing new test, one with no history, as new and counts it in the heading, as noNewFailures does', () => {
+    const checkout = { testId: 'a', title: 'checkout @smoke', file: 'cart.spec.ts', status: 'failed', duration: 4200, retry: 1, steps: [], history: [] } as TestResultData;
+    const comparison = { ...data.comparison!, changes: { ...data.comparison!.changes, newTests: [checkout] } };
+    const out = renderSummary({ ...data, comparison }, { workspace: WORKSPACE });
+    expect(out).toContain(`### Failures (2, 2 new)
+
+| Test | Location |
+|---|---|
+| **New** \`checkout @smoke [Desktop Chrome]\` | \`e2e/tests/cart.spec.ts:6\` |
+| **New** \`totals \\| tax\` | \`e2e/tests/cart.spec.ts:27\` |
+`);
+  });
+
+  it('shows where a new failure started, with the compare page and the first files changed in between', () => {
+    const url = `https://github.com/acme/shop/compare/${'a'.repeat(40)}...${'b'.repeat(40)}`;
+    const commits = {
+      lastPassed: { commit: 'aaaaaaaa', sha: 'a'.repeat(40) },
+      firstFailed: { commit: 'bbbbbbbb', sha: 'b'.repeat(40) },
+      url,
+      suspects: ['src/cart.ts', 'src/tax.ts', 'e2e/tests/cart.spec.ts', 'e2e/pages/cart.ts', 'e2e/fixtures.ts', 'package.json'],
+    };
+    const firstOnly = { firstFailed: { commit: 'bbbbbbbb' } };
+    const withCommits = (c: object) => renderSummary({ ...data, tests: data.tests.map((t) => (t.testId === 'b' ? { ...t, commits: c } : t)) as JsonExportData['tests'] }, { workspace: WORKSPACE });
+
+    expect(withCommits(commits)).toContain(
+      `| **New** \`totals \\| tax\`<br>Last passed at \`aaaaaaaa\`, first failed at \`bbbbbbbb\` ([compare](${url}))<br>Changed: \`src/cart.ts\`, \`src/tax.ts\`, \`e2e/tests/cart.spec.ts\`, \`e2e/pages/cart.ts\`, \`e2e/fixtures.ts\`, and 1 more | \`e2e/tests/cart.spec.ts:27\` |`,
+    );
+    expect(withCommits(firstOnly)).toContain('| **New** `totals \\| tax`<br>First failed at `bbbbbbbb` | `e2e/tests/cart.spec.ts:27` |');
+    const sameCommit = { lastPassed: { commit: 'bbbbbbbb' }, firstFailed: { commit: 'bbbbbbbb' }, url: 'https://github.com/acme/shop/commit/bbbbbbbb' };
+    expect(withCommits(sameCommit)).toContain(
+      '| **New** `totals \\| tax`<br>No code change: last passed and first failed at `bbbbbbbb` ([commit](https://github.com/acme/shop/commit/bbbbbbbb)) | `e2e/tests/cart.spec.ts:27` |',
+    );
+  });
+
+  it('names the branch and commit of the baseline run under the totals', () => {
+    const baselineRun = { ...run, ciInfo: { provider: 'github', branch: 'main', commit: 'abc12345' } };
+    const out = renderSummary({ ...data, comparison: { ...data.comparison!, baselineRun } }, { workspace: WORKSPACE });
+    expect(out).toContain(`| 50% | 3 | 2 | 1 | 1 | 1.4m |
+
+**Baseline run:** \`main\` @ \`abc12345\`
+
+**Quality gates: failed**`);
+  });
+
+  it('shows the pass rate as n/a when every test was skipped', () => {
+    const skipped = data.tests.filter((t) => t.status === 'skipped');
+    const summary = { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: null };
+    const out = renderSummary({ ...data, tests: skipped, summary, comparison: undefined, qualityGates: undefined }, { workspace: WORKSPACE });
+    expect(out).toContain('| n/a | 0 | 0 | 0 | 1 | 0ms |');
+  });
+
   it('headlines a run where nothing passed or failed by what happened, not as passed', () => {
     const headline = (tests: JsonExportData['tests'], summary: JsonExportData['summary']) =>
       renderSummary({ ...data, tests, summary, comparison: undefined, qualityGates: undefined }, { workspace: WORKSPACE }).split('\n')[2];
     const skipped = data.tests.filter((t) => t.status === 'skipped');
-    expect(headline(skipped, { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: 0 })).toBe('**Skipped:** all 1 tests were skipped.');
+    expect(headline(skipped, { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: null })).toBe('**Skipped:** all 1 tests were skipped.');
     expect(headline([], { total: 0, passed: 0, failed: 0, skipped: 0, flaky: 0, duration: 0, passRate: 0 })).toBe('**No tests ran.**');
   });
 });
