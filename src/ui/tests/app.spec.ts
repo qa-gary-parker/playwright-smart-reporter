@@ -233,6 +233,8 @@ test('Failure clusters labels each cluster from history with its trend, and Reso
   await page.goto(url('screen=insights&mode=light'));
   const clusters = page.locator('.panel', { has: page.getByRole('heading', { name: 'Failure clusters' }) });
   await expect(clusters.locator('.signal')).toHaveText([...Array(6).fill('Recurring, 4 runs'), 'New']);
+  // Labels are cut to the panel width, so the full label is the tooltip
+  await expect(clusters.locator('.lines__label').last()).toHaveAttribute('title', "toHaveText on getByRole('heading', { level: 1 }) at checkout/payments/saved-card.spec.ts:142");
   await expect(clusters.locator('.signal').first()).toHaveAttribute('title', 'Since 6 Aug at a1b2c3d4');
   expect(await clusters.locator('.spark').evaluateAll((sparks) => sparks.map((s) => s.getAttribute('aria-label')))).toEqual([
     ...[2, 2, 2, 3, 2, 2].map((n) => `Tests in this cluster per run: 0, 0, 0, 0, 0, 0, ${n}, ${n}, ${n}, ${n}`),

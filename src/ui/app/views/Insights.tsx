@@ -175,7 +175,7 @@ export function Insights() {
                 const label = c.tracking && clusterLabel(c.tracking);
                 return (
                   <li class="lines__item">
-                    <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
+                    <a class="lines__label mono" title={c.errorType} href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
                       {c.errorType}
                     </a>
                     {label && (
