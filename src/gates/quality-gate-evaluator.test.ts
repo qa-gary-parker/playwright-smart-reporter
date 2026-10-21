@@ -464,6 +464,17 @@ describe('QualityGateEvaluator', () => {
       expect(result.rules).toEqual([{ rule: 'noNewFailures', passed: false, actual: '1', threshold: '≤ 0' }]);
     });
 
+    it('counts a failing new test, one with no history, as a new failure', () => {
+      const newTests = [
+        createTestResult({ testId: 'new-failed', status: 'failed', outcome: 'unexpected' }),
+        createTestResult({ testId: 'new-passed', status: 'passed', outcome: 'expected' }),
+      ];
+      const comparison = createComparison({ changes: { ...createComparison().changes, newTests } });
+      expect(evaluator.evaluate({ noNewFailures: true }, newTests, comparison).rules).toEqual([
+        { rule: 'noNewFailures', passed: false, actual: '1', threshold: '≤ 0' },
+      ]);
+    });
+
     it('reads a comparison saved before notInBaseline existed', () => {
       const { notInBaseline: _, ...changes } = createComparison().changes;
       const comparison = { ...createComparison(), changes } as unknown as RunComparison;
@@ -849,6 +860,14 @@ describe('QualityGateEvaluator', () => {
       const notInBaseline = [flaky('a'), createTestResult({ testId: 'b', outcome: 'expected' }), createTestResult({ testId: 'c', status: 'failed', outcome: 'unexpected' })];
       const comparison = createComparison({ changes: { ...createComparison().changes, notInBaseline } });
       expect(evaluator.evaluate({ noNewFlaky: true }, notInBaseline, comparison).rules).toEqual([
+        { rule: 'noNewFlaky', passed: false, actual: '1', threshold: '≤ 0' },
+      ]);
+    });
+
+    it('counts a flaky new test, one with no history', () => {
+      const newTests = [flaky('new-flaky'), createTestResult({ testId: 'new-passed', outcome: 'expected' })];
+      const comparison = createComparison({ changes: { ...createComparison().changes, newTests } });
+      expect(evaluator.evaluate({ noNewFlaky: true }, newTests, comparison).rules).toEqual([
         { rule: 'noNewFlaky', passed: false, actual: '1', threshold: '≤ 0' },
       ]);
     });

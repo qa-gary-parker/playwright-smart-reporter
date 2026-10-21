@@ -186,13 +186,14 @@ export class QualityGateEvaluator {
     };
   }
 
-  // Counts a flaky test that did not run in the baseline run, as noNewFailures counts a failing one.
+  // Counts a flaky test that did not run in the baseline run, new or not, as noNewFailures counts a failing one.
   private evaluateNoNewFlaky(comparison?: RunComparison): QualityGateRuleResult {
     // JSON exported before 4.0.0 has no newFlaky.
     if (!comparison?.changes.newFlaky) {
       return { rule: 'noNewFlaky', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no comparison data' };
     }
-    const count = comparison.changes.newFlaky.length + (comparison.changes.notInBaseline ?? []).filter(t => t.outcome === 'flaky').length;
+    const absent = [...comparison.changes.newTests, ...(comparison.changes.notInBaseline ?? [])];
+    const count = comparison.changes.newFlaky.length + absent.filter(t => t.outcome === 'flaky').length;
     return { rule: 'noNewFlaky', passed: count === 0, actual: String(count), threshold: '≤ 0' };
   }
 
@@ -294,9 +295,10 @@ export class QualityGateEvaluator {
       };
     }
 
-    // A failing test that did not run in the baseline run may be new, so a partial baseline cannot pass it silently.
+    // A failing test that did not run in the baseline run, new or not, counts, so a partial baseline cannot pass it silently.
     // JSON exported before 4.0.0 has no notInBaseline.
-    const newFailureCount = comparison.changes.newFailures.length + (comparison.changes.notInBaseline ?? []).filter(isFailedTest).length;
+    const absent = [...comparison.changes.newTests, ...(comparison.changes.notInBaseline ?? [])];
+    const newFailureCount = comparison.changes.newFailures.length + absent.filter(isFailedTest).length;
 
     return {
       rule: 'noNewFailures',

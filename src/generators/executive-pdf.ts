@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { isFailedTest } from '../utils/flakiness';
 import { computeRunStats, formatPassRate, runStabilityGrade } from '../utils/run-stats';
-import { isWarning } from '../gates/quality-gate-reporter';
+import { isWarning, ruleLabel } from '../gates/quality-gate-reporter';
 
 export type { PdfFontConfig };
 
@@ -740,7 +740,7 @@ function drawQualityGates(doc: PDFKit.PDFDocument, result: QualityGateResult, st
 
     doc.save();
     doc.font(FONT_REGULAR).fontSize(8).fillColor(scheme.bodyText);
-    doc.text(rule.id ?? `${formatRuleName(rule.rule)}${rule.scope ? ` (${rule.scope})` : ''}`, MARGIN + 8, y + 6, { width: colWidths[0] });
+    doc.text(ruleLabel(rule), MARGIN + 8, y + 6, { width: colWidths[0] });
     doc.text(rule.actual, MARGIN + colWidths[0] + 4, y + 6, { width: colWidths[1] });
     doc.text(rule.threshold, MARGIN + colWidths[0] + colWidths[1] + 4, y + 6, { width: colWidths[2] });
 
@@ -770,17 +770,6 @@ function drawQualityGates(doc: PDFKit.PDFDocument, result: QualityGateResult, st
   doc.restore();
 
   return y + 32;
-}
-
-function formatRuleName(rule: string): string {
-  const names: Record<string, string> = {
-    maxFailures: 'Maximum Failures',
-    minPassRate: 'Minimum Pass Rate',
-    maxFlakyRate: 'Maximum Flaky Rate',
-    minStabilityGrade: 'Minimum Stability Grade',
-    noNewFailures: 'No New Failures',
-  };
-  return names[rule] || rule;
 }
 
 // ---------------------------------------------------------------------------

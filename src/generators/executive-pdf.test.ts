@@ -558,8 +558,8 @@ describe('executive-pdf', () => {
     expectDrawn(lines, [
       'Quality Gates',
       'Rule', 'Actual', 'Threshold', 'Status',
-      'Maximum Failures', '1', '0', expect.stringMatching(/ Failed$/),
-      'Minimum Pass Rate', '75%', '70%', expect.stringMatching(/ Passed$/),
+      'Max failures', '1', '0', expect.stringMatching(/ Failed$/),
+      'Min pass rate', '75%', '70%', expect.stringMatching(/ Passed$/),
       'customRule', 'yes', 'yes', expect.stringMatching(/ Passed$/),
       expect.stringMatching(/ Gates failed$/),
       FOOTER,
@@ -577,7 +577,7 @@ describe('executive-pdf', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
 
     expectDrawn(lines, [
-      'Minimum Pass Rate (tag @critical)', '100%', '100%', expect.stringMatching(/ Passed$/),
+      'Min pass rate (tag @critical)', '100%', '100%', expect.stringMatching(/ Passed$/),
       'chromium flaky', '50%', '2%', '! Warning',
       expect.stringMatching(/ All gates passed$/),
     ]);
@@ -591,7 +591,19 @@ describe('executive-pdf', () => {
     const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
 
     expect(lines).toContain('QUALITY GATES PASSED');
-    expectDrawn(lines, ['No New Failures', 'N/A', '0', '- Skipped', expect.stringMatching(/ All gates passed$/)]);
+    expectDrawn(lines, ['No new failures', 'N/A', '0', '- Skipped', expect.stringMatching(/ All gates passed$/)]);
+  });
+
+  it('names the accessibility, coverage, duration and flaky rules as the terminal and the report do', () => {
+    const rule = (name: string) => ({ rule: name, passed: true, actual: '0', threshold: '0' });
+    const qualityGateResult: QualityGateResult = {
+      passed: true,
+      rules: ['maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky'].map(rule),
+    };
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
+
+    const labels = ['Max a11y violations', 'Max a11y critical', 'Max a11y serious', 'Min line coverage', 'Max duration regression', 'No new flaky tests'];
+    expectDrawn(lines, ['Status', ...labels.flatMap((label) => [label, '0', '0', expect.stringMatching(/ Passed$/)])]);
   });
 
   it('draws the suite breakdown, worst pass rate first, with a flaky test counted as passed', () => {

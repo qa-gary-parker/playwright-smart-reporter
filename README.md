@@ -764,9 +764,9 @@ reporter: [
 
 The result shows in the top bar and in the Quality gate panel in Insights, and is logged at the end of the run. A breached gate fails the Playwright run (exit code `1`), even when every test passed.
 
-`noNewFailures` counts tests that failed now and passed in the baseline run. It also counts a failing test that did not run in the baseline run, so a run compared with a partial baseline does not pass by default.
+`noNewFailures` counts tests that failed now and passed in the baseline run. It also counts a failing test that did not run in the baseline run, including a new test with no history, so a run compared with a partial baseline does not pass by default.
 
-`noNewFlaky: true` counts tests that passed on a retry now and passed on the first attempt in the baseline run. Like `noNewFailures`, it also counts a flaky test that did not run in the baseline run. The CLI skips it for a JSON export from before 4.0.0.
+`noNewFlaky: true` counts tests that passed on a retry now and passed on the first attempt in the baseline run. Like `noNewFailures`, it also counts a flaky test that did not run in the baseline run, including a new test. The CLI skips it for a JSON export from before 4.0.0.
 
 `maxDurationRegression: 20` fails the gate when the tests run more than 20% longer than the median of their passing runs. It adds up the tests that passed and have 5 passing runs, this run included (the tests that get a duration trend), so one test's jitter does not decide the gate. It is skipped when no test has that history.
 
