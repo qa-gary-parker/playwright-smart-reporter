@@ -299,6 +299,14 @@ export interface StepData {
   depth?: number;      // number of kept steps that enclose this one
 }
 
+// A test.step that ran slower than the median of its passing runs in history
+export interface StepTrend {
+  title: string;
+  median: number;   // ms
+  current: number;  // ms, this run
+  ratio: number;    // current / median, 1 decimal
+}
+
 // Test annotation (beyond tags) - captures @slow, @fixme, custom annotations
 export interface TestAnnotation {
   type: string;              // e.g., 'slow', 'fixme', 'skip', 'issue', custom types
@@ -357,6 +365,7 @@ export interface TestResultData {
   flakinessInterval?: [number, number]; // 95% Wilson interval of flakinessScore
   performanceTrend?: string;
   averageDuration?: number;
+  stepTrends?: StepTrend[];
   aiSuggestion?: string;
   steps: StepData[];
   screenshot?: string;

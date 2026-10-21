@@ -361,6 +361,10 @@
   border-radius: var(--radius-sm);
 }
 
+.step[data-trend] {
+  grid-template-columns: 12px minmax(0, 1fr) auto 96px 56px;
+}
+
 .step[data-failed] {
   background: var(--fail-bg);
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PerformanceAnalyzer } from './performance-analyzer';
-import type { TestResultData, TestHistoryEntry } from '../types';
+import type { StepData, TestResultData, TestHistoryEntry } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
   return {
@@ -278,6 +278,34 @@ describe('PerformanceAnalyzer', () => {
         expect(analyzer.getStatus('→ Stable')).toBe('stable');
         expect(analyzer.getStatus(undefined)).toBe('stable');
       });
+    });
+  });
+
+  describe('step trends', () => {
+    const analyzer = new PerformanceAnalyzer();
+    const step = (title: string, duration: number): StepData => ({ title, duration, category: 'test.step' });
+    const run = (stepDurations: Record<string, number>, passed = true) => ({ ...createHistoryEntry(1000, { passed }), stepDurations });
+
+    it('gives each step slower than the median of its passing runs as a ratio', () => {
+      const test = createTestResult({ steps: [step('login', 310), step('checkout', 200)] });
+      analyzer.analyze(test, Array.from({ length: 5 }, () => run({ login: 100, checkout: 190 })));
+
+      expect(test.stepTrends).toEqual([{ title: 'login', median: 100, current: 310, ratio: 3.1 }]);
+    });
+
+    it('needs 4 passing runs with the step and a change of at least 100ms, and compares only a passing test', () => {
+      const history = [
+        ...Array.from({ length: 3 }, () => run({ login: 100, fill: 20, search: 200 })),
+        ...Array.from({ length: 2 }, () => run({ login: 100, fill: 20, search: 200 }, false)),
+        run({ fill: 20, search: 200 }),
+      ];
+      const steps = [step('login', 310), step('fill', 110), step('search', 500)];
+      const passed = createTestResult({ steps });
+      analyzer.analyze(passed, history);
+      const failed = createTestResult({ steps, status: 'failed' });
+      analyzer.analyze(failed, history);
+
+      expect([passed.stepTrends, failed.stepTrends]).toEqual([[{ title: 'search', median: 200, current: 500, ratio: 2.5 }], undefined]);
     });
   });
 

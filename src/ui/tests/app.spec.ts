@@ -251,6 +251,26 @@ test('History shows the flakiness interval, or insufficient history below 5 runs
   await expect(flakiness).toHaveText('Flakiness insufficient history 3 of 5 runs');
 });
 
+test('Steps marks a step that ran slower than the median of its passing runs', async ({ page }) => {
+  const id = '[Desktop Chrome] demo.spec.ts::documentation link works';
+  await page.addInitScript((testId) => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<Record<string, unknown>> }) => {
+        d.tests.find((t) => t.testId === testId)!.stepTrends = [{ title: 'Navigate to Playwright homepage', median: 148, current: 459, ratio: 3.1 }];
+        value = d;
+      },
+    });
+  }, id);
+  await page.goto(url('mode=light', `#/q/all?test=${encodeURIComponent(id)}`));
+  const trends = page.locator('.steps .signal');
+  await expect(trends).toHaveText(['3.1× slower']);
+  await expect(trends).toHaveAttribute('title', 'Median 148ms in passing runs');
+  await expect(page.locator('.step', { has: page.locator('.signal') }).locator('.step__title')).toHaveText('Navigate to Playwright homepage');
+});
+
 test('History labels the baseline duration as the median of passing runs', async ({ page }) => {
   await page.goto(url('screen=flaky&mode=light'));
   await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();

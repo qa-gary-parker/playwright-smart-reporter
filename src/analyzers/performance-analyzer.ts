@@ -1,8 +1,11 @@
-import type { TestResultData, TestHistoryEntry, PerformanceMetrics } from '../types';
+import type { TestResultData, TestHistoryEntry, PerformanceMetrics, StepTrend } from '../types';
 import { MIN_SAMPLE_RUNS, median } from '../utils/stats';
+import { stepDurationsOf } from './causal-timeline';
 
 // A change also has to be this many ms, so jitter in short tests is not a trend.
 export const MIN_DURATION_CHANGE_MS = 250;
+// Steps are shorter than tests; 100ms is also the flake forecast's floor for duration drift.
+const MIN_STEP_CHANGE_MS = 100;
 
 /**
  * Analyzes test performance trends and regressions
@@ -62,6 +65,25 @@ export class PerformanceAnalyzer {
 
     // Add detailed performance metrics
     test.performanceMetrics = this.calculateMetrics(test.duration, baseline);
+
+    const stepTrends = this.slowerSteps(test, relevantHistory);
+    if (stepTrends.length > 0) test.stepTrends = stepTrends;
+  }
+
+  /**
+   * This run's test.step titles that took longer than the median of the same step in passing
+   * runs, by more than the threshold and at least MIN_STEP_CHANGE_MS.
+   */
+  private slowerSteps(test: TestResultData, passing: TestHistoryEntry[]): StepTrend[] {
+    const trends: StepTrend[] = [];
+    for (const [title, current] of Object.entries(stepDurationsOf(test.steps) ?? {})) {
+      const samples = passing.flatMap(e => e.stepDurations?.[title] ?? []);
+      if (samples.length < MIN_SAMPLE_RUNS - 1) continue;
+      const baseline = median(samples);
+      if (baseline === 0 || (current - baseline) / baseline <= this.performanceThreshold || current - baseline < MIN_STEP_CHANGE_MS) continue;
+      trends.push({ title, median: Math.round(baseline), current, ratio: Math.round((current / baseline) * 10) / 10 });
+    }
+    return trends;
   }
 
   /**

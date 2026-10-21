@@ -71,20 +71,29 @@ function StackError({ message }: { message: string }) {
 function Steps({ t }: { t: ReportTest }) {
   const failed = failingStepIndex(t);
   const max = Math.max(...t.steps.map((s) => s.duration), 1);
+  const trends = new Map((t.stepTrends ?? []).map((tr) => [tr.title, tr]));
   return (
     <ol class="steps">
-      {t.steps.map((s, i) => (
-        <li class="step" data-failed={i === failed ? '' : undefined}>
-          {i === failed ? <StatusGlyph status="failed" size={12} /> : <span class="step__dot" />}
-          <span class="step__title mono" title={s.title}>
-            {s.title}
-          </span>
-          <span class="step__bar" aria-hidden="true">
-            <span style={{ width: `${(s.duration / max) * 100}%` }} />
-          </span>
-          <span class="step__dur mono">{formatDuration(s.duration)}</span>
-        </li>
-      ))}
+      {t.steps.map((s, i) => {
+        const trend = s.category === 'test.step' ? trends.get(s.title) : undefined;
+        return (
+          <li class="step" data-failed={i === failed ? '' : undefined} data-trend={trend ? '' : undefined}>
+            {i === failed ? <StatusGlyph status="failed" size={12} /> : <span class="step__dot" />}
+            <span class="step__title mono" title={s.title}>
+              {s.title}
+            </span>
+            {trend && (
+              <span class="signal" title={`Median ${formatDuration(trend.median)} in passing runs`}>
+                {trend.ratio.toFixed(1)}× slower
+              </span>
+            )}
+            <span class="step__bar" aria-hidden="true">
+              <span style={{ width: `${(s.duration / max) * 100}%` }} />
+            </span>
+            <span class="step__dur mono">{formatDuration(s.duration)}</span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
