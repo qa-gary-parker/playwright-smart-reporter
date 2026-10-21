@@ -521,8 +521,23 @@ test('the Quality gate panel names a rule by its id or scope, and marks a breach
   await expect(panel.getByRole('img')).toHaveAccessibleName('failed');
 });
 
-test('the Failed card counts failures that did not run in the baseline run, as noNewFailures does', async ({ page }) => {
+test('the Failed card counts what noNewFailures counts: new failures, failing new tests, and failures not in the baseline run', async ({ page }) => {
+  // One failing test that is not yet a new failure or not in the baseline run becomes a new test, with no history.
+  await page.addInitScript(() => {
+    let value: unknown;
+    type Data = { tests: Array<{ testId: string; outcome?: string; signals: string[] }>; comparison: { changes: Record<string, string[]> } };
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: Data) => {
+        const { notInBaseline } = d.comparison.changes;
+        const failing = d.tests.find((t) => t.outcome === 'unexpected' && !t.signals.includes('new-failure') && !notInBaseline.includes(t.testId));
+        d.comparison.changes.newTests = [failing!.testId];
+        value = d;
+      },
+    });
+  });
   await page.goto(url('screen=insights&mode=light'));
   // The fixture's not-in-baseline group holds one failing and one passing test.
-  await expect(page.getByRole('main').getByRole('link', { name: /^Failed/ })).toHaveText(/^Failed\s*14\s*1 new, 1 not in baseline$/);
+  await expect(page.getByRole('main').getByRole('link', { name: /^Failed/ })).toHaveText(/^Failed\s*14\s*2 new, 1 not in baseline$/);
 });

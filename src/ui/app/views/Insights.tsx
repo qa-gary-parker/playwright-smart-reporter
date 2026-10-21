@@ -77,8 +77,9 @@ export function Insights() {
   const byId = testsById.value;
   const ids = (list: string[] | undefined) => (list ?? []).map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);
   const failing = tests.filter(isFailing);
-  const newFailures = failing.filter((t) => t.signals.includes('new-failure')).length;
-  // noNewFailures also counts these, so the card names them.
+  // The card names what noNewFailures counts: new failures, failing new tests and failures not in the baseline run.
+  const newTests = new Set(d.comparison?.changes.newTests);
+  const newFailures = failing.filter((t) => t.signals.includes('new-failure') || newTests.has(t.testId)).length;
   const notInBaseline = new Set(d.comparison?.changes.notInBaseline);
   const absent = failing.filter((t) => notInBaseline.has(t.testId)).length;
   const failedSub = [newFailures ? `${newFailures} new` : '', absent ? `${absent} not in baseline` : ''].filter(Boolean).join(', ') || 'none new';

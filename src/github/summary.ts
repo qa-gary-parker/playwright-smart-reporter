@@ -70,8 +70,8 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
   }
 
   if (failures.length > 0) {
-    // New failures (failed now, passed in the baseline run) are listed first and marked.
-    const newIds = new Set((data.comparison?.changes.newFailures ?? []).map((t) => t.testId));
+    // New failures and failing new tests are listed first and marked, as noNewFailures counts both.
+    const newIds = new Set([...(data.comparison?.changes.newFailures ?? []), ...(data.comparison?.changes.newTests ?? [])].map((t) => t.testId));
     const absentIds = new Set((data.comparison?.changes.notInBaseline ?? []).map((t) => t.testId));
     const fresh = failures.filter((t) => newIds.has(t.testId));
     const absent = failures.filter((t) => absentIds.has(t.testId)).length;

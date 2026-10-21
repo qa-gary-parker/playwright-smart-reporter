@@ -157,6 +157,19 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('marks a failing new test, one with no history, as new and counts it in the heading, as noNewFailures does', () => {
+    const checkout = { testId: 'a', title: 'checkout @smoke', file: 'cart.spec.ts', status: 'failed', duration: 4200, retry: 1, steps: [], history: [] } as TestResultData;
+    const comparison = { ...data.comparison!, changes: { ...data.comparison!.changes, newTests: [checkout] } };
+    const out = renderSummary({ ...data, comparison }, { workspace: WORKSPACE });
+    expect(out).toContain(`### Failures (2, 2 new)
+
+| Test | Location |
+|---|---|
+| **New** \`checkout @smoke [Desktop Chrome]\` | \`e2e/tests/cart.spec.ts:6\` |
+| **New** \`totals \\| tax\` | \`e2e/tests/cart.spec.ts:27\` |
+`);
+  });
+
   it('names the branch and commit of the baseline run under the totals', () => {
     const baselineRun = { ...run, ciInfo: { provider: 'github', branch: 'main', commit: 'abc12345' } };
     const out = renderSummary({ ...data, comparison: { ...data.comparison!, baselineRun } }, { workspace: WORKSPACE });

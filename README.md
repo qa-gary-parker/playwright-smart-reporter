@@ -1453,7 +1453,7 @@ When pull request and branch runs share one history file, raise `maxHistoryRuns`
 
 Show the run where reviewers already look:
 
-- **Job summary:** pass rate, the branch and commit of the baseline run, quality gate result, failures (new failures first, and failures that did not run in the baseline run marked), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
+- **Job summary:** pass rate, the branch and commit of the baseline run, quality gate result, failures (new failures and failing new tests first, and failures that did not run in the baseline run marked), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
 - **Annotations:** an error on the line of each failing assertion, not on the test declaration.
 - **Pull request comment:** the same summary as one comment. Each run updates that comment, so re-runs do not add more comments.
 
