@@ -27,7 +27,8 @@ export function commitRange(lastPassed: Pick<RunSummary, 'ciInfo'> | undefined, 
   const to = ref(firstFailed.ciInfo);
   if (!to) return undefined;
   const from = ref(lastPassed?.ciInfo);
-  const url = pageUrl(firstFailed.ciInfo!, rev(from), rev(to));
+  // Passed and failed at one commit: the compare page would be empty
+  const url = pageUrl(firstFailed.ciInfo!, from?.commit === to.commit ? undefined : rev(from), rev(to));
   return { ...(from && { lastPassed: from }), firstFailed: to, ...(url && { url }) };
 }
 
@@ -61,7 +62,7 @@ function isShallow(cwd: string): boolean {
 }
 
 /**
- * Sets the files changed in each range that has both commits, from git in the local clone: one call per distinct range.
+ * Sets the files changed in each range of two commits, from git in the local clone: one call per distinct range.
  * A range git cannot compare (no git, or a shallow clone without the commits) keeps no suspects.
  */
 export function addSuspects(ranges: Array<CommitRange | undefined>, cwd: string, redact: (text: string) => string = (t) => t): void {
@@ -69,7 +70,7 @@ export function addSuspects(ranges: Array<CommitRange | undefined>, cwd: string,
   for (const r of ranges) {
     const from = rev(r?.lastPassed);
     const to = rev(r?.firstFailed);
-    if (!r || !from || !to) continue;
+    if (!r || !from || !to || from === to) continue;
     const range = `${from}..${to}`;
     if (!diffs.has(range)) {
       try {

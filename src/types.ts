@@ -445,7 +445,7 @@ export interface CommitRange {
   lastPassed?: CommitRef;     // absent when no run in history passed, or that run had no commit
   firstFailed: CommitRef;
   url?: string;               // GitHub or GitLab page of the range, or of the first failed commit
-  suspects?: string[];        // files changed in the range, with suspects: true; absent when git could not tell
+  suspects?: string[];        // files changed in the range, with suspects: true; absent for a range of one commit, or when git could not tell
 }
 
 export interface CommitRef {

@@ -1503,6 +1503,7 @@ When pull request and branch runs share one history file, raise `maxHistoryRuns`
 For each new failure, the reporter finds the last run it passed in and the first run it failed in after that. The commits come from the CI info in history. Each failure cluster gets the same range, from the runs its tests ran in.
 
 - The test detail shows the range, such as `9f8e7d6c..a1b2c3d4`. On GitHub and GitLab it links to the compare page. When no run in history passed, it shows the first failed commit only.
+- When the test passed and failed at the same commit, the range shows as **no code change** and links to that commit. With `suspects`, it runs no git call and lists no files.
 - In Insights, the tooltip of a cluster's label names the commit it last passed at.
 - The job summary and the pull request comment show the range under each new failure.
 - The JSON export has the range in `tests[].commits` and `failureClusters[].tracking.commits`.

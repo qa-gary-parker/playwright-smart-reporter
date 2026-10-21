@@ -69,6 +69,7 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 export function commitsLabel(c: CommitRange): { text: string; title: string } {
   const from = c.lastPassed?.commit;
   const to = c.firstFailed.commit;
+  if (from === to) return { text: 'no code change', title: `No code change: last passed and first failed at ${to}` };
   return from ? { text: `${from}..${to}`, title: `Last passed at ${from}, first failed at ${to}` } : { text: to, title: `First failed at ${to}` };
 }
 

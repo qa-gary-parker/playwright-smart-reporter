@@ -24,8 +24,12 @@ function table(header: string[], rows: string[][]): string[] {
 
 // Where a new failure started, and the files changed since it last passed
 function commitsLine(c: CommitRange): string {
-  const at = `${c.lastPassed ? `Last passed at ${code(c.lastPassed.commit)}, first` : 'First'} failed at ${code(c.firstFailed.commit)}`;
-  const link = c.url ? ` ([${c.lastPassed ? 'compare' : 'commit'}](${c.url}))` : '';
+  const to = code(c.firstFailed.commit);
+  const same = c.lastPassed?.commit === c.firstFailed.commit;
+  const at = same
+    ? `No code change: last passed and first failed at ${to}`
+    : `${c.lastPassed ? `Last passed at ${code(c.lastPassed.commit)}, first` : 'First'} failed at ${to}`;
+  const link = c.url ? ` ([${c.lastPassed && !same ? 'compare' : 'commit'}](${c.url}))` : '';
   const files = c.suspects ?? [];
   const extra = files.length > SUSPECT_LIMIT ? `, and ${files.length - SUSPECT_LIMIT} more` : '';
   return `<br>${at}${link}${files.length ? `<br>Changed: ${files.slice(0, SUSPECT_LIMIT).map(code).join(', ')}${extra}` : ''}`;

@@ -156,6 +156,7 @@ describe('cluster labels', () => {
     const firstFailed = { commit: 'bbbbbbbb', sha: 'b'.repeat(40) };
     expect(commitsLabel({ lastPassed: { commit: 'aaaaaaaa' }, firstFailed })).toEqual({ text: 'aaaaaaaa..bbbbbbbb', title: 'Last passed at aaaaaaaa, first failed at bbbbbbbb' });
     expect(commitsLabel({ firstFailed })).toEqual({ text: 'bbbbbbbb', title: 'First failed at bbbbbbbb' });
+    expect(commitsLabel({ lastPassed: { commit: 'bbbbbbbb' }, firstFailed })).toEqual({ text: 'no code change', title: 'No code change: last passed and first failed at bbbbbbbb' });
   });
 });
 

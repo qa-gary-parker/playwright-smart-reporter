@@ -185,6 +185,10 @@ describe('renderSummary', () => {
       `| **New** \`totals \\| tax\`<br>Last passed at \`aaaaaaaa\`, first failed at \`bbbbbbbb\` ([compare](${url}))<br>Changed: \`src/cart.ts\`, \`src/tax.ts\`, \`e2e/tests/cart.spec.ts\`, \`e2e/pages/cart.ts\`, \`e2e/fixtures.ts\`, and 1 more | \`e2e/tests/cart.spec.ts:27\` |`,
     );
     expect(withCommits(firstOnly)).toContain('| **New** `totals \\| tax`<br>First failed at `bbbbbbbb` | `e2e/tests/cart.spec.ts:27` |');
+    const sameCommit = { lastPassed: { commit: 'bbbbbbbb' }, firstFailed: { commit: 'bbbbbbbb' }, url: 'https://github.com/acme/shop/commit/bbbbbbbb' };
+    expect(withCommits(sameCommit)).toContain(
+      '| **New** `totals \\| tax`<br>No code change: last passed and first failed at `bbbbbbbb` ([commit](https://github.com/acme/shop/commit/bbbbbbbb)) | `e2e/tests/cart.spec.ts:27` |',
+    );
   });
 
   it('names the branch and commit of the baseline run under the totals', () => {

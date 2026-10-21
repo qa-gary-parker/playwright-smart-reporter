@@ -83,6 +83,10 @@ describe('commitRange', () => {
     expect(commitRange(undefined, { ciInfo: unknown('1234abcd') })).toEqual({ firstFailed: { commit: '1234abcd' }, url: `${REPO}/commit/1234abcd` });
     expect(commitRange(undefined, { ciInfo: unknown('release-7') })).toEqual({ firstFailed: { commit: 'release-7' } });
   });
+
+  it('links a range that passed and failed at one commit to that commit, not to an empty compare page', () => {
+    expect(commitRange({ ciInfo: ci('a') }, { ciInfo: ci('a') })).toEqual({ lastPassed: ref('a'), firstFailed: ref('a'), url: `${REPO}/commit/${'a'.repeat(40)}` });
+  });
 });
 
 describe('addSuspects', () => {
@@ -150,14 +154,15 @@ describe('addSuspects', () => {
     ]]);
   });
 
-  it('gives no suspects outside a git repository, and passes git no saved commit that is not hex', () => {
+  it('gives no suspects outside a git repository, and calls git for no commit that is not hex and no range of one commit', () => {
     const outside = [range('a'.repeat(40), 'b'.repeat(40))];
     const injected = [range('--output=/tmp/x', 'b'.repeat(40))];
+    const oneCommit = [range('c'.repeat(40), 'c'.repeat(40))];
     vi.mocked(execFileSync).mockClear();
 
-    addSuspects([...outside, ...injected], tmp);
+    addSuspects([...outside, ...injected, ...oneCommit], tmp);
 
-    expect([...outside, ...injected].map((r) => r.suspects)).toEqual([undefined, undefined]);
+    expect([...outside, ...injected, ...oneCommit].map((r) => r.suspects)).toEqual([undefined, undefined, undefined]);
     expect(vi.mocked(execFileSync).mock.calls.map((c) => c[1]?.[2])).toEqual(['diff', 'rev-parse']);
     expect(vi.mocked(console.log).mock.calls).toEqual([['Smart Reporter: no suspects for aaaaaaaa..bbbbbbbb: git could not compare these commits here.']]);
   });
