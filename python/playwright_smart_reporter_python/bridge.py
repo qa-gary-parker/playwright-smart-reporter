@@ -9,14 +9,15 @@ from typing import Optional
 
 from .converter import convert_pytest_json
 
-# Template for the Node.js script. {generators_dir} is injected as an absolute
+# Template for the Node.js script. {dist_dir} is injected as an absolute
 # path so require() resolves correctly regardless of cwd.  Internal relative
-# requires (../utils, ./card-generator, etc.) resolve relative to the loaded
-# file's own directory, so the preserved directory structure keeps them working.
+# requires (../utils, ../ui, etc.) resolve relative to the loaded file's own
+# directory, so the preserved directory structure keeps them working.
+# Same path as the Node reporter: buildReportData, then writeReport.
 _GENERATE_SCRIPT_TEMPLATE = """\
 const fs = require('fs');
-const path = require('path');
-const {{ generateHtml }} = require('{generators_dir}/html-generator');
+const {{ buildReportData }} = require('{dist_dir}/report-data/builder');
+const {{ loadUiAssets, writeReport }} = require('{dist_dir}/report-data/writer');
 
 const inputPath = process.argv[2];
 const outputPath = process.argv[3] || 'smart-report.html';
@@ -27,14 +28,10 @@ if (!inputPath) {{
 }}
 
 const data = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-const html = generateHtml(data);
-
-const outDir = path.dirname(outputPath);
-if (outDir && outDir !== '.') {{
-  fs.mkdirSync(outDir, {{ recursive: true }});
-}}
-
-fs.writeFileSync(outputPath, html, 'utf8');
+writeReport(buildReportData(data), {{ outputPath, assets: loadUiAssets() }}).catch((err) => {{
+  console.error(err);
+  process.exit(1);
+}});
 """
 
 
@@ -46,18 +43,18 @@ def _get_dist_root() -> Path:
     1. Bundled dist shipped inside the Python package (PyPI install)
     2. Monorepo dist/ at the repository root (development)
 
-    Returns the directory that contains generators/html-generator.js.
+    Returns the directory that contains report-data/builder.js.
     """
     # 1) Bundled inside the installed package
     bundled = Path(__file__).resolve().parent / "_bundled_dist"
-    if (bundled / "generators" / "html-generator.js").is_file():
+    if (bundled / "report-data" / "builder.js").is_file():
         return bundled
 
     # 2) Monorepo layout
     monorepo = _find_monorepo_root()
     if monorepo is not None:
         dist = monorepo / "dist"
-        if (dist / "generators" / "html-generator.js").is_file():
+        if (dist / "report-data" / "builder.js").is_file():
             return dist
 
     raise RuntimeError(
@@ -136,11 +133,10 @@ class SmartReporterBridge:
             data_json_path = self.project_root / ".smart-reporter-data.json"
         data_json_path.write_text(json.dumps(html_data, indent=2), encoding="utf-8")
 
-        # Build the generator script with absolute path to generators dir
-        generators_dir = (self._dist_root / "generators").resolve()
+        # Build the generator script with absolute path to the dist dir
         # Normalise to forward slashes for Node.js on all platforms
-        gen_dir_str = str(generators_dir).replace("\\", "/")
-        script_content = _GENERATE_SCRIPT_TEMPLATE.format(generators_dir=gen_dir_str)
+        dist_dir_str = str(self._dist_root.resolve()).replace("\\", "/")
+        script_content = _GENERATE_SCRIPT_TEMPLATE.format(dist_dir=dist_dir_str)
 
         script_path = self.project_root / ".generate-report.js"
         script_path.write_text(script_content, encoding="utf-8")

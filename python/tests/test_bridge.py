@@ -1,3 +1,6 @@
+import importlib.util
+import json
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -5,10 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from playwright_smart_reporter_python.bridge import (
+    SmartReporterBridge,
     _find_monorepo_root,
     _get_dist_root,
     _is_valid_root,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestIsValidRoot:
@@ -35,9 +41,9 @@ class TestGetDistRoot:
     def test_prefers_bundled_over_monorepo(self, tmp_path):
         """Bundled dist should be preferred when present."""
         # Create a fake bundled dist
-        bundled = tmp_path / "_bundled_dist" / "generators"
+        bundled = tmp_path / "_bundled_dist" / "report-data"
         bundled.mkdir(parents=True)
-        (bundled / "html-generator.js").write_text("// bundled")
+        (bundled / "builder.js").write_text("// bundled")
 
         with patch(
             "playwright_smart_reporter_python.bridge.__file__",
@@ -53,9 +59,9 @@ class TestGetDistRoot:
         (monorepo / "package.json").write_text(
             '{"name": "playwright-smart-reporter"}'
         )
-        dist = monorepo / "dist" / "generators"
+        dist = monorepo / "dist" / "report-data"
         dist.mkdir(parents=True)
-        (dist / "html-generator.js").write_text("// monorepo")
+        (dist / "builder.js").write_text("// monorepo")
 
         with patch(
             "playwright_smart_reporter_python.bridge._find_monorepo_root",
@@ -99,9 +105,9 @@ class TestSmartReporterBridge:
         from playwright_smart_reporter_python.bridge import SmartReporterBridge
 
         # Create fake dist
-        bundled = tmp_path / "pkg" / "_bundled_dist" / "generators"
+        bundled = tmp_path / "pkg" / "_bundled_dist" / "report-data"
         bundled.mkdir(parents=True)
-        (bundled / "html-generator.js").write_text("// fake")
+        (bundled / "builder.js").write_text("// fake")
 
         with patch(
             "playwright_smart_reporter_python.bridge.__file__",
@@ -124,9 +130,9 @@ class TestSmartReporterBridge:
     def test_generate_report_calls_node(self, tmp_path, sample_report_path):
         from playwright_smart_reporter_python.bridge import SmartReporterBridge
 
-        bundled = tmp_path / "pkg" / "_bundled_dist" / "generators"
+        bundled = tmp_path / "pkg" / "_bundled_dist" / "report-data"
         bundled.mkdir(parents=True)
-        (bundled / "html-generator.js").write_text("// fake")
+        (bundled / "builder.js").write_text("// fake")
 
         with patch(
             "playwright_smart_reporter_python.bridge.__file__",
@@ -147,3 +153,76 @@ class TestSmartReporterBridge:
                 args = mock_run.call_args[0][0]
                 assert args[0] == "node"
                 assert "generate-report" in args[1]
+
+
+def _report_data(html):
+    match = re.search(r"<script>window\.__SMART_DATA__=(.*?);</script>", html, re.S)
+    assert match is not None, "report data is not embedded in the HTML"
+    return json.loads(match.group(1))
+
+
+def _load_bundler():
+    spec = importlib.util.spec_from_file_location(
+        "bundle_dist", REPO_ROOT / "python" / "scripts" / "bundle_dist.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestRoundTrip:
+    """Runs Node on the compiled dist, so `npm run build` must run first."""
+
+    def _assert_report(self, html_path, dist_root):
+        html = html_path.read_text(encoding="utf-8")
+        data = _report_data(html)
+        assert data["schemaVersion"] == 4
+        assert data["meta"]["startTime"] == 1700000000000
+        assert [t["title"] for t in data["tests"]] == [
+            "TestLogin::test_valid_credentials",
+            "TestLogin::test_invalid_password",
+            "test_widget_count",
+            "test_export_csv",
+        ]
+        assert [t["status"] for t in data["tests"]] == [
+            "passed",
+            "failed",
+            "passed",
+            "skipped",
+        ]
+        summary = data["summary"]
+        assert (
+            summary["total"],
+            summary["passed"],
+            summary["failed"],
+            summary["skipped"],
+        ) == (4, 2, 1, 1)
+        assert data["ai"]["analysisOff"] is True
+        assert (dist_root / "ui" / "app.js").read_text(encoding="utf-8") in html
+
+    def test_generates_report_from_built_dist(self, tmp_path, sample_report_path):
+        bridge = SmartReporterBridge(project_root=tmp_path)
+        output = tmp_path / "out" / "report.html"
+
+        bridge.generate_report(pytest_json_path=sample_report_path, output_html=output)
+
+        self._assert_report(output, bridge._dist_root)
+
+    def test_bundled_dist_is_self_contained(self, tmp_path, sample_report_path):
+        repo = tmp_path / "repo"
+        package_dir = repo / "python" / "playwright_smart_reporter_python"
+        package_dir.mkdir(parents=True)
+        (repo / "dist").symlink_to(REPO_ROOT / "dist")
+        _load_bundler().bundle(repo)
+
+        with patch(
+            "playwright_smart_reporter_python.bridge.__file__",
+            str(package_dir / "bridge.py"),
+        ):
+            bridge = SmartReporterBridge(project_root=tmp_path)
+        assert bridge._dist_root == package_dir.resolve() / "_bundled_dist"
+
+        output = tmp_path / "report.html"
+        bridge.generate_report(pytest_json_path=sample_report_path, output_html=output)
+
+        self._assert_report(output, bridge._dist_root)
