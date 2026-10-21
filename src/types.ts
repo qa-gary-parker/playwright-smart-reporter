@@ -317,8 +317,8 @@ export interface AttemptData {
 
 // Phase 34: what differs between the traces of a flaky test's failed attempt and its passing attempt
 export interface AttemptDiff {
-  failed: number;                   // retry of the failed attempt: the first failed one that has a trace
-  passed: number;                   // retry of the passing attempt
+  failed: number;                   // retry of the first attempt that missed the expected status and has a trace (for test.fail(), one that passed)
+  passed: number;                   // retry of the last attempt that got the expected status
   missingTrace?: number[];          // retries without a trace; network and console are then absent
   network?: AttemptRequestDiff[];   // absent with enableNetworkLogs: false
   console?: Array<{ level: string; text: string }>; // errors and warnings only the failed attempt logged

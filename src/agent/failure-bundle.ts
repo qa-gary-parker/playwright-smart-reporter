@@ -216,7 +216,7 @@ function toFailure(t: SourceTest, rootDir: string): AgentFailure {
     ? t.attempts
     : [{ retry: t.retry, status: t.status, duration: t.duration, error: t.error, steps: [] }];
   const step = failingStep(t);
-  const divergence = divergenceSummary(attempts);
+  const divergence = divergenceSummary(attempts, t.expectedStatus);
 
   return {
     id: t.testId,

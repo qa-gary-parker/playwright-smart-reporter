@@ -113,6 +113,15 @@ describe('divergenceSummary', () => {
     );
   });
 
+  it('for test.fail(), puts the attempt that passed against the attempt that failed as expected', () => {
+    expect(divergenceSummary([attempt(0, 'passed', 1200, PASSED_STEPS), attempt(1, 'failed', 4800, FAILED_STEPS)], 'failed')).toBe(
+      'Attempt 1 passed after 1.2s; attempt 2 failed in 4.8s',
+    );
+    expect(divergenceSummary([attempt(0, 'timedOut', 30000, FAILED_STEPS), attempt(1, 'failed', 900, PASSED_STEPS)], 'failed')).toBe(
+      "Attempt 1 timed out at step 'checkout › pay' after 3.2s; attempt 2 ran it in 400ms and failed",
+    );
+  });
+
   it('has no summary for one attempt, or for failed attempts without any failed step', () => {
     expect(divergenceSummary([attempt(0, 'failed', 4800, FAILED_STEPS)])).toBeUndefined();
     expect(divergenceSummary([attempt(0, 'failed', 6100, []), attempt(1, 'failed', 6200, [])])).toBeUndefined();
@@ -206,6 +215,11 @@ describe('compareAttemptTraces', () => {
       network: [{ method: 'GET', url: 'http://shop.test/api/cart?t=[REDACTED]', failed: 500, passed: 200 }],
       console: [{ level: 'error', text: `${'x'.repeat(496)}[RED…` }],
     });
+  });
+
+  it('for test.fail(), compares the attempt that passed with the attempt that failed as expected', () => {
+    const passedFirst = [attempt(0, 'passed', 400, []), attempt(1, 'failed', 900, [])];
+    expect(compareAttemptTraces(passedFirst, new Map([[0, evidence], [1, null]]), undefined, 'failed')).toEqual({ failed: 0, passed: 1, missingTrace: [1] });
   });
 
   it('has nothing to compare without a failed and a passing attempt', () => {

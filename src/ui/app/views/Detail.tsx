@@ -18,7 +18,7 @@ import {
 import { displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
 import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
-import { alignSteps, divergenceSummary } from '../../../analyzers/attempt-compare';
+import { alignSteps, divergenceSummary, pickAttempts } from '../../../analyzers/attempt-compare';
 import { Lightbox, type MediaItem } from './Lightbox';
 import { Violations } from './Accessibility';
 import { Markdown } from './Markdown';
@@ -90,12 +90,11 @@ function Steps({ t }: { t: ReportTest }) {
 
 function Attempts({ t }: { t: ReportTest }) {
   const attempts = t.attempts ?? [];
-  // Side by side only makes sense when one attempt failed and a later one passed.
-  const failedAttempt = attempts.find((a) => a.status === 'failed' || a.status === 'timedOut');
-  const passedAttempt = [...attempts].reverse().find((a) => a.status === 'passed');
-  const compare = failedAttempt && passedAttempt ? [failedAttempt, passedAttempt] : undefined;
+  // Side by side only makes sense when one attempt missed the expected status and another got it.
+  const { missed, met } = pickAttempts(attempts, t.expectedStatus);
+  const compare = missed[0] && met ? [missed[0], met] : undefined;
   const rows = useMemo(() => (compare ? alignSteps(compare[0].steps, compare[1].steps) : []), [t]);
-  const summary = useMemo(() => divergenceSummary(attempts), [t]);
+  const summary = useMemo(() => divergenceSummary(attempts, t.expectedStatus), [t]);
   return (
     <div class="attempts">
       {summary && <p class="attempts__summary">{summary}</p>}

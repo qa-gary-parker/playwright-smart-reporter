@@ -979,7 +979,7 @@ class SmartReporter implements Reporter {
   private settleAttemptEvidence(r: TestResultData): void {
     const traces = this.attemptTraces.get(r.testId);
     this.attemptTraces.delete(r.testId);
-    const diff = traces && r.outcome === 'flaky' ? compareAttemptTraces(r.attempts ?? [], traces, this.redact) : undefined;
+    const diff = traces && r.outcome === 'flaky' ? compareAttemptTraces(r.attempts ?? [], traces, this.redact, r.expectedStatus) : undefined;
     if (diff) r.attemptDiff = diff;
     for (const attempt of r.attempts ?? []) {
       if (r.outcome !== 'flaky') {

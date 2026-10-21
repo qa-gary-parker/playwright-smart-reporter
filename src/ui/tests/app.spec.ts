@@ -262,6 +262,28 @@ test('the retry comparison pairs steps by title path, so a step only the passing
   await expect(page.getByRole('article', { name: 'Test detail' }).locator('.attempts__summary')).toHaveText('Attempt 1 failed after 4.8s; attempt 2 passed in 2.3s');
 });
 
+test('for test.fail(), the retry comparison puts the attempt that passed first, against the one that failed as expected', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; expectedStatus?: string; attempts?: Array<{ status: string; duration: number; steps: unknown[] }> }> }) => {
+        const flaky = d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!;
+        const step = (title: string, duration: number, failed?: boolean) => ({ title, duration, category: 'test.step', ...(failed && { failed }) });
+        flaky.expectedStatus = 'failed';
+        Object.assign(flaky.attempts![0], { status: 'passed', duration: 1200, steps: [step('open shop', 500)] });
+        Object.assign(flaky.attempts![1], { status: 'failed', duration: 900, steps: [step('open shop', 500), step('pay', 300, true)] });
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.getByRole('table', { name: 'Steps by attempt' }).getByRole('columnheader')).toHaveText(['Attempt 1 (passed)', 'Attempt 2 (failed)']);
+  await expect(page.getByRole('article', { name: 'Test detail' }).locator('.attempts__summary')).toHaveText('Attempt 1 passed after 1.2s; attempt 2 failed in 900ms');
+});
+
 test('a failed attempt shows its own screenshot and trace in the Attempts section', async ({ page }) => {
   await page.addInitScript(() => {
     let value: unknown;

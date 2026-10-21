@@ -173,7 +173,7 @@ export function buildPlaywrightStyleAiPrompt(params: {
       const error = a.error?.split('\n')[0];
       lines.push(`- Attempt ${a.retry + 1} (${a.status}, ${formatDuration(a.duration)})${error ? `: ${error}` : ''}`);
     }
-    const divergence = divergenceSummary(attempts);
+    const divergence = divergenceSummary(attempts, test.expectedStatus);
     if (divergence) lines.push('', divergence);
   }
 

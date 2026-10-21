@@ -25,3 +25,11 @@ test('checks out on the second try', async ({}, testInfo) => {
     });
   });
 });
+
+// test.fail(): the first attempt passes, which Playwright counts as a failure and retries; the retry fails as expected.
+test('is expected to fail and passes once', async ({}, testInfo) => {
+  test.fail();
+  await test.step('checkout', async () => {
+    if (testInfo.retry > 0) throw new Error('fails as expected');
+  });
+});

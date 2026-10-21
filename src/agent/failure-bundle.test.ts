@@ -172,6 +172,20 @@ describe('buildFailureBundle', () => {
     expect(formatFailureText(f)).toContain(`  Attempts: failed in 6100ms, failed in 6200ms\n    Every attempt failed at step 'Sign in › Expect "toBeVisible"'\n`);
   });
 
+  it('for test.fail(), does not take an attempt that passed as the one that went right', () => {
+    const data = loadFixture();
+    const t = data.tests[0];
+    t.expectedStatus = 'failed';
+    t.attempts = [
+      { retry: 0, status: 'timedOut', duration: 30000, steps: [{ title: 'Sign in', duration: 5900, category: 'test.step', failed: true }] },
+      { retry: 1, status: 'passed', duration: 6200, steps: [] },
+    ];
+
+    const [f] = buildFailureBundle(data, OPTS).failures;
+
+    expect(f.divergence).toBe("Attempt 1 timed out at step 'Sign in' after 5.9s; attempt 2 passed after 6.2s");
+  });
+
   it('redacts secrets seeded into every text field the bundle copies', () => {
     const t = (...parts: string[]) => parts.join('');
     const secrets = {

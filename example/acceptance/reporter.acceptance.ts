@@ -380,6 +380,14 @@ describe('failed attempts', () => {
     expect(test.attemptDiff).toEqual({ failed: 0, passed: 1, missingTrace: [1] });
   });
 
+  it('for test.fail(), compares the attempt that passed with the attempt that failed as expected', () => {
+    const out = run('attempts-test-fail', {}, 'expected to fail and passes once');
+    const [test] = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).tests;
+
+    expect([test.outcome, test.attemptDiff]).toEqual(['flaky', { failed: 0, passed: 1, missingTrace: [1] }]);
+    expect(test.aiPrompt).toMatch(/^Attempt 1 passed after \d+ms; attempt 2 failed in \d+ms$/m);
+  });
+
   it('keeps no evidence on earlier attempts of a test that failed every time, and writes no files for them', () => {
     const out = run('attempts-all-failed', { cspSafe: true }, 'fails every time');
     const [test] = cspSafeData(out).tests;

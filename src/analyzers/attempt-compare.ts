@@ -63,8 +63,13 @@ export function alignSteps(a: StepData[], b: StepData[]): StepRow[] {
   }));
 }
 
-const isFailedAttempt = (a: AttemptData) => a.status === 'failed' || a.status === 'timedOut';
-const ended = (a: AttemptData) => (a.status === 'timedOut' ? 'timed out' : 'failed');
+const said = (a: AttemptData) => (a.status === 'timedOut' ? 'timed out' : a.status);
+
+/** The attempts that did not end with the expected status, and the last one that did. A test.fail() attempt that passed did not. */
+export function pickAttempts(attempts: AttemptData[], expected: AttemptData['status'] = 'passed'): { missed: AttemptData[]; met?: AttemptData } {
+  const ran = (a: AttemptData) => a.status === 'passed' || a.status === 'failed' || a.status === 'timedOut';
+  return { missed: attempts.filter((a) => ran(a) && a.status !== expected), met: [...attempts].reverse().find((a) => a.status === expected) };
+}
 
 // The innermost failed step under the first failed top-level branch.
 function failedStepIndex(steps: StepData[]): number {
@@ -76,29 +81,32 @@ function failedStepIndex(steps: StepData[]): number {
   return best;
 }
 
-/** One line on where the attempts went different ways: the first failed attempt against the passing one, or each failed attempt. */
-export function divergenceSummary(attempts: AttemptData[]): string | undefined {
-  const failed = attempts.filter(isFailedAttempt);
-  const passed = [...attempts].reverse().find((a) => a.status === 'passed');
-  if (failed.length === 0) return undefined;
+/**
+ * One line on where the attempts went different ways: the first attempt that missed the expected status
+ * against the last one that got it, or each attempt that missed it.
+ */
+export function divergenceSummary(attempts: AttemptData[], expected?: AttemptData['status']): string | undefined {
+  const { missed, met } = pickAttempts(attempts, expected);
+  if (missed.length === 0) return undefined;
   const at = (a: AttemptData) => {
     const i = failedStepIndex(a.steps);
     return i < 0 ? undefined : { i, path: stepPath(a.steps, i).join(' › '), took: formatDuration(a.steps[i].duration) };
   };
 
-  if (passed) {
-    const [f, step] = [failed[0], at(failed[0])];
-    if (!step) return `Attempt ${f.retry + 1} ${ended(f)} after ${formatDuration(f.duration)}; attempt ${passed.retry + 1} passed in ${formatDuration(passed.duration)}`;
-    const b = alignSteps(f.steps, passed.steps).find((r) => r.a === step.i)?.b;
-    const there = b === undefined ? 'passed without it' : `passed it in ${formatDuration(passed.steps[b].duration)}`;
-    return `Attempt ${f.retry + 1} ${ended(f)} at step '${step.path}' after ${step.took}; attempt ${passed.retry + 1} ${there}`;
+  if (met) {
+    const [f, step] = [missed[0], at(missed[0])];
+    if (!step) return `Attempt ${f.retry + 1} ${said(f)} after ${formatDuration(f.duration)}; attempt ${met.retry + 1} ${said(met)} in ${formatDuration(met.duration)}`;
+    const b = alignSteps(f.steps, met.steps).find((r) => r.a === step.i)?.b;
+    const took = b === undefined ? undefined : formatDuration(met.steps[b].duration);
+    const there = !took ? `${said(met)} without it` : met.status === 'passed' ? `passed it in ${took}` : `ran it in ${took} and ${said(met)}`;
+    return `Attempt ${f.retry + 1} ${said(f)} at step '${step.path}' after ${step.took}; attempt ${met.retry + 1} ${there}`;
   }
 
-  const steps = failed.map(at);
-  if (failed.length < 2 || steps.every((s) => !s)) return undefined;
+  const steps = missed.map(at);
+  if (missed.length < 2 || steps.every((s) => !s)) return undefined;
   if (steps.every((s) => s && s.path === steps[0]!.path)) return `Every attempt failed at step '${steps[0]!.path}'`;
-  const line = failed
-    .map((a, k) => `attempt ${a.retry + 1} ${ended(a)} ${steps[k] ? `at step '${steps[k]!.path}' after ${steps[k]!.took}` : `after ${formatDuration(a.duration)}`}`)
+  const line = missed
+    .map((a, k) => `attempt ${a.retry + 1} ${said(a)} ${steps[k] ? `at step '${steps[k]!.path}' after ${steps[k]!.took}` : `after ${formatDuration(a.duration)}`}`)
     .join('; ');
   return line[0].toUpperCase() + line.slice(1);
 }
@@ -155,11 +163,15 @@ export function diffAttemptEvidence(failed: AttemptEvidence, passed: AttemptEvid
   return diff;
 }
 
-/** The first failed attempt that has a trace against the passing one; without both traces, which attempts lack one. */
-export function compareAttemptTraces(attempts: AttemptData[], traces: Map<number, AttemptEvidence | null>, redact?: (text: string) => string): AttemptDiff | undefined {
-  const failed = attempts.filter(isFailedAttempt);
-  const f = failed.find((a) => traces.get(a.retry)) ?? failed[0];
-  const p = [...attempts].reverse().find((a) => a.status === 'passed');
+/** The first attempt that missed the expected status and has a trace, against the last one that got it; without both traces, which attempts lack one. */
+export function compareAttemptTraces(
+  attempts: AttemptData[],
+  traces: Map<number, AttemptEvidence | null>,
+  redact?: (text: string) => string,
+  expected?: AttemptData['status'],
+): AttemptDiff | undefined {
+  const { missed, met: p } = pickAttempts(attempts, expected);
+  const f = missed.find((a) => traces.get(a.retry)) ?? missed[0];
   if (!f || !p) return undefined;
   const [ef, ep] = [traces.get(f.retry), traces.get(p.retry)];
   if (!ef || !ep) return { failed: f.retry, passed: p.retry, missingTrace: [f, p].filter((a) => !traces.get(a.retry)).map((a) => a.retry) };
