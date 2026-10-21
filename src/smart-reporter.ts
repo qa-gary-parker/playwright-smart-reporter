@@ -495,7 +495,11 @@ class SmartReporter implements Reporter {
     }
 
     // Before attempts, the live file, history and every export copy these fields
-    if (this.redact) redactTestResult(testData, this.redact);
+    if (this.redact) {
+      redactTestResult(testData, this.redact);
+      // The attempt was built for the AI prompt, before redaction
+      attempt.error = testData.error;
+    }
 
     // Run all analyzers (flakiness, performance, retries, stability)
     this.flakinessAnalyzer.analyze(testData, history);
