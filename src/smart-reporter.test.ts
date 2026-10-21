@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { mergeHistories } from './smart-reporter';
-import type { RunSummary, TestHistory, TestHistoryEntry } from './types';
+import type { HistoryRunFile, RunSummary, TestHistory, TestHistoryEntry } from './types';
 
 describe('mergeHistories', () => {
   let dir: string;
@@ -252,6 +252,19 @@ describe('mergeHistories', () => {
       expect(merged.summaries!.map((s) => s.runId)).toEqual(['run-2', 'run-3']);
       expect(merged.forecasts).toEqual({ 'run-3': { a: 0.7 } });
       expect(merged.runFiles).toEqual({ 'run-3': './history-runs/run-3.json' });
+    });
+
+    // #67: run files copied beside a history file merge with it
+    it('reads the run files in the .runs folder beside each history file', () => {
+      fs.mkdirSync(file('history.runs'));
+      for (const [n, test] of [[1, 'a'], [2, 'b']] as const) {
+        const run: HistoryRunFile = { version: 1, summary: summary(3, 1), tests: { [test]: entry(3) } };
+        write(`history.runs/run-3.shard-${n}-of-2.json`, run);
+      }
+
+      mergeHistories([write('history.json', base)], file('output.json'));
+
+      expect(counts(read('output.json'))).toEqual({ entries: { a: 3, b: 3 }, summaries: [['run-1', 2], ['run-2', 2], ['run-3', 2]] });
     });
   });
 });

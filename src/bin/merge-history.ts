@@ -2,8 +2,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestHistory } from '../types';
-import { readHistoryFile, mergeHistoryData, limitHistory } from '../utils/history-merge';
+import type { HistoryRunFile, TestHistory } from '../types';
+import { readHistoryFile, readRunFiles, rebuildHistory, limitHistory } from '../utils/history-merge';
 
 interface MergeOptions {
   output?: string;
@@ -47,6 +47,7 @@ function showUsage(): void {
 Usage: merge-history [options] <input-files...>
 
 Merge multiple test-history.json files from parallel CI runs.
+Also reads the run files in the .runs folder beside each file (test-history.runs/).
 
 Options:
   -o, --output <file>      Output file path (default: merged-history.json)
@@ -170,12 +171,15 @@ async function main(): Promise<void> {
     // Load all history files
     console.log(`Loading ${expandedFiles.length} history file(s)...`);
     const histories: TestHistory[] = [];
+    const runFiles = new Map<string, HistoryRunFile>();
 
     for (const filePath of expandedFiles) {
       try {
         const history = readHistoryFile(filePath);
         histories.push(history);
-        console.log(`  ✓ Loaded: ${filePath}`);
+        const before = runFiles.size;
+        readRunFiles(filePath, runFiles);
+        console.log(`  ✓ Loaded: ${filePath}${runFiles.size > before ? ` and ${runFiles.size - before} run file(s)` : ''}`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`  ✗ Error: ${message}`);
@@ -185,7 +189,7 @@ async function main(): Promise<void> {
 
     // Merge histories
     console.log('\nMerging histories...');
-    let merged = mergeHistoryData(histories);
+    let merged = rebuildHistory(histories, runFiles.values());
 
     // Log merge stats before limiting
     const totalTests = Object.keys(merged.tests).length;

@@ -301,6 +301,8 @@ describe('failed attempts', () => {
       .filter((f) => !f.startsWith('test-results') && fs.statSync(path.join(out, f)).isFile())
       .map((f) => f.split(path.sep).join('/'))
       .sort();
+  // The run's own history file (#67)
+  const HISTORY_RUN_FILE = expect.stringMatching(/^test-history\.runs\/run-\d+\.json$/);
 
   it('keeps the screenshot and trace of an attempt that failed before the retry passed', () => {
     const out = run('attempts', {}, 'fails once');
@@ -323,7 +325,7 @@ describe('failed attempts', () => {
       .map((p) => path.posix.normalize(p));
     const files = outputFiles(out);
 
-    expect(files.filter((f) => !linked.includes(f))).toEqual(['pw-junit.xml', 'pw.json', 'smart-report-data.js', 'smart-report.css', 'smart-report.html', 'smart-report.js', 'test-history.json']);
+    expect(files.filter((f) => !linked.includes(f))).toEqual(['pw-junit.xml', 'pw.json', 'smart-report-data.js', 'smart-report.css', 'smart-report.html', 'smart-report.js', 'test-history.json', HISTORY_RUN_FILE]);
     expect(files.filter((f) => linked.includes(f))).toEqual(['smart-report-screenshot-1.png', `traces/${TRACE}`]);
   });
 
@@ -403,6 +405,7 @@ describe('failed attempts', () => {
       'smart-report.html',
       'smart-report.js',
       'test-history.json',
+      HISTORY_RUN_FILE,
       'traces/attempts.fixtures.ts____fails every time with a screenshot-trace-0.zip',
     ]);
   });

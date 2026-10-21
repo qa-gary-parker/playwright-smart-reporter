@@ -44,6 +44,16 @@ function mergeHistory(name: string, args: string[]): TestHistory {
 const entriesPerTest = (history: TestHistory) =>
   Object.fromEntries(Object.entries(history.tests).map(([testId, entries]) => [testId, entries.length]));
 
+const counts = (s: RunSummary) => [s.runId, s.total, s.passed, s.failed, s.skipped, s.flaky, s.passRate];
+// The skipped test is left out of the pass rate: 2 of the 3 that ran
+const MERGED_SUMMARIES = [
+  ['run-ci-1', 4, 2, 1, 1, 1, 67],
+  ['run-ci-2', 4, 2, 1, 1, 1, 67],
+  ['run-ci-3', 4, 2, 1, 1, 1, 67],
+];
+
+const runsDir = (historyFile: string) => historyFile.replace(/\.json$/, '.runs');
+
 const shardSummaries = () =>
   shards.map((file) => (JSON.parse(fs.readFileSync(file, 'utf8')) as TestHistory).summaries!.find((s) => s.runId === 'run-ci-3')!);
 
@@ -69,17 +79,11 @@ afterAll(() => {
 
 describe('merge-history on sharded runs', () => {
   it('combines the shard summaries of one run, and keeps a run restored into both shards once', () => {
-    const counts = (s: RunSummary) => [s.runId, s.total, s.passed, s.failed, s.skipped, s.flaky, s.passRate];
     expect(shardSummaries().map((s) => s.total)).toEqual([2, 2]);
 
     const merged = mergeHistory('merged.json', shards);
 
-    // The skipped test is left out of the pass rate: 2 of the 3 that ran
-    expect(merged.summaries!.map(counts)).toEqual([
-      ['run-ci-1', 4, 2, 1, 1, 1, 67],
-      ['run-ci-2', 4, 2, 1, 1, 1, 67],
-      ['run-ci-3', 4, 2, 1, 1, 1, 67],
-    ]);
+    expect(merged.summaries!.map(counts)).toEqual(MERGED_SUMMARIES);
     const [shard1, shard2] = shardSummaries();
     expect(merged.summaries![2].duration).toBe(Math.max(shard1.duration, shard2.duration));
     expect(merged.summaries![2].timestamp).toBe([shard1.timestamp, shard2.timestamp].sort()[0]);
@@ -113,4 +117,35 @@ describe('merge-history on sharded runs', () => {
   it('takes -n as --max-runs', () => {
     expect(mergeHistory('short-flag.json', [...shards, '-n', '2'])).toEqual(mergeHistory('long-flag.json', [...shards, '--max-runs', '2']));
   });
+
+  it('reads the run files beside each history file, so shard run files copied into one folder merge', () => {
+    const copied = path.join(tmp, 'copied', 'test-history.json');
+    fs.mkdirSync(runsDir(copied), { recursive: true });
+    fs.copyFileSync(shards[0], copied);
+    for (const shard of shards) {
+      for (const name of fs.readdirSync(runsDir(shard))) fs.copyFileSync(path.join(runsDir(shard), name), path.join(runsDir(copied), name));
+    }
+
+    const merged = mergeHistory('copied-merged.json', [copied]);
+
+    expect(fs.readdirSync(runsDir(copied)).sort()).toEqual(['run-ci-3.shard-1-of-2.json', 'run-ci-3.shard-2-of-2.json']);
+    expect(merged.summaries!.map(counts)).toEqual(MERGED_SUMMARIES);
+    expect(entriesPerTest(merged)).toEqual(THREE_RUNS);
+  });
+});
+
+describe('shards that share one history folder', () => {
+  it('record one run with the totals of both shards, from one run file per shard', () => {
+    const historyFile = path.join(tmp, 'shared', 'test-history.json');
+    fs.mkdirSync(path.dirname(historyFile), { recursive: true });
+    fs.copyFileSync(path.join(tmp, 'restored.json'), historyFile);
+    for (const n of [1, 2]) {
+      runSuite(path.join(tmp, `shared-out${n}`), { historyFile, runId: 'ci-3' }, ['--grep', GREP, '--fully-parallel', `--shard=${n}/2`]);
+    }
+
+    const history: TestHistory = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+    expect(history.summaries!.map(counts)).toEqual(MERGED_SUMMARIES);
+    expect(entriesPerTest(history)).toEqual(THREE_RUNS);
+    expect(fs.readdirSync(runsDir(historyFile)).sort()).toEqual(['run-ci-3.shard-1-of-2.json', 'run-ci-3.shard-2-of-2.json']);
+  }, 60_000);
 });

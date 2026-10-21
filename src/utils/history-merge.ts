@@ -1,5 +1,6 @@
 import * as fs from 'fs';
-import type { TestHistory, RunSummary } from '../types';
+import * as path from 'path';
+import type { TestHistory, RunSummary, HistoryRunFile } from '../types';
 import { passRateOf } from './run-stats';
 
 /**
@@ -34,6 +35,70 @@ export function readHistoryFile(filePath: string): TestHistory {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to load history from ${filePath}: ${message}`);
   }
+}
+
+/** `<history base>.runs/` beside a history file, for example `test-history.runs/` */
+export function runsDirOf(historyPath: string): string {
+  return path.join(path.dirname(historyPath), `${path.basename(historyPath, path.extname(historyPath))}.runs`);
+}
+
+/**
+ * Adds the run files beside a history file to runFiles, by file name. The same file name in two
+ * folders is one run and shard, so the later attempt is kept. A file that cannot be read is skipped.
+ */
+export function readRunFiles(historyPath: string, runFiles = new Map<string, HistoryRunFile>()): Map<string, HistoryRunFile> {
+  const dir = runsDirOf(historyPath);
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir).filter((name) => name.endsWith('.json')).sort();
+  } catch {
+    return runFiles;
+  }
+  for (const name of names) {
+    try {
+      const run = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf-8')) as HistoryRunFile;
+      if (run.version !== 1 || !run.summary?.runId || !run.tests) throw new Error('not a version 1 run file');
+      const kept = runFiles.get(name);
+      if (!kept || run.summary.timestamp > kept.summary.timestamp) runFiles.set(name, run);
+    } catch (err) {
+      console.warn(`Skipped history run file ${path.join(dir, name)}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return runFiles;
+}
+
+/**
+ * The history of index files plus run files: each index keeps its runs that have no run file,
+ * and every run file adds its run. The run files of one run's shards combine into one summary.
+ */
+export function rebuildHistory(indexes: TestHistory[], runFiles: Iterable<HistoryRunFile>): TestHistory {
+  const runs = [...runFiles];
+  const fromFiles = new Set(runs.map((run) => run.summary.runId));
+  const kept = indexes.map((index): TestHistory => ({
+    ...index,
+    tests: Object.fromEntries(
+      Object.entries(index.tests ?? {})
+        .map(([testId, entries]) => [testId, entries.filter((e) => !e.runId || !fromFiles.has(e.runId))] as const)
+        .filter(([, entries]) => entries.length > 0),
+    ),
+    summaries: (index.summaries ?? []).filter((s) => !fromFiles.has(s.runId)),
+    forecasts: index.forecasts && Object.fromEntries(Object.entries(index.forecasts).filter(([runId]) => !fromFiles.has(runId))),
+  }));
+  // Each file is a distinct shard, so combine here: the merge below keeps equal summaries once
+  const summaries = new Map<string, RunSummary>();
+  for (const { summary } of runs) {
+    const prev = summaries.get(summary.runId);
+    summaries.set(summary.runId, prev ? combineShardSummaries(prev, summary) : summary);
+  }
+  return mergeHistoryData([
+    ...kept,
+    ...runs.map(({ summary, tests, forecasts }): TestHistory => ({
+      runs: [],
+      tests: Object.fromEntries(Object.entries(tests).map(([testId, entry]) => [testId, [entry]])),
+      forecasts: forecasts && { [summary.runId]: forecasts },
+    })),
+    { runs: [], tests: {}, summaries: [...summaries.values()] },
+  ]);
 }
 
 /**

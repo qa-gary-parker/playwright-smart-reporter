@@ -248,6 +248,14 @@ export interface TestHistory {
   forecasts?: Record<string, Record<string, number>>;
 }
 
+// One run, or one shard of it, in `<history base>.runs/`. Written once; the history index is rebuilt from these.
+export interface HistoryRunFile {
+  version: 1;
+  summary: RunSummary;
+  tests: Record<string, TestHistoryEntry>;
+  forecasts?: Record<string, number>; // testId -> forecast risk
+}
+
 export interface TestResultSnapshot {
   testId: string;
   title: string;

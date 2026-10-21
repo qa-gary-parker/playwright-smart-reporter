@@ -1108,7 +1108,7 @@ The reporter redacts these fields of each test when the test ends:
 - Network log URLs.
 - The request URLs and console messages of the attempt comparison.
 
-Every output is built from these fields. So the HTML report, the JSON, JUnit and CTRF exports, the PDF, `test-history.json`, the `history-runs/` snapshots, the failure bundle, the live results file and the AI prompts get the redacted text.
+Every output is built from these fields. So the HTML report, the JSON, JUnit and CTRF exports, the PDF, `test-history.json` and its run files, the `history-runs/` snapshots, the failure bundle, the live results file and the AI prompts get the redacted text.
 
 These are not redacted:
 
@@ -1148,6 +1148,21 @@ reporter: [
 With filtering on, verbose `page.click()`, `page.fill()` steps are hidden — your named `test.step()` entries and `expect()` assertion steps remain.
 
 All `expect()` assertion steps (top-level and nested) are shown by default and are kept even when `filterPwApiSteps` is on. Set `showExpectSteps: false` to hide them.
+
+## History Storage
+
+Each run saves two things beside `historyFile`:
+
+- **A run file** in `test-history.runs/`: the run's summary, the result of each test, and the forecast risks. The name is `<runId>.json`, or `<runId>.shard-<i>-of-<n>.json` for a shard. The reporter writes each run file once. A run with the same `runId` and shard replaces it, so a CI re-run replaces the earlier attempt.
+- **The index**, `test-history.json`: the last `maxHistoryRuns` runs, rebuilt from the index and the run files. It is complete on its own. Caches, `merge-history` and the `digest` command need only this file.
+
+How the reporter uses them:
+
+- **Shared folder:** runs that share the folder do not lose each other's results. The reporter rebuilds the index under a lock, `test-history.json.lock`. A run waits up to 10 seconds for the lock. A lock older than 30 seconds was left by a run that crashed, so the next run takes it over. When a run cannot get the lock, its run file stays, and the next run adds it to the index.
+- **Copied run files:** when a run starts, it also reads the run files that the index does not list yet. So copying run files from other shards or machines into `test-history.runs/` merges them.
+- **Shards:** the run files of one `runId` combine into one run, with the totals of all shards.
+- **Retention:** `maxHistoryRuns` (default 10) is the only setting. The reporter deletes the run files of older runs. With `enableHistoryDrilldown`, it also deletes their `history-runs/` snapshots.
+- **Folder name:** the folder follows `historyFile` and `projectName`. For example, `reports/{project}/history.json` keeps its run files in `reports/{project}/history.runs/`.
 
 ## Multi-Project History
 
@@ -1209,7 +1224,7 @@ test('payment flow', async ({ page }) => {
 
 ### Persisting History
 
-History must persist between runs for flakiness detection and trends to work.
+History must persist between runs for flakiness detection and trends to work. Caching `test-history.json` is enough for one job. The `test-history.runs/` folder matters only when you [combine shards from separate machines](#sharded-runs).
 
 #### GitHub Actions
 
@@ -1384,7 +1399,7 @@ steps:
 
 ### Sharded Runs
 
-For consistent history across parallel shards, set `runId`. Without it, each shard saves its own run, so after the histories are merged the next run compares with one shard only, and the tests of the other shards show as not in the baseline run:
+Set `runId`, so the shards of one CI run record one run. Without it, each shard saves its own run, so after the histories are merged the next run compares with one shard only, and the tests of the other shards show as not in the baseline run:
 
 ```typescript
 reporter: [
@@ -1393,6 +1408,13 @@ reporter: [
   }],
 ]
 ```
+
+Each shard writes its own run file, `test-history.runs/<runId>.shard-<i>-of-<n>.json`. The history counts one run with the totals of all shards.
+
+- **Shards on one machine or on a shared volume:** nothing more to do.
+- **Shards on separate machines:** the reporter cannot merge two CI caches saved by different jobs. Use one of these:
+  - Upload each shard's `test-history.runs/` folder as an artifact. In a later job, copy the run files into one `test-history.runs/` folder beside the restored `test-history.json`, and cache both. The next run reads the run files.
+  - Merge the history files with `merge-history` (below), and cache the merged file.
 
 ### Merging History from Multiple Machines
 
@@ -1403,6 +1425,10 @@ npx playwright-smart-reporter-merge-history \
   -o merged-history.json \
   --max-runs 10
 ```
+
+- The command also reads the run files in the `.runs` folder beside each input file, for example `shard1/test-history.runs/`.
+- It keeps a run that several inputs restored from one cache once, and combines the shards of one run.
+- It writes one complete history file. `-n` is short for `--max-runs`.
 
 ## CSP-Safe Mode
 

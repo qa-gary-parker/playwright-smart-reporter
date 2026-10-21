@@ -25,6 +25,7 @@ import type {
   RunSnapshotFile,
   QualityGateResult,
   QuarantineFile,
+  HistoryRunFile,
 } from './types';
 
 // ============================================================================
@@ -73,7 +74,7 @@ import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest } from './utils';
 import { buildRunSummary, computeRunStats } from './utils/run-stats';
-import { readHistoryFile, mergeHistoryData, limitHistory } from './utils/history-merge';
+import { readHistoryFile, readRunFiles, rebuildHistory, limitHistory } from './utils/history-merge';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
 import { createRedactor, redactTestResult } from './agent/redact';
@@ -208,7 +209,7 @@ class SmartReporter implements Reporter {
     }
 
     // Initialize HistoryCollector and load history
-    this.historyCollector = new HistoryCollector(this.options, this.outputDir);
+    this.historyCollector = new HistoryCollector(this.options, this.outputDir, config.shard);
     this.historyCollector.loadHistory();
     this.historyCollector.adoptLegacyIds(legacyIds);
 
@@ -1057,6 +1058,7 @@ export function mergeHistories(
   maxHistoryRuns: number = 10
 ): void {
   const histories: TestHistory[] = [];
+  const runFiles = new Map<string, HistoryRunFile>();
   for (const filePath of historyFiles) {
     if (!fs.existsSync(filePath)) {
       console.warn(`History file not found: ${filePath}`);
@@ -1065,12 +1067,13 @@ export function mergeHistories(
 
     try {
       histories.push(readHistoryFile(filePath));
+      readRunFiles(filePath, runFiles);
     } catch (err) {
       console.error(`Failed to parse history file ${filePath}:`, err);
     }
   }
 
-  const merged = mergeHistoryData(histories);
+  const merged = rebuildHistory(histories, runFiles.values());
   fs.writeFileSync(outputFile, JSON.stringify(maxHistoryRuns > 0 ? limitHistory(merged, maxHistoryRuns) : merged, null, 2));
   console.log(`✅ Merged ${historyFiles.length} history files into ${outputFile}`);
 }
