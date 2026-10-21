@@ -14,6 +14,7 @@ import { TeamsNotifier } from '../notifiers/teams-notifier';
 import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
 import { LiveWriter } from '../live/live-writer';
 import { summarizeOwnership } from '../analyzers/ownership';
+import { detectCIInfo } from './ci-detector';
 
 interface Stats { passed: number; failed: number; skipped: number; flaky: number; passRate: number | null }
 type Field = keyof Stats;
@@ -177,5 +178,39 @@ describe('run statistics (#66)', () => {
       wanted[name] = pick(expected, fields(expected));
     }
     expect(actual).toEqual(wanted);
+  });
+});
+
+describe('CI info of the run (#73)', () => {
+  const sha = '0123456789abcdef0123456789abcdef01234567';
+  // Every variable the GitHub detection reads, so the CI this suite runs on does not leak in.
+  const GITHUB_PUSH = {
+    GITHUB_ACTIONS: 'true', GITHUB_EVENT_PATH: '', GITHUB_HEAD_REF: '', GITHUB_BASE_REF: '', GITHUB_REF: 'refs/heads/main',
+    GITHUB_REF_NAME: 'main', GITHUB_SHA: sha, GITHUB_RUN_ID: '42', GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'acme/shop',
+  };
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-run-ci-'));
+    for (const [name, value] of Object.entries(GITHUB_PUSH)) vi.stubEnv(name, value);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('history summaries, the report trend and the JSON export record it', () => {
+    const results = [pass('p')];
+    const collector = new HistoryCollector({ historyFile: 'history.json' }, dir);
+    collector.updateHistory(results);
+    const json = JSON.parse(fs.readFileSync(exportJsonData(results, emptyHistory(), NOW, {}, undefined, undefined, dir, 'ci'), 'utf8'));
+
+    const ci = { provider: 'github', branch: 'main', commit: '01234567', buildId: '42', sha, repoUrl: 'https://github.com/acme/shop' };
+    expect({
+      history: collector.getHistory().summaries![0].ciInfo,
+      // The reporter detects the CI once and passes it to the report.
+      trend: buildReportData({ results, history: emptyHistory(), startTime: NOW, options: {}, ciInfo: detectCIInfo() }, NOW).trends.at(-1)!.ciInfo,
+      json: json.metadata.ci,
+    }).toEqual({ history: ci, trend: ci, json: ci });
   });
 });

@@ -271,8 +271,12 @@ export interface RunSnapshotFile {
 export interface CIInfo {
   provider: string;  // 'github' | 'gitlab' | 'circleci' | 'jenkins' | 'azure'
   branch?: string;
-  commit?: string;
+  commit?: string;  // short form of sha, for display
   buildId?: string;
+  sha?: string;  // the full commit; for a pull request, its head where CI names it
+  repoUrl?: string;
+  prNumber?: number;
+  targetBranch?: string;  // the branch a pull request merges into
 }
 
 // ============================================================================

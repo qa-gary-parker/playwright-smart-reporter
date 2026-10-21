@@ -1253,6 +1253,8 @@ Upload the HTML file together with the files the reporter wrote next to it: `<na
 
 The reporter automatically detects GitHub Actions, GitLab CI, CircleCI, Jenkins, Azure DevOps, and Buildkite. Branch, commit SHA, and build ID are displayed in the report's top bar.
 
+Each run summary in the history file (`ciInfo`) and the JSON export (`metadata.ci`) also records the full commit SHA, the repository URL, and, for a pull request, its number and target branch. On GitHub Actions, GitLab and Azure DevOps pull request runs, the commit is the head of the pull request, not the merge commit that CI makes for the run. The repository URL never includes credentials from the clone URL.
+
 ### GitHub Pull Requests
 
 Show the run where reviewers already look:

@@ -66,6 +66,25 @@ describe('history', () => {
     expect(run.status).toBe(1);
     expect(Object.keys(JSON.parse(fs.readFileSync(historyFile, 'utf8')).tests)).toEqual(['suite.fixtures.ts::passes']);
   });
+
+  // On a pull_request run GITHUB_SHA is the merge commit GitHub makes; the event payload has the head of the pull request.
+  it('saves the CI info of a GitHub pull request run in history and the JSON export', () => {
+    const out = path.join(tmp, 'ci-info');
+    const event = path.join(tmp, 'pull-request-event.json');
+    const head = 'feedc0de00112233445566778899aabbccddeeff';
+    fs.writeFileSync(event, JSON.stringify({ pull_request: { number: 42, head: { sha: head } } }));
+    const run = runSuite(out, { exportJson: true }, ['--grep', 'passes$'], 'test', {
+      GITHUB_ACTIONS: 'true', GITHUB_EVENT_PATH: event, GITHUB_SHA: '1111111111111111111111111111111111111111',
+      GITHUB_REF: 'refs/pull/42/merge', GITHUB_REF_NAME: '42/merge', GITHUB_HEAD_REF: 'feature/cart', GITHUB_BASE_REF: 'main',
+      GITHUB_RUN_ID: '777', GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'acme/shop',
+    });
+
+    expect(run.status).toBe(0);
+    const ci = { provider: 'github', branch: 'feature/cart', commit: 'feedc0de', buildId: '777', sha: head, repoUrl: 'https://github.com/acme/shop', prNumber: 42, targetBranch: 'main' };
+    const [summary] = JSON.parse(fs.readFileSync(path.join(out, 'test-history.json'), 'utf8')).summaries;
+    const json = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+    expect({ history: summary.ciInfo, json: json.metadata.ci }).toEqual({ history: ci, json: ci });
+  });
 });
 
 describe('quarantine', () => {

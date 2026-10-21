@@ -78,7 +78,7 @@ function withCurrentRun(input: ReportInput, duration: number): RunSummary[] {
   const past = input.history.summaries ?? [];
   const runId = runIdOf(input);
   if (past.some((r) => r.runId === runId)) return past;
-  return [...past, buildRunSummary(input.results, { runId, timestamp: new Date(input.startTime).toISOString(), duration })];
+  return [...past, buildRunSummary(input.results, { runId, timestamp: new Date(input.startTime).toISOString(), duration, ciInfo: input.ciInfo })];
 }
 
 function runIdOf(input: ReportInput): string {

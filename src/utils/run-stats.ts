@@ -67,7 +67,7 @@ export function runStabilityGrade(results: Array<Pick<TestResultData, 'stability
 }
 
 /** The run summary that history, the report trends and the comparison save for a run. */
-export function buildRunSummary(results: TestResultData[], run: Pick<RunSummary, 'runId' | 'timestamp' | 'duration'>): RunSummary {
+export function buildRunSummary(results: TestResultData[], run: Pick<RunSummary, 'runId' | 'timestamp' | 'duration' | 'ciInfo'>): RunSummary {
   const { total, passed, failed, skipped, flaky, passRate } = computeRunStats(results);
   return {
     runId: run.runId,
@@ -80,6 +80,7 @@ export function buildRunSummary(results: TestResultData[], run: Pick<RunSummary,
     slow: results.filter(r => r.performanceTrend?.startsWith('↑')).length,
     duration: run.duration,
     passRate,
+    ciInfo: run.ciInfo,
     stabilityGrade: runStabilityGrade(results),
   };
 }

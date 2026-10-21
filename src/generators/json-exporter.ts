@@ -9,9 +9,11 @@ import type {
   A11yResult,
   CausalTimeline,
   QualityGateResult,
+  CIInfo,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
+import { detectCIInfo } from '../utils/ci-detector';
 
 export function getReporterVersion(): string {
   try {
@@ -30,6 +32,7 @@ export interface JsonExportData {
     projectName?: string;
     // Phase 5: CI surface integrations — absolute directory that test `file` paths are relative to
     rootDir?: string;
+    ci?: CIInfo;
   };
   summary: {
     total: number;
@@ -166,6 +169,7 @@ export function exportJsonData(
       reporterVersion: getReporterVersion(),
       projectName: options.projectName,
       rootDir,
+      ci: detectCIInfo(),
     },
     summary: {
       total,

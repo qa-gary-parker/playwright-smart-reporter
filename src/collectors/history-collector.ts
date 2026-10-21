@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot } from '../types';
-import { isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
+import { detectCIInfo, isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
 import { buildRunSummary } from '../utils/run-stats';
 import { stepDurationsOf } from '../analyzers/causal-timeline';
@@ -163,7 +163,7 @@ export class HistoryCollector {
       }
     }
 
-    this.history.summaries!.push(buildRunSummary(results, { ...this.currentRun, duration: Date.now() - this.startTime }));
+    this.history.summaries!.push(buildRunSummary(results, { ...this.currentRun, duration: Date.now() - this.startTime, ciInfo: detectCIInfo() }));
 
     // Keep only last N summaries
     if (this.history.summaries!.length > this.options.maxHistoryRuns) {
