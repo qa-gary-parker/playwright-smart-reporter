@@ -60,6 +60,7 @@ include = ["playwright_smart_reporter_python*"]
 [tool.setuptools.package-data]
 playwright_smart_reporter_python = [
     "py.typed",
+    "package.json",
     "_bundled_dist/**/*.js",
     "_bundled_dist/**/*.css",
     "_bundled_dist/**/*.html",

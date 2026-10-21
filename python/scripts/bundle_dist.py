@@ -5,6 +5,7 @@ Bundle the pre-built Node.js dist/ files into the Python package.
 Run from the python/ directory (or repo root) after `npm run build`:
     python scripts/bundle_dist.py
 """
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -64,6 +65,10 @@ def bundle(repo_root: Path) -> None:
     if missing:
         print(f"ERROR: Missing files in dist/: {missing}", file=sys.stderr)
         sys.exit(1)
+
+    # getReporterVersion() reads ../../package.json from generators/, which is the package dir
+    version = json.loads((repo_root / "package.json").read_text(encoding="utf-8"))["version"]
+    (dest.parent / "package.json").write_text(json.dumps({"version": version}) + "\n", encoding="utf-8")
 
     print(f"Bundled {len(REQUIRED_FILES)} files into {dest}")
 

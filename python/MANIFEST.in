@@ -1,3 +1,4 @@
 include LICENSE
 include playwright_smart_reporter_python/py.typed
+include playwright_smart_reporter_python/package.json
 recursive-include playwright_smart_reporter_python/_bundled_dist *.js *.css *.html *.txt

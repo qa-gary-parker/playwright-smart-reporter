@@ -198,6 +198,9 @@ class TestRoundTrip:
             summary["skipped"],
         ) == (4, 2, 1, 1)
         assert data["ai"]["analysisOff"] is True
+        package = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
+        assert data["meta"]["reporterVersion"] == package["version"]
+        assert data["config"]["features"]["live"] is False
         assert (dist_root / "ui" / "app.js").read_text(encoding="utf-8") in html
 
     def test_generates_report_from_built_dist(self, tmp_path, sample_report_path):
@@ -213,6 +216,7 @@ class TestRoundTrip:
         package_dir = repo / "python" / "playwright_smart_reporter_python"
         package_dir.mkdir(parents=True)
         (repo / "dist").symlink_to(REPO_ROOT / "dist")
+        (repo / "package.json").symlink_to(REPO_ROOT / "package.json")
         _load_bundler().bundle(repo)
 
         with patch(
