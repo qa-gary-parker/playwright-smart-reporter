@@ -251,6 +251,12 @@ test('History shows the flakiness interval, or insufficient history below 5 runs
   await expect(flakiness).toHaveText('Flakiness insufficient history 3 of 5 runs');
 });
 
+test('History labels the baseline duration as the median of passing runs', async ({ page }) => {
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.locator('.history .statline > span').nth(1)).toHaveText('Median 737ms');
+});
+
 test('the retry comparison appears for a test that failed and then passed, and not for one that always failed', async ({ page }) => {
   await page.goto(url('screen=flaky&mode=light'));
   await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();

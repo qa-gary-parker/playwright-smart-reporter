@@ -221,7 +221,7 @@ function History({ t }: { t: ReportTest }) {
           Passed <strong>{passed}</strong> of last {runs.length}
         </span>
         <span>
-          Avg <strong class="mono">{formatDuration(t.averageDuration ?? t.duration)}</strong>
+          Median <strong class="mono">{formatDuration(t.averageDuration ?? t.duration)}</strong>
         </span>
         {t.flakinessScore !== undefined && (
           <span>

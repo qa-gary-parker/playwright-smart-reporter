@@ -1,5 +1,6 @@
 import type { TestHistory, RunSummary, TestHistoryEntry, DigestOptions } from '../types';
 import { FlakinessAnalyzer } from '../analyzers/flakiness-analyzer';
+import { median } from '../utils/stats';
 
 export interface DigestData {
   period: string;
@@ -277,23 +278,19 @@ export class HealthDigest {
     const result: Array<{ testId: string; percentChange: number }> = [];
 
     for (const [testId, entries] of Object.entries(tests)) {
-      const inPeriod = entries.filter(
-        e => !e.skipped && new Date(e.timestamp).getTime() >= periodStart,
-      );
-      const beforePeriod = entries.filter(
-        e => !e.skipped && new Date(e.timestamp).getTime() < periodStart,
-      );
+      // As in PerformanceAnalyzer: a failed run times the failure, and the median ignores one slow pass.
+      const passed = entries.filter(e => e.passed && !e.skipped);
+      const inPeriod = passed.filter(e => new Date(e.timestamp).getTime() >= periodStart).map(e => e.duration);
+      const beforePeriod = passed.filter(e => new Date(e.timestamp).getTime() < periodStart).map(e => e.duration);
 
       if (inPeriod.length === 0 || beforePeriod.length === 0) continue;
 
-      const avgBefore =
-        beforePeriod.reduce((sum, e) => sum + e.duration, 0) / beforePeriod.length;
-      const avgInPeriod =
-        inPeriod.reduce((sum, e) => sum + e.duration, 0) / inPeriod.length;
+      const medianBefore = median(beforePeriod);
+      const medianInPeriod = median(inPeriod);
 
-      if (avgBefore === 0) continue;
+      if (medianBefore === 0) continue;
 
-      const percentChange = ((avgInPeriod - avgBefore) / avgBefore) * 100;
+      const percentChange = ((medianInPeriod - medianBefore) / medianBefore) * 100;
 
       if (percentChange > PERFORMANCE_THRESHOLD) {
         result.push({

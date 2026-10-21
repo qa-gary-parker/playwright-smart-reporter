@@ -307,6 +307,40 @@ describe('HealthDigest', () => {
       expect(result.performanceTrends[0].percentChange).toBeGreaterThan(20);
     });
 
+    it('compares the median of passing runs, so slow failures and one slow pass neither hide nor fake a regression', () => {
+      const history: TestHistory = {
+        runs: [],
+        tests: {
+          'test-hidden': [
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(14) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(12) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(11) }),
+            createEntry({ passed: false, duration: 30000, timestamp: timestamp(10) }),
+            createEntry({ passed: true, duration: 1500, timestamp: timestamp(6) }),
+            createEntry({ passed: true, duration: 1500, timestamp: timestamp(4) }),
+            createEntry({ passed: true, duration: 1500, timestamp: timestamp(2) }),
+          ],
+          'test-noisy': [
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(14) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(12) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(10) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(6) }),
+            createEntry({ passed: false, duration: 30000, timestamp: timestamp(5) }),
+            createEntry({ passed: true, duration: 9000, timestamp: timestamp(4) }),
+            createEntry({ passed: true, duration: 1000, timestamp: timestamp(2) }),
+          ],
+        },
+        summaries: [
+          createSummary({ runId: 'r1', timestamp: timestamp(6) }),
+          createSummary({ runId: 'r2', timestamp: timestamp(2) }),
+        ],
+      };
+
+      const result = digest.analyze(history, createOptions());
+
+      expect(result.performanceTrends).toEqual([{ testId: 'test-hidden', percentChange: 50 }]);
+    });
+
     it('handles empty history', () => {
       const result = digest.analyze(emptyHistory(), createOptions());
 
