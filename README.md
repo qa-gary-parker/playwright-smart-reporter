@@ -396,7 +396,7 @@ Signals combine so that one strong signal can flag a test on its own, and weak s
 
 A test with fewer than `minRuns` non-skipped runs (this run included) gets `insufficient-history` instead of a score and is never listed as at risk. The duration signals also need at least 8 runs, so one slow run in a short history cannot flag a test. With the default `maxHistoryRuns: 10`, a test can have at most 11 runs, so a `minRuns` above 11 means no test is ever scored.
 
-Forecast risks are recorded per run in the history file under `forecasts` (`runId -> testId -> risk`; risk 0 is omitted) and pruned to `maxHistoryRuns`, so the forecast's accuracy can be checked later. `playwright-smart-reporter-merge-history` does not merge `forecasts` yet.
+Forecast risks are recorded per run in the history file under `forecasts` (`runId -> testId -> risk`; risk 0 is omitted) and pruned to `maxHistoryRuns`, so the forecast's accuracy can be checked later. `playwright-smart-reporter-merge-history` keeps the `forecasts` of every merged run.
 
 To replay the forecast over recorded history from a clone of this repository: `npm run build && node scripts/backtest-forecast.mjs <dir containing test-history.json>`.
 

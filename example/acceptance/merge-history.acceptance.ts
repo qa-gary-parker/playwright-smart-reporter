@@ -109,4 +109,8 @@ describe('merge-history on sharded runs', () => {
       'suite.fixtures.ts::is skipped': 2,
     });
   });
+
+  it('takes -n as --max-runs', () => {
+    expect(mergeHistory('short-flag.json', [...shards, '-n', '2'])).toEqual(mergeHistory('long-flag.json', [...shards, '--max-runs', '2']));
+  });
 });

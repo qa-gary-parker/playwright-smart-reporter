@@ -1,16 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { mergeHistories } from './smart-reporter';
-import type { TestHistory } from './types';
-
-vi.mock('fs');
+import type { RunSummary, TestHistory, TestHistoryEntry } from './types';
 
 describe('mergeHistories', () => {
-  const mockFs = vi.mocked(fs);
+  let dir: string;
+  const file = (name: string) => path.join(dir, name);
+  const write = (name: string, history: unknown) => {
+    fs.writeFileSync(file(name), typeof history === 'string' ? history : JSON.stringify(history));
+    return file(name);
+  };
+  const read = (name: string): TestHistory => JSON.parse(fs.readFileSync(file(name), 'utf8'));
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockFs.existsSync.mockReturnValue(true);
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-merge-'));
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -18,6 +23,7 @@ describe('mergeHistories', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it('merges multiple history files', () => {
@@ -48,20 +54,9 @@ describe('mergeHistories', () => {
       }],
     };
 
-    mockFs.readFileSync.mockImplementation((path) => {
-      if (String(path).includes('history1')) return JSON.stringify(history1);
-      if (String(path).includes('history2')) return JSON.stringify(history2);
-      return '';
-    });
+    mergeHistories([write('history1.json', history1), write('history2.json', history2)], file('output.json'));
 
-    let writtenContent: string = '';
-    mockFs.writeFileSync.mockImplementation((_path, content) => {
-      writtenContent = String(content);
-    });
-
-    mergeHistories(['history1.json', 'history2.json'], 'output.json');
-
-    const result: TestHistory = JSON.parse(writtenContent);
+    const result = read('output.json');
 
     // Check runs are merged and sorted by timestamp
     expect(result.runs.length).toBe(2);
@@ -87,16 +82,9 @@ describe('mergeHistories', () => {
       summaries: [],
     };
 
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(history));
+    mergeHistories([write('history.json', history)], file('output.json'));
 
-    let writtenContent: string = '';
-    mockFs.writeFileSync.mockImplementation((_path, content) => {
-      writtenContent = String(content);
-    });
-
-    mergeHistories(['history.json'], 'output.json');
-
-    const result: TestHistory = JSON.parse(writtenContent);
+    const result = read('output.json');
 
     expect(result.runs.length).toBe(1);
   });
@@ -122,16 +110,9 @@ describe('mergeHistories', () => {
       })),
     };
 
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(history));
+    mergeHistories([write('history.json', history)], file('output.json'), 10);
 
-    let writtenContent: string = '';
-    mockFs.writeFileSync.mockImplementation((_path, content) => {
-      writtenContent = String(content);
-    });
-
-    mergeHistories(['history.json'], 'output.json', 10);
-
-    const result: TestHistory = JSON.parse(writtenContent);
+    const result = read('output.json');
 
     expect(result.runs.length).toBe(10);
     expect(result.tests['test-1'].length).toBe(10);
@@ -139,24 +120,20 @@ describe('mergeHistories', () => {
   });
 
   it('warns when history file not found', () => {
-    mockFs.existsSync.mockReturnValue(false);
-    mockFs.writeFileSync.mockImplementation(() => {});
-
-    mergeHistories(['nonexistent.json'], 'output.json');
+    mergeHistories([file('nonexistent.json')], file('output.json'));
 
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('not found'));
   });
 
   it('handles parse errors gracefully', () => {
-    mockFs.readFileSync.mockReturnValue('invalid json');
-    mockFs.writeFileSync.mockImplementation(() => {});
+    const bad = write('bad.json', 'invalid json');
 
     // Should not throw
     expect(() => {
-      mergeHistories(['bad.json'], 'output.json');
+      mergeHistories([bad], file('output.json'));
     }).not.toThrow();
 
-    expect(console.error).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(`Failed to parse history file ${bad}:`, expect.any(Error));
   });
 
   it('uses default maxHistoryRuns of 10', () => {
@@ -169,16 +146,9 @@ describe('mergeHistories', () => {
       summaries: [],
     };
 
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(history));
+    mergeHistories([write('history.json', history)], file('output.json'));
 
-    let writtenContent: string = '';
-    mockFs.writeFileSync.mockImplementation((_path, content) => {
-      writtenContent = String(content);
-    });
-
-    mergeHistories(['history.json'], 'output.json');
-
-    const result: TestHistory = JSON.parse(writtenContent);
+    const result = read('output.json');
 
     expect(result.runs.length).toBe(10);
   });
@@ -194,16 +164,9 @@ describe('mergeHistories', () => {
       summaries: [],
     };
 
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(history));
+    mergeHistories([write('history.json', history)], file('output.json'));
 
-    let writtenContent: string = '';
-    mockFs.writeFileSync.mockImplementation((_path, content) => {
-      writtenContent = String(content);
-    });
-
-    mergeHistories(['history.json'], 'output.json');
-
-    const result: TestHistory = JSON.parse(writtenContent);
+    const result = read('output.json');
 
     expect(result.runs[0].runId).toBe('run-1');
     expect(result.runs[1].runId).toBe('run-2');
@@ -217,19 +180,78 @@ describe('mergeHistories', () => {
       summaries: [],
     };
 
-    mockFs.readFileSync.mockReturnValue(JSON.stringify(history));
+    mergeHistories([write('empty.json', history)], file('output.json'));
 
-    let writtenContent: string = '';
-    mockFs.writeFileSync.mockImplementation((_path, content) => {
-      writtenContent = String(content);
-    });
-
-    mergeHistories(['empty.json'], 'output.json');
-
-    const result: TestHistory = JSON.parse(writtenContent);
+    const result = read('output.json');
 
     expect(result.runs).toEqual([]);
     expect(result.tests).toEqual({});
     expect(result.summaries).toEqual([]);
+  });
+
+  // #57: the same merge as the merge-history bin
+  describe('shards restored from one history', () => {
+    const at = (day: number) => `2024-01-0${day}T10:00:00.000Z`;
+    const entry = (day: number): TestHistoryEntry => ({ passed: true, duration: 100, timestamp: at(day), runId: `run-${day}` });
+    const summary = (day: number, total: number, duration = 100): RunSummary => ({
+      runId: `run-${day}`, timestamp: at(day), total, passed: total, failed: 0, skipped: 0, flaky: 0, slow: 0, duration, passRate: 100,
+    });
+    // Runs 1 and 2 ran tests a and b. Each shard restored them, then ran one of the tests in run 3.
+    const base: TestHistory = { runs: [], tests: { a: [entry(1), entry(2)], b: [entry(1), entry(2)] }, summaries: [summary(1, 2), summary(2, 2)] };
+    const shard = (test: 'a' | 'b'): TestHistory => ({
+      ...base,
+      tests: { ...base.tests, [test]: [...base.tests[test], entry(3)] },
+      summaries: [...base.summaries!, summary(3, 1, test === 'a' ? 100 : 120)],
+    });
+    const counts = (h: TestHistory) => ({
+      entries: Object.fromEntries(Object.entries(h.tests).map(([id, e]) => [id, e.length])),
+      summaries: h.summaries!.map((s) => [s.runId, s.total]),
+    });
+
+    it('keeps each run of a test once and adds the shard summaries of run 3', () => {
+      mergeHistories([write('shard1.json', shard('a')), write('shard2.json', shard('b'))], file('output.json'));
+
+      expect(counts(read('output.json'))).toEqual({
+        entries: { a: 3, b: 3 },
+        summaries: [['run-1', 2], ['run-2', 2], ['run-3', 2]],
+      });
+    });
+
+    it('gives the same history for one file merged twice as for it merged once', () => {
+      const once = write('shard1.json', shard('a'));
+      mergeHistories([once], file('once.json'));
+      mergeHistories([once, once], file('twice.json'));
+
+      expect(counts(read('twice.json'))).toEqual({ entries: { a: 3, b: 2 }, summaries: [['run-1', 2], ['run-2', 2], ['run-3', 1]] });
+      expect(read('twice.json')).toEqual(read('once.json'));
+    });
+
+    it('keeps the forecasts and drilldown snapshots of every run', () => {
+      const one: TestHistory = { ...shard('a'), forecasts: { 'run-2': { a: 0.4 }, 'run-3': { a: 0.7 } } };
+      const two: TestHistory = { ...shard('b'), forecasts: { 'run-2': { a: 0.4 }, 'run-3': { b: 0.2 } } };
+      const drilldown = { runs: [{ runId: 'run-1', timestamp: at(1) }], runFiles: { 'run-1': './history-runs/run-1.json' } };
+
+      mergeHistories([write('shard1.json', { ...one, ...drilldown }), write('shard2.json', two)], file('output.json'));
+
+      const merged = read('output.json');
+      expect(merged.forecasts).toEqual({ 'run-2': { a: 0.4 }, 'run-3': { a: 0.7, b: 0.2 } });
+      expect(merged.runFiles).toEqual({ 'run-1': './history-runs/run-1.json' });
+    });
+
+    it('drops the forecasts and drilldown snapshots of runs that maxHistoryRuns leaves out', () => {
+      const history: TestHistory = {
+        ...shard('a'),
+        runs: [1, 2, 3].map((day) => ({ runId: `run-${day}`, timestamp: at(day) })),
+        runFiles: { 'run-1': './history-runs/run-1.json', 'run-3': './history-runs/run-3.json' },
+        forecasts: { 'run-1': { a: 0.1 }, 'run-3': { a: 0.7 } },
+      };
+
+      mergeHistories([write('history.json', history)], file('output.json'), 2);
+
+      const merged = read('output.json');
+      expect(merged.summaries!.map((s) => s.runId)).toEqual(['run-2', 'run-3']);
+      expect(merged.forecasts).toEqual({ 'run-3': { a: 0.7 } });
+      expect(merged.runFiles).toEqual({ 'run-3': './history-runs/run-3.json' });
+    });
   });
 });

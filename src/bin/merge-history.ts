@@ -2,8 +2,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestHistory, RunSummary } from '../types';
-import { passRateOf } from '../utils/run-stats';
+import type { TestHistory } from '../types';
+import { readHistoryFile, mergeHistoryData, limitHistory } from '../utils/history-merge';
 
 interface MergeOptions {
   output?: string;
@@ -25,7 +25,7 @@ function parseArgs(): MergeOptions {
 
     if (arg === '-o' || arg === '--output') {
       options.output = args[++i];
-    } else if (arg === '--max-runs') {
+    } else if (arg === '-n' || arg === '--max-runs') {
       options.maxRuns = parseInt(args[++i], 10);
       if (isNaN(options.maxRuns)) {
         console.error('Error: --max-runs must be a valid number');
@@ -49,9 +49,9 @@ Usage: merge-history [options] <input-files...>
 Merge multiple test-history.json files from parallel CI runs.
 
 Options:
-  -o, --output <file>    Output file path (default: merged-history.json)
-  --max-runs <number>    Limit history size to N most recent runs (optional)
-  -h, --help            Show this help message
+  -o, --output <file>      Output file path (default: merged-history.json)
+  -n, --max-runs <number>  Limit history size to N most recent runs (optional)
+  -h, --help               Show this help message
 
 Examples:
   # Merge two history files
@@ -64,174 +64,6 @@ Examples:
   # Merge with max-runs limit
   merge-history ci-run1/test-history.json ci-run2/test-history.json --max-runs 20
 `);
-}
-
-/**
- * Load a test history file
- */
-function loadHistoryFile(filePath: string): TestHistory {
-  try {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
-
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(content);
-
-    // Support both old and new format
-    if (parsed.tests) {
-      // New format
-      return parsed as TestHistory;
-    } else {
-      // Old format: convert to new format
-      return {
-        runs: [],
-        tests: parsed,
-        summaries: [],
-      };
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to load history from ${filePath}: ${message}`);
-  }
-}
-
-/**
- * Merge multiple test histories
- */
-function mergeHistories(histories: TestHistory[]): TestHistory {
-  const merged: TestHistory = {
-    runs: [],
-    tests: {},
-    summaries: [],
-  };
-
-  // testId -> entry JSON -> times kept
-  const kept = new Map<string, Map<string, number>>();
-
-  // Merge all tests
-  for (const history of histories) {
-    // An entry restored into several inputs (shards of one run) is kept as often as one input has it
-    for (const [testId, entries] of Object.entries(history.tests || {})) {
-      if (!merged.tests[testId]) {
-        merged.tests[testId] = [];
-        kept.set(testId, new Map());
-      }
-      const keptCounts = kept.get(testId)!;
-      const counts = new Map<string, number>();
-      for (const entry of entries) {
-        const key = JSON.stringify(entry);
-        const count = (counts.get(key) ?? 0) + 1;
-        counts.set(key, count);
-        if (count > (keptCounts.get(key) ?? 0)) {
-          keptCounts.set(key, count);
-          merged.tests[testId].push(entry);
-        }
-      }
-    }
-
-    // Merge run metadata
-    if (history.runs) {
-      merged.runs.push(...history.runs);
-    }
-
-    // Merge summaries
-    if (history.summaries) {
-      merged.summaries!.push(...history.summaries);
-    }
-  }
-
-  // Remove duplicate runs (by runId)
-  const seenRunIds = new Set<string>();
-  merged.runs = merged.runs.filter((run) => {
-    if (seenRunIds.has(run.runId)) {
-      return false;
-    }
-    seenRunIds.add(run.runId);
-    return true;
-  });
-
-  // Keep a summary restored into several inputs once, and combine the shards of one run (same runId)
-  const seenSummaries = new Set<string>();
-  const summariesByRunId = new Map<string, RunSummary>();
-  for (const summary of merged.summaries!) {
-    const key = JSON.stringify(summary);
-    if (seenSummaries.has(key)) continue;
-    seenSummaries.add(key);
-    const prev = summariesByRunId.get(summary.runId);
-    if (!prev) {
-      summariesByRunId.set(summary.runId, summary);
-      continue;
-    }
-    const total = prev.total + summary.total;
-    const passed = prev.passed + summary.passed;
-    const skipped = prev.skipped + summary.skipped;
-    summariesByRunId.set(summary.runId, {
-      ...prev,
-      timestamp: summary.timestamp < prev.timestamp ? summary.timestamp : prev.timestamp,
-      total,
-      passed,
-      failed: prev.failed + summary.failed,
-      skipped,
-      flaky: prev.flaky + summary.flaky,
-      slow: prev.slow + summary.slow,
-      duration: Math.max(prev.duration, summary.duration),
-      passRate: passRateOf({ total, passed, skipped }),
-    });
-  }
-  merged.summaries = [...summariesByRunId.values()];
-
-  // Sort runs and summaries by timestamp
-  merged.runs.sort((a, b) => {
-    return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-  });
-
-  merged.summaries!.sort((a, b) => {
-    return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-  });
-
-  // Sort test history entries by timestamp
-  for (const testId in merged.tests) {
-    merged.tests[testId].sort((a, b) => {
-      return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-    });
-  }
-
-  return merged;
-}
-
-/**
- * Limit history to most recent N runs
- */
-function limitHistory(history: TestHistory, maxRuns: number): TestHistory {
-  const limited: TestHistory = {
-    runs: history.runs.slice(-maxRuns),
-    tests: {},
-    summaries: history.summaries ? history.summaries.slice(-maxRuns) : [],
-  };
-
-  // Get IDs of runs to keep
-  const keepRunIds = new Set(limited.runs.map((r) => r.runId));
-
-  // Only keep test entries from runs we're keeping
-  if (history.summaries && history.summaries.length > 0) {
-    // Keep entries from the start of the oldest kept run on; runs[] is empty without drilldown
-    const oldestKeptTimestamp = new Date(limited.summaries![0].timestamp).getTime();
-
-    for (const [testId, entries] of Object.entries(history.tests || {})) {
-      limited.tests[testId] = entries.filter((entry) => {
-        const entryTime = new Date(entry.timestamp).getTime();
-        return entryTime >= oldestKeptTimestamp;
-      });
-    }
-  } else {
-    // Fallback: keep last maxRuns entries per test
-    for (const [testId, entries] of Object.entries(history.tests || {})) {
-      limited.tests[testId] = entries.slice(-maxRuns);
-    }
-  }
-
-  return limited;
 }
 
 /**
@@ -341,7 +173,7 @@ async function main(): Promise<void> {
 
     for (const filePath of expandedFiles) {
       try {
-        const history = loadHistoryFile(filePath);
+        const history = readHistoryFile(filePath);
         histories.push(history);
         console.log(`  ✓ Loaded: ${filePath}`);
       } catch (err) {
@@ -353,7 +185,7 @@ async function main(): Promise<void> {
 
     // Merge histories
     console.log('\nMerging histories...');
-    let merged = mergeHistories(histories);
+    let merged = mergeHistoryData(histories);
 
     // Log merge stats before limiting
     const totalTests = Object.keys(merged.tests).length;

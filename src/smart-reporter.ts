@@ -73,6 +73,7 @@ import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest } from './utils';
 import { buildRunSummary, computeRunStats } from './utils/run-stats';
+import { readHistoryFile, mergeHistoryData, limitHistory } from './utils/history-merge';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
 import { createRedactor, redactTestResult } from './agent/redact';
@@ -1055,9 +1056,7 @@ export function mergeHistories(
   outputFile: string,
   maxHistoryRuns: number = 10
 ): void {
-  const mergedHistory: TestHistory = { runs: [], tests: {}, summaries: [] };
-
-  // Load and merge all history files
+  const histories: TestHistory[] = [];
   for (const filePath of historyFiles) {
     if (!fs.existsSync(filePath)) {
       console.warn(`History file not found: ${filePath}`);
@@ -1065,64 +1064,14 @@ export function mergeHistories(
     }
 
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const history: TestHistory = JSON.parse(content);
-
-      // Merge runs metadata
-      if (history.runs) {
-        mergedHistory.runs.push(...history.runs);
-      }
-
-      // Merge test entries
-      if (history.tests) {
-        for (const [testId, entries] of Object.entries(history.tests)) {
-          if (!mergedHistory.tests[testId]) {
-            mergedHistory.tests[testId] = [];
-          }
-          mergedHistory.tests[testId].push(...entries);
-        }
-      }
-
-      // Merge summaries
-      if (history.summaries) {
-        mergedHistory.summaries!.push(...history.summaries);
-      }
+      histories.push(readHistoryFile(filePath));
     } catch (err) {
       console.error(`Failed to parse history file ${filePath}:`, err);
     }
   }
 
-  // Sort and deduplicate runs by runId
-  const seenRunIds = new Set<string>();
-  mergedHistory.runs = mergedHistory.runs
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .filter(run => {
-      if (seenRunIds.has(run.runId)) return false;
-      seenRunIds.add(run.runId);
-      return true;
-    })
-    .slice(-maxHistoryRuns);
-
-  // Sort test entries by timestamp and keep last N
-  for (const testId of Object.keys(mergedHistory.tests)) {
-    mergedHistory.tests[testId] = mergedHistory.tests[testId]
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .slice(-maxHistoryRuns);
-  }
-
-  // Sort and deduplicate summaries by runId
-  const seenSummaryIds = new Set<string>();
-  mergedHistory.summaries = mergedHistory.summaries!
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    .filter(summary => {
-      if (seenSummaryIds.has(summary.runId)) return false;
-      seenSummaryIds.add(summary.runId);
-      return true;
-    })
-    .slice(-maxHistoryRuns);
-
-  // Write merged history
-  fs.writeFileSync(outputFile, JSON.stringify(mergedHistory, null, 2));
+  const merged = mergeHistoryData(histories);
+  fs.writeFileSync(outputFile, JSON.stringify(maxHistoryRuns > 0 ? limitHistory(merged, maxHistoryRuns) : merged, null, 2));
   console.log(`✅ Merged ${historyFiles.length} history files into ${outputFile}`);
 }
 
