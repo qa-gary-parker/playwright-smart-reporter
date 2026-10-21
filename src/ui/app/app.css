@@ -964,6 +964,10 @@ a.lines__label {
   min-height: 26px;
 }
 
+.retry-diff--requests .retry-diff__row {
+  grid-template-columns: minmax(0, 1fr) 96px 96px;
+}
+
 .retry-diff__row > span {
   padding: var(--space-1) var(--space-3);
   overflow: hidden;

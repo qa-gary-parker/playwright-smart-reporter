@@ -1,4 +1,4 @@
-import type { AttemptData, StepData } from '../types';
+import type { AttemptData, AttemptDiff, AttemptRequestDiff, StepData } from '../types';
 import { formatDuration } from '../utils/formatters';
 
 // Pure, so the report UI bundles it too.
@@ -101,4 +101,67 @@ export function divergenceSummary(attempts: AttemptData[]): string | undefined {
     .map((a, k) => `attempt ${a.retry + 1} ${ended(a)} ${steps[k] ? `at step '${steps[k]!.path}' after ${steps[k]!.took}` : `after ${formatDuration(a.duration)}`}`)
     .join('; ');
   return line[0].toUpperCase() + line.slice(1);
+}
+
+// One attempt's requests (first browser context, after the network log filters) and console messages.
+export interface AttemptEvidence {
+  network?: Array<{ method: string; url: string; status: number }>;
+  console: Array<{ level: string; text: string }>;
+}
+
+const MAX_DIFF_ROWS = 50;
+const MAX_TEXT = 500;
+const MAX_URL = 2_048;
+const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+
+type Request = NonNullable<AttemptEvidence['network']>[number];
+
+/**
+ * Requests and console problems that differ between two attempts. Repeated requests pair up in order.
+ * Compares the text as recorded; redact masks only the rows kept, before they are cut.
+ */
+export function diffAttemptEvidence(failed: AttemptEvidence, passed: AttemptEvidence, redact = (text: string) => text): Pick<AttemptDiff, 'network' | 'console'> {
+  const diff: Pick<AttemptDiff, 'network' | 'console'> = {};
+  if (failed.network && passed.network) {
+    const key = (r: Request) => `${r.method} ${r.url}`;
+    const queues = new Map<string, Request[]>();
+    for (const r of passed.network) {
+      const queue = queues.get(key(r));
+      if (queue) queue.push(r);
+      else queues.set(key(r), [r]);
+    }
+    const paired = new Set<Request>();
+    const rows: Array<[Request, Pick<AttemptRequestDiff, 'failed' | 'passed'>]> = [];
+    for (const r of failed.network) {
+      const twin = queues.get(key(r))?.shift();
+      if (twin) paired.add(twin);
+      if (twin?.status !== r.status) rows.push([r, { failed: r.status, ...(twin && { passed: twin.status }) }]);
+    }
+    for (const r of passed.network) if (!paired.has(r)) rows.push([r, { passed: r.status }]);
+    diff.network = rows.slice(0, MAX_DIFF_ROWS).map(([r, statuses]) => ({ method: r.method, url: cut(redact(r.url), MAX_URL), ...statuses }));
+  }
+  const problem = (c: { level: string }) => /^(error|warn)/i.test(c.level);
+  const line = (c: { level: string; text: string }) => `${c.level} ${c.text}`;
+  const seen = new Map<string, number>();
+  for (const c of passed.console) if (problem(c)) seen.set(line(c), (seen.get(line(c)) ?? 0) + 1);
+  const only: AttemptEvidence['console'] = [];
+  for (const c of failed.console) {
+    if (!problem(c)) continue;
+    const n = seen.get(line(c)) ?? 0;
+    if (n > 0) seen.set(line(c), n - 1);
+    else only.push(c);
+  }
+  diff.console = only.slice(0, MAX_DIFF_ROWS).map((c) => ({ level: c.level, text: cut(redact(c.text), MAX_TEXT) }));
+  return diff;
+}
+
+/** The first failed attempt that has a trace against the passing one; without both traces, which attempts lack one. */
+export function compareAttemptTraces(attempts: AttemptData[], traces: Map<number, AttemptEvidence | null>, redact?: (text: string) => string): AttemptDiff | undefined {
+  const failed = attempts.filter(isFailedAttempt);
+  const f = failed.find((a) => traces.get(a.retry)) ?? failed[0];
+  const p = [...attempts].reverse().find((a) => a.status === 'passed');
+  if (!f || !p) return undefined;
+  const [ef, ep] = [traces.get(f.retry), traces.get(p.retry)];
+  if (!ef || !ep) return { failed: f.retry, passed: p.retry, missingTrace: [f, p].filter((a) => !traces.get(a.retry)).map((a) => a.retry) };
+  return { failed: f.retry, passed: p.retry, ...diffAttemptEvidence(ef, ep, redact) };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AttemptData, StepData } from '../types';
-import { alignSteps, divergenceSummary, stepPath } from './attempt-compare';
+import { alignSteps, compareAttemptTraces, diffAttemptEvidence, divergenceSummary, stepPath, type AttemptEvidence } from './attempt-compare';
 
 const step = (title: string, duration: number, over: Partial<StepData> = {}): StepData => ({ title, duration, category: 'test.step', ...over });
 const attempt = (retry: number, status: AttemptData['status'], duration: number, steps: StepData[]): AttemptData => ({ retry, status, duration, steps });
@@ -116,5 +116,99 @@ describe('divergenceSummary', () => {
   it('has no summary for one attempt, or for failed attempts without any failed step', () => {
     expect(divergenceSummary([attempt(0, 'failed', 4800, FAILED_STEPS)])).toBeUndefined();
     expect(divergenceSummary([attempt(0, 'failed', 6100, []), attempt(1, 'failed', 6200, [])])).toBeUndefined();
+  });
+});
+
+const req = (url: string, status: number, method = 'GET') => ({ method, url: `http://shop.test${url}`, status });
+
+describe('diffAttemptEvidence', () => {
+  it('lists requests made in one attempt only and requests whose status differs, failed attempt first', () => {
+    const failed: AttemptEvidence = { network: [req('/', 200), req('/api/cart', 500), req('/api/log', 204, 'POST')], console: [] };
+    const passed: AttemptEvidence = { network: [req('/', 200), req('/api/cart', 200), req('/api/promo', 200)], console: [] };
+
+    expect(diffAttemptEvidence(failed, passed)).toEqual({
+      network: [
+        { method: 'GET', url: 'http://shop.test/api/cart', failed: 500, passed: 200 },
+        { method: 'POST', url: 'http://shop.test/api/log', failed: 204 },
+        { method: 'GET', url: 'http://shop.test/api/promo', passed: 200 },
+      ],
+      console: [],
+    });
+  });
+
+  it('pairs a repeated request in order, so only the extra call is listed', () => {
+    const failed: AttemptEvidence = { network: [req('/api/poll', 200), req('/api/poll', 503), req('/api/poll', 200)], console: [] };
+    const passed: AttemptEvidence = { network: [req('/api/poll', 200), req('/api/poll', 200)], console: [] };
+
+    expect(diffAttemptEvidence(failed, passed).network).toEqual([
+      { method: 'GET', url: 'http://shop.test/api/poll', failed: 503, passed: 200 },
+      { method: 'GET', url: 'http://shop.test/api/poll', failed: 200 },
+    ]);
+  });
+
+  it('lists console errors and warnings that only the failed attempt logged', () => {
+    const failed: AttemptEvidence = {
+      console: [
+        { level: 'log', text: 'booted' },
+        { level: 'error', text: 'Uncaught TypeError: cart is undefined' },
+        { level: 'warning', text: 'slow response' },
+        { level: 'error', text: 'ads blocked' },
+      ],
+    };
+    const passed: AttemptEvidence = { console: [{ level: 'error', text: 'ads blocked' }, { level: 'error', text: 'only when passing' }] };
+
+    expect(diffAttemptEvidence(failed, passed)).toEqual({
+      console: [
+        { level: 'error', text: 'Uncaught TypeError: cart is undefined' },
+        { level: 'warning', text: 'slow response' },
+      ],
+    });
+  });
+
+  it('keeps at most 50 rows of each kind and cuts long text', () => {
+    const failed: AttemptEvidence = {
+      network: Array.from({ length: 60 }, (_, i) => req(`/api/${i}`, 200)),
+      console: Array.from({ length: 60 }, (_, i) => ({ level: 'error', text: `${i} ${'x'.repeat(600)}` })),
+    };
+    const diff = diffAttemptEvidence(failed, { network: [], console: [] });
+
+    expect([diff.network?.length, diff.console?.length, diff.console?.[0].text.length]).toEqual([50, 50, 501]);
+  });
+});
+
+describe('compareAttemptTraces', () => {
+  const evidence: AttemptEvidence = { network: [req('/api/cart', 500)], console: [] };
+  const attempts = [attempt(0, 'failed', 900, []), attempt(1, 'passed', 400, [])];
+
+  it('names the attempts that have no trace instead of comparing', () => {
+    expect(compareAttemptTraces(attempts, new Map([[0, evidence], [1, null]]))).toEqual({ failed: 0, passed: 1, missingTrace: [1] });
+    expect(compareAttemptTraces(attempts, new Map([[0, null], [1, null]]))).toEqual({ failed: 0, passed: 1, missingTrace: [0, 1] });
+  });
+
+  it('compares the first failed attempt that has a trace with the passing attempt', () => {
+    const three = [attempt(0, 'failed', 900, []), attempt(1, 'timedOut', 900, []), attempt(2, 'passed', 400, [])];
+    expect(compareAttemptTraces(three, new Map([[0, null], [1, evidence], [2, { network: [req('/api/cart', 200)], console: [] }]]))).toEqual({
+      failed: 1,
+      passed: 2,
+      network: [{ method: 'GET', url: 'http://shop.test/api/cart', failed: 500, passed: 200 }],
+      console: [],
+    });
+  });
+
+  it('compares the text as recorded, then masks what it keeps before cutting it', () => {
+    const redact = (text: string) => text.split('tok-1234').join('[REDACTED]');
+    const failed: AttemptEvidence = { network: [req('/api/cart?t=tok-1234', 500)], console: [{ level: 'error', text: `${'x'.repeat(496)}tok-1234` }] };
+    const passed: AttemptEvidence = { network: [req('/api/cart?t=tok-1234', 200)], console: [] };
+
+    expect(compareAttemptTraces(attempts, new Map([[0, failed], [1, passed]]), redact)).toEqual({
+      failed: 0,
+      passed: 1,
+      network: [{ method: 'GET', url: 'http://shop.test/api/cart?t=[REDACTED]', failed: 500, passed: 200 }],
+      console: [{ level: 'error', text: `${'x'.repeat(496)}[RED…` }],
+    });
+  });
+
+  it('has nothing to compare without a failed and a passing attempt', () => {
+    expect(compareAttemptTraces([attempt(0, 'failed', 900, []), attempt(1, 'failed', 900, [])], new Map([[0, evidence], [1, evidence]]))).toBeUndefined();
   });
 });

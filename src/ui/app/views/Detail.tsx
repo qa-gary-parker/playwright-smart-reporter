@@ -138,7 +138,67 @@ function Attempts({ t }: { t: ReportTest }) {
           ))}
         </div>
       )}
+      {t.attemptDiff && <TraceDiff d={t.attemptDiff} />}
     </div>
+  );
+}
+
+function TraceDiff({ d }: { d: NonNullable<ReportTest['attemptDiff']> }) {
+  if (d.missingTrace) {
+    const which = d.missingTrace.map((r) => r + 1);
+    return (
+      <p class="muted">
+        {which.length > 1 ? `Attempts ${which.join(' and ')} have` : `Attempt ${which[0]} has`} no trace, so the requests and console messages of
+        attempt {d.failed + 1} and attempt {d.passed + 1} cannot be compared. Set <span class="mono">trace: 'on'</span> in the Playwright config to
+        record a trace of every attempt.
+      </p>
+    );
+  }
+  const network = d.network ?? [];
+  const messages = d.console ?? [];
+  const status = (s?: number) => (s === undefined ? 'not sent' : s > 0 ? String(s) : 'ERR');
+  const compared = `${d.network ? 'requests and ' : ''}console errors and warnings`;
+  const same = network.length === 0 && messages.length === 0;
+  return (
+    <>
+      <p class="muted">
+        {same
+          ? `The traces of attempt ${d.failed + 1} and attempt ${d.passed + 1} have the same ${compared}.`
+          : `The ${compared} that differ between the traces of attempt ${d.failed + 1} and attempt ${d.passed + 1}:`}
+      </p>
+      {network.length > 0 && (
+        <div class="retry-diff retry-diff--requests" role="table" aria-label="Requests by attempt">
+          <div class="retry-diff__row retry-diff__head" role="row">
+            <span role="columnheader">Request</span>
+            <span role="columnheader">Attempt {d.failed + 1}</span>
+            <span role="columnheader">Attempt {d.passed + 1}</span>
+          </div>
+          {network.map((r) => (
+            <div class="retry-diff__row" role="row" title={r.url}>
+              <span role="cell" class="mono">
+                {r.method} {r.url}
+              </span>
+              <span role="cell" class="mono">
+                {status(r.failed)}
+              </span>
+              <span role="cell" class="mono">
+                {status(r.passed)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {messages.length > 0 && (
+        <ul class="console" aria-label={`Console errors and warnings only in attempt ${d.failed + 1}`}>
+          {messages.map((c) => (
+            <li class="console__line mono" data-level={c.level}>
+              <span class="console__level">{c.level}</span>
+              {c.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

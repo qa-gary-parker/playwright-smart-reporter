@@ -77,6 +77,7 @@ import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
 import { createRedactor, redactTestResult } from './agent/redact';
 import { buildCausalTimeline, findFailureMoment } from './analyzers/causal-timeline';
+import { compareAttemptTraces, type AttemptEvidence } from './analyzers/attempt-compare';
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
 import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
@@ -101,6 +102,7 @@ class SmartReporter implements Reporter {
   private stepCollector: StepCollector;
   private attachmentCollector: AttachmentCollector;
   private networkCollector: NetworkCollector;
+  private attemptNetworkCollector: NetworkCollector;
   private a11yCollector = new A11yCollector();
   private coverageCollector?: CoverageCollector;
 
@@ -132,6 +134,8 @@ class SmartReporter implements Reporter {
   private testIds = new Map<string, string>(); // Playwright's test.id -> the id results and history are keyed on
   private allTests: TestCase[] = [];
   private redact?: (text: string) => string;
+  // testId -> retry -> requests and console of that attempt's trace (null: no trace), held until the test settles
+  private attemptTraces = new Map<string, Map<number, AttemptEvidence | null>>();
 
   constructor(options: SmartReporterOptions = {}) {
     this.options = options;
@@ -150,6 +154,13 @@ class SmartReporter implements Reporter {
       excludeStaticAssets: options.networkLogExcludeAssets ?? true,
       maxEntries: options.networkLogMaxEntries ?? 50,
       includeBodies: true,
+    });
+    // The same filters without the entry cap, so two attempts are compared over all their requests
+    this.attemptNetworkCollector = new NetworkCollector({
+      urlFilter: options.networkLogFilter,
+      excludeStaticAssets: options.networkLogExcludeAssets ?? true,
+      maxEntries: 0,
+      includeBodies: false,
     });
 
     // Initialize other components
@@ -426,13 +437,15 @@ class SmartReporter implements Reporter {
       a => a.name === 'trace' && a.contentType === 'application/zip'
     );
     const wantTimeline = (result.status === 'failed' || result.status === 'timedOut') && this.options.enableCausalTimeline !== false;
+    // A failed attempt that may be retried, or a retry that passed: the test may turn out flaky, so its attempts get compared
+    const comparable = mayRetry || (result.retry > 0 && result.status === test.expectedStatus);
     let trace: TraceContents | undefined;
     if (traceAttachment?.path) {
       testData.tracePath = traceAttachment.path;
-      // One trace read feeds both the network log and the causal timeline
-      if (this.options.enableNetworkLogs !== false || wantTimeline) {
+      // One trace read feeds the network log, the causal timeline and the attempt comparison
+      if (this.options.enableNetworkLogs !== false || wantTimeline || comparable) {
         try {
-          trace = readTrace(traceAttachment.path, { timeline: wantTimeline });
+          trace = readTrace(traceAttachment.path, { timeline: wantTimeline || comparable });
         } catch (err) {
           console.warn(`Failed to parse trace file: ${traceAttachment.path}`, err);
         }
@@ -448,6 +461,14 @@ class SmartReporter implements Reporter {
           // Network log extraction is optional, don't fail on errors
         }
       }
+    }
+    if (comparable) {
+      const traces = this.attemptTraces.get(testId) ?? new Map<number, AttemptEvidence | null>();
+      traces.set(result.retry, trace ? {
+        ...(this.options.enableNetworkLogs !== false && { network: this.attemptNetworkCollector.collectFromContents(trace).entries }),
+        console: trace.contexts.flatMap((c) => c.console),
+      } : null);
+      this.attemptTraces.set(testId, traces);
     }
 
     // Phase 10: Accessibility
@@ -956,6 +977,10 @@ class SmartReporter implements Reporter {
   // Earlier attempts keep their evidence only when a later attempt passed. A test that failed
   // every time has the same evidence on its final attempt. Safe to call more than once.
   private settleAttemptEvidence(r: TestResultData): void {
+    const traces = this.attemptTraces.get(r.testId);
+    this.attemptTraces.delete(r.testId);
+    const diff = traces && r.outcome === 'flaky' ? compareAttemptTraces(r.attempts ?? [], traces, this.redact) : undefined;
+    if (diff) r.attemptDiff = diff;
     for (const attempt of r.attempts ?? []) {
       if (r.outcome !== 'flaky') {
         delete attempt.attachments;

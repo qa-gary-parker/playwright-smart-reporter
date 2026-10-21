@@ -320,6 +320,47 @@ describe('failed attempts', () => {
     expect(divergenceSummary(test.attempts!)).toMatch(/^Attempt 1 failed at step 'checkout › pay' after \d+ms; attempt 2 passed it in \d+ms$/);
   });
 
+  it("with trace: 'on', lists the requests and console errors that differ between the failed and the passing attempt", () => {
+    const out = path.join(tmp, 'attempts-trace-on');
+    runSuite(out, {}, [], 'test', { ACCEPTANCE_MATCH: 'attempt-trace.fixtures.ts' });
+    const [test] = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).tests;
+
+    expect(test.outcome).toBe('flaky');
+    expect(test.attemptDiff).toEqual({
+      failed: 0,
+      passed: 1,
+      network: [
+        { method: 'GET', url: 'http://cart.test/api/cart', failed: 500, passed: 200 },
+        { method: 'GET', url: 'http://cart.test/api/promo', passed: 200 },
+      ],
+      console: [
+        { level: 'error', text: 'Failed to load resource: the server responded with a status of 500 (Internal Server Error)' },
+        { level: 'error', text: 'cart failed: 500' },
+      ],
+    });
+  });
+
+  it('with redact, masks the request URLs and console text of the comparison', () => {
+    const out = path.join(tmp, 'attempts-trace-redact');
+    runSuite(out, { redact: { patterns: ['promo', 'cart failed'] } }, [], 'test', { ACCEPTANCE_MATCH: 'attempt-trace.fixtures.ts' });
+    const [test] = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).tests;
+
+    expect([test.attemptDiff?.network, test.attemptDiff?.console?.[1]]).toEqual([
+      [
+        { method: 'GET', url: 'http://cart.test/api/cart', failed: 500, passed: 200 },
+        { method: 'GET', url: 'http://cart.test/api/[REDACTED]', passed: 200 },
+      ],
+      { level: 'error', text: '[REDACTED]: 500' },
+    ]);
+  });
+
+  it("with trace: 'retain-on-failure', names the passing attempt as the one without a trace", () => {
+    const out = run('attempts-retain', {}, 'fails once');
+    const [test] = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).tests;
+
+    expect(test.attemptDiff).toEqual({ failed: 0, passed: 1, missingTrace: [1] });
+  });
+
   it('keeps no evidence on earlier attempts of a test that failed every time, and writes no files for them', () => {
     const out = run('attempts-all-failed', { cspSafe: true }, 'fails every time');
     const [test] = cspSafeData(out).tests;

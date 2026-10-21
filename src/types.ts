@@ -311,6 +311,22 @@ export interface AttemptData {
   tracePath?: string;
 }
 
+// Phase 34: what differs between the traces of a flaky test's failed attempt and its passing attempt
+export interface AttemptDiff {
+  failed: number;                   // retry of the failed attempt: the first failed one that has a trace
+  passed: number;                   // retry of the passing attempt
+  missingTrace?: number[];          // retries without a trace; network and console are then absent
+  network?: AttemptRequestDiff[];   // absent with enableNetworkLogs: false
+  console?: Array<{ level: string; text: string }>; // errors and warnings only the failed attempt logged
+}
+
+export interface AttemptRequestDiff {
+  method: string;
+  url: string;
+  failed?: number;                  // status in the failed attempt, -1 for no response; absent when that attempt did not send it
+  passed?: number;                  // status in the passing attempt; absent when that attempt did not send it
+}
+
 export interface TestResultData {
   testId: string;
   title: string;
@@ -360,6 +376,7 @@ export interface TestResultData {
   performanceMetrics?: PerformanceMetrics;
   networkLogs?: NetworkLogData;        // NEW: Network logs from trace
   attempts?: AttemptData[];            // Every attempt in retry order, final attempt last
+  attemptDiff?: AttemptDiff;           // Flaky tests only
 
   // Phase 9: Ownership and routing
   owners?: string[];

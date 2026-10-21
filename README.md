@@ -90,7 +90,7 @@ The detail pane is in triage order. Sections that have no data are left out.
 | Source | Playwright's code frame at the failing line |
 | Timeline | The causal failure timeline (see [Causal Failure Timeline](#causal-failure-timeline)) |
 | AI analysis | The AI suggestion, or a note that AI is off or has no provider. Copy AI prompt works in both cases. |
-| Attempts | Every attempt with status, duration, and first error line. Above them, one line says where the attempts went different ways, for example `Attempt 1 failed at step 'checkout › pay' after 3.2s; attempt 2 passed it in 400ms`. For a flaky test, each attempt before the last also shows its own screenshots, videos and traces; the last attempt's are under Attachments. When an attempt failed and a later one passed, a step-by-step comparison of the two. Steps are paired by title path (the step's title and the titles of the steps around it), so a step that only one attempt ran marks only its own row. Rows are marked when the step is in one attempt only, failed in one attempt only, or took more than 2x as long in one attempt. Nested steps are indented. |
+| Attempts | Every attempt with status, duration, and first error line. Above them, one line says where the attempts went different ways, for example `Attempt 1 failed at step 'checkout › pay' after 3.2s; attempt 2 passed it in 400ms`. For a flaky test, each attempt before the last also shows its own screenshots, videos and traces; the last attempt's are under Attachments. When an attempt failed and a later one passed, a step-by-step comparison of the two. Steps are paired by title path (the step's title and the titles of the steps around it), so a step that only one attempt ran marks only its own row. Rows are marked when the step is in one attempt only, failed in one attempt only, or took more than 2x as long in one attempt. Nested steps are indented. For a flaky test, below the steps, what differs between the traces of the first failed attempt that has a trace and the passing attempt: requests sent in one attempt only or with a different status, and console errors and warnings that only the failed attempt logged. At most 50 of each. Requests follow the network log options (`networkLogFilter`, `networkLogExcludeAssets`, no `networkLogMaxEntries` cap) and are not compared with `enableNetworkLogs: false`. Without a trace of both attempts, the section names the attempt that has none; `trace: 'retain-on-failure'` keeps no trace of the passing attempt, so use `trace: 'on'`. |
 | Steps | Each step with a duration bar. The failing step is marked. |
 | Network | Requests from the trace: method, status, path, duration. Failed requests are marked. |
 | Console | Console messages from the trace of the failed attempt |
@@ -1086,6 +1086,7 @@ The reporter redacts these fields of each test when the test ends:
 - The **Copy AI prompt** text. It includes stdout and stderr.
 - The failure timeline: step titles, request URLs, console messages and the first-anomaly summary.
 - Network log URLs.
+- The request URLs and console messages of the attempt comparison.
 
 Every output is built from these fields. So the HTML report, the JSON, JUnit and CTRF exports, the PDF, `test-history.json`, the `history-runs/` snapshots, the failure bundle, the live results file and the AI prompts get the redacted text.
 

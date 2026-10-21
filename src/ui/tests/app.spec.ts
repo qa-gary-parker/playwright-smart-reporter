@@ -283,6 +283,49 @@ test('a failed attempt shows its own screenshot and trace in the Attempts sectio
   await expect(page.getByRole('group', { name: /^Attempt \d+ attachments$/ })).toHaveCount(1);
 });
 
+const withAttemptDiff = (page: import('@playwright/test').Page, attemptDiff: object) =>
+  page.addInitScript((diff) => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { tests: Array<{ testId: string; attemptDiff?: object }> }) => {
+        d.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::flaky behavior - random failure')!.attemptDiff = diff;
+        value = d;
+      },
+    });
+  }, attemptDiff);
+
+test('the Attempts section lists the requests and console errors that differ between the traces of the two attempts', async ({ page }) => {
+  await withAttemptDiff(page, {
+    failed: 0,
+    passed: 1,
+    network: [
+      { method: 'GET', url: 'http://shop.test/api/cart', failed: 500, passed: 200 },
+      { method: 'GET', url: 'http://shop.test/api/promo', passed: 200 },
+    ],
+    console: [{ level: 'error', text: 'cart failed: 500' }],
+  });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  const rows = page.getByRole('table', { name: 'Requests by attempt' }).getByRole('row');
+  expect(await rows.evaluateAll((rs) => rs.map((r) => [...r.children].map((c) => c.textContent)))).toEqual([
+    ['Request', 'Attempt 1', 'Attempt 2'],
+    ['GET http://shop.test/api/cart', '500', '200'],
+    ['GET http://shop.test/api/promo', 'not sent', '200'],
+  ]);
+  await expect(page.getByRole('list', { name: 'Console errors and warnings only in attempt 1' }).getByRole('listitem')).toHaveText(['errorcart failed: 500']);
+});
+
+test('the Attempts section names the attempt that has no trace and the trace setting that records one', async ({ page }) => {
+  await withAttemptDiff(page, { failed: 0, passed: 1, missingTrace: [1] });
+  await page.goto(url('screen=flaky&mode=light'));
+  await page.getByRole('treeitem').filter({ hasText: /Desktop Chrome.*flaky behavior - random failure/ }).click();
+  await expect(page.getByRole('article', { name: 'Test detail' }).getByText(/no trace/)).toHaveText(
+    "Attempt 2 has no trace, so the requests and console messages of attempt 1 and attempt 2 cannot be compared. Set trace: 'on' in the Playwright config to record a trace of every attempt.",
+  );
+});
+
 test('views and tabs for features that are off cannot be opened by URL or shortcut', async ({ page }) => {
   await page.goto(url('screen=insights&mode=light&off=gallery,trends,comparison', '#/gallery'));
   await expect(page).toHaveURL(/#\/insights$/);
