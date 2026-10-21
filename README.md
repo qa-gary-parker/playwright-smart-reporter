@@ -182,7 +182,7 @@ Press `?` in the report to see this list.
 
 Insights is the landing view and holds the run metrics:
 
-- A stats row: failed (with the number of new failures; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
+- A stats row: failed (with the number of new failures and of failures that did not run in the baseline run; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
 - An outcome bar: passed, failed, flaky, skipped.
 - The pass rate is the passed tests out of the tests that ran. Skipped tests are left out, so a run with no failures shows 100%. When every test was skipped, the pass rate is `n/a` (`null` in the JSON export and history) and there is no health grade. The report, history, JSON export, PDF, gates and notifications use this same pass rate.
 - Panels: AI summary, Quality gate, Failure clusters, At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).

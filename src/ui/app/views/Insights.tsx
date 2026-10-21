@@ -44,6 +44,10 @@ export function Insights() {
   const ids = (list: string[] | undefined) => (list ?? []).map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);
   const failing = tests.filter(isFailing);
   const newFailures = failing.filter((t) => t.signals.includes('new-failure')).length;
+  // noNewFailures also counts these, so the card names them.
+  const notInBaseline = new Set(d.comparison?.changes.notInBaseline);
+  const absent = failing.filter((t) => notInBaseline.has(t.testId)).length;
+  const failedSub = [newFailures ? `${newFailures} new` : '', absent ? `${absent} not in baseline` : ''].filter(Boolean).join(', ') || 'none new';
 
   return (
     <div class="page">
@@ -60,7 +64,7 @@ export function Insights() {
           <span class="stat__value" data-tone={failing.length ? 'fail' : undefined}>
             {failing.length}
           </span>
-          <span class="stat__sub">{failing.length === 0 ? 'nothing failed' : newFailures ? `${newFailures} new` : 'none new'}</span>
+          <span class="stat__sub">{failing.length === 0 ? 'nothing failed' : failedSub}</span>
         </a>
         <div class="stat">
           <span class="stat__label">Pass rate</span>

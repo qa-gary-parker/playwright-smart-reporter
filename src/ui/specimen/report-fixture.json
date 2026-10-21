@@ -235,6 +235,7 @@
     "[Mobile Chrome] feature-demo.spec.ts::flaky network-dependent check"
    ],
    "notInBaseline": [
+    "[Mobile Chrome] demo.spec.ts::regression test for bug #123",
     "[Desktop Chrome] feature-demo.spec.ts::homepage loads and displays heading"
    ]
   }

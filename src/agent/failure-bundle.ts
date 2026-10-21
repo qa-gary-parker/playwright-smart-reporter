@@ -360,7 +360,8 @@ export function loadFailureBundle(file: string, opts: FailureBundleOptions): Fai
     throw new Error(`${file} is not valid JSON: ${err instanceof Error ? err.message : err}`);
   }
   if (data?.format === FAILURE_BUNDLE_FORMAT) return assertFailureBundle(data);
-  if (data?.schemaVersion === SCHEMA_VERSION && data.meta && Array.isArray(data.tests)) return buildFailureBundle(data, opts);
+  // 3.x report data (schemaVersion 3) has the same tests and meta, the only fields the bundle reads.
+  if ([3, SCHEMA_VERSION].includes(data?.schemaVersion) && data.meta && Array.isArray(data.tests)) return buildFailureBundle(data, opts);
   if (data?.metadata && Array.isArray(data.tests)) return buildFailureBundle(fromJsonExport(data), opts);
   throw new Error(`${file} is not a failure bundle, report data, or JSON export`);
 }

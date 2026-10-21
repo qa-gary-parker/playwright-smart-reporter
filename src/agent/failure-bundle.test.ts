@@ -281,6 +281,12 @@ describe('loadFailureBundle and writeFailureBundle', () => {
     expect(loadFailureBundle(jsFile, OPTS).failures).toStrictEqual([LOGIN_FAILURE, EXPORT_FAILURE]);
   });
 
+  it('builds the bundle from report data written by 3.x, which has schemaVersion 3', () => {
+    const v3File = path.join(dir, 'smart-report-data.json');
+    fs.writeFileSync(v3File, JSON.stringify({ ...loadFixture(), schemaVersion: 3 }));
+    expect(loadFailureBundle(v3File, OPTS).failures).toStrictEqual([LOGIN_FAILURE, EXPORT_FAILURE]);
+  });
+
   it('builds the bundle from the exportJson output, which carries lines but no steps or history', () => {
     const jsonFile = exportJsonData(loadFixture().tests as TestResultData[], { runs: [], tests: {} }, 0, {}, undefined, undefined, dir);
     const bundle = loadFailureBundle(jsonFile, OPTS);

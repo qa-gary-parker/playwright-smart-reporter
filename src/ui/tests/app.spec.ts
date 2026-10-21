@@ -399,7 +399,13 @@ test('the Compare tab lists tests that did not run in the baseline run in their 
     /^Fixed\s*0$/,
     /^Performance improvements\s*1$/,
     /^New tests\s*0$/,
-    /^Not in baseline run\s*1$/,
+    /^Not in baseline run\s*2$/,
   ]);
   await expect(tree.getByRole('treeitem', { level: 2 }).last()).toContainText('homepage loads and displays heading');
+});
+
+test('the Failed card counts failures that did not run in the baseline run, as noNewFailures does', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  // The fixture's not-in-baseline group holds one failing and one passing test.
+  await expect(page.getByRole('main').getByRole('link', { name: /^Failed/ })).toHaveText(/^Failed\s*14\s*1 new, 1 not in baseline$/);
 });
