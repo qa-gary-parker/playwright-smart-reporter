@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import type { FullConfig, FullResult, Suite, TestCase, TestResult } from '@playwright/test/reporter';
 import SmartReporter, { mergeHistories } from './smart-reporter';
-import type { HistoryRunFile, QualityGateConfig, RunSummary, TestHistory, TestHistoryEntry } from './types';
+import type { JsonExportData } from './generators/json-exporter';
+import type { HistoryRunFile, QualityGateConfig, RunSummary, SmartReporterOptions, TestHistory, TestHistoryEntry } from './types';
+
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync) };
+});
 
 describe('SmartReporter options', () => {
   it('throws at creation on an unknown quality gate key, so a typo cannot pass the gate', () => {
@@ -275,5 +283,73 @@ describe('mergeHistories', () => {
 
       expect(counts(read('output.json'))).toEqual({ entries: { a: 3, b: 3 }, summaries: [['run-1', 2], ['run-2', 2], ['run-3', 2]] });
     });
+  });
+});
+
+describe('commits of a new failure', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'smart-commits-')));
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  // One GitHub run of one test at the commit c repeated, read back from the JSON export
+  async function run(c: string, status: 'passed' | 'failed', options: SmartReporterOptions = {}): Promise<JsonExportData> {
+    const env = { GITHUB_ACTIONS: 'true', GITHUB_EVENT_PATH: '', GITHUB_SHA: c.repeat(40), GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'acme/shop' };
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+    const results: TestResult[] = [];
+    const test = {
+      id: 'checkout', title: 'checkout', retries: 0, expectedStatus: 'passed', results, repeatEachIndex: 0, tags: [], annotations: [],
+      location: { file: path.join(dir, 'checkout.spec.ts'), line: 1, column: 1 },
+      titlePath: () => ['', 'checkout.spec.ts', 'checkout'],
+      outcome: () => (status === 'passed' ? 'expected' : 'unexpected'),
+    } as unknown as TestCase;
+    const reporter = new SmartReporter({ exportJson: true, runId: c, ...options });
+    reporter.onBegin({ rootDir: dir } as FullConfig, { allTests: () => [test] } as unknown as Suite);
+    const result = {
+      retry: 0, status, duration: 5, startTime: new Date(), errors: status === 'failed' ? [{ message: 'Error: checkout broke' }] : [],
+      attachments: [], steps: [], stdout: [], stderr: [],
+    } as unknown as TestResult;
+    results.push(result);
+    await reporter.onTestEnd(test, result);
+    await reporter.onEnd({ status, duration: 5 } as FullResult);
+    return JSON.parse(fs.readFileSync(path.join(dir, 'smart-report-data.json'), 'utf8'));
+  }
+
+  const RANGE = {
+    lastPassed: { commit: 'bbbbbbbb', sha: 'b'.repeat(40) },
+    firstFailed: { commit: 'cccccccc', sha: 'c'.repeat(40) },
+    url: `https://github.com/acme/shop/compare/${'b'.repeat(40)}...${'c'.repeat(40)}`,
+  };
+
+  it('gives a test that fails in run 3 the commits from run 2 to run 3, and its cluster the same, without calling git', async () => {
+    vi.mocked(execFileSync).mockClear();
+    await run('a', 'passed');
+    await run('b', 'passed');
+    const json = await run('c', 'failed');
+
+    expect([json.tests[0].commits, json.failureClusters?.[0].tracking?.commits]).toEqual([RANGE, RANGE]);
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalled();
+  });
+
+  it('with suspects, asks git once for the files changed in that range, and keeps the range when git cannot tell', async () => {
+    await run('a', 'passed', { suspects: true });
+    await run('b', 'passed', { suspects: true });
+    vi.mocked(execFileSync).mockClear();
+    const json = await run('c', 'failed', { suspects: true });
+
+    expect([json.tests[0].commits, json.failureClusters?.[0].tracking?.commits]).toEqual([RANGE, RANGE]);
+    expect(vi.mocked(execFileSync).mock.calls.filter((c) => c[1]?.includes('diff')).map((c) => c[1])).toEqual([
+      ['-C', dir, 'diff', '--name-only', '-z', `${'b'.repeat(40)}..${'c'.repeat(40)}`],
+    ]);
   });
 });

@@ -352,6 +352,7 @@ describe('failure clustering', () => {
     const run = (broken: string, sha: string) => {
       const { status } = runSuite(out, { exportJson: true }, ['--retries=0', '--grep', 'draft'], 'test', {
         ACCEPTANCE_MATCH: 'cluster.fixtures.ts', BROKEN_DRAFTS: broken, GITHUB_ACTIONS: 'true', GITHUB_EVENT_PATH: '', GITHUB_SHA: sha.repeat(40),
+        GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'acme/shop',
       });
       expect(status).toBe(1);
       const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
@@ -360,6 +361,10 @@ describe('failure clustering', () => {
     };
     const notesTest = 'cluster.fixtures.ts::keeps the notes draft';
     const titleTest = 'cluster.fixtures.ts::keeps the title draft';
+    const at = (c: string) => ({ commit: c.repeat(8), sha: c.repeat(40) });
+    const failedAtA = { firstFailed: at('a'), url: `https://github.com/acme/shop/commit/${'a'.repeat(40)}` };
+    // notes passed in run 2 and failed again in run 3
+    const run2To3 = { lastPassed: at('b'), firstFailed: at('c'), url: `https://github.com/acme/shop/compare/${'b'.repeat(40)}...${'c'.repeat(40)}` };
 
     const first = run('notes,title', 'a');
     const second = run('title', 'b');
@@ -368,8 +373,9 @@ describe('failure clustering', () => {
 
     // The first run has no history to compare with
     expect(first.data.clusters.map((c) => [c.testIds, c.tracking])).toEqual([[[notesTest], undefined], [[titleTest], undefined]]);
-    expect(second.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[title, { status: 'recurring', runs: 2, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1, 1] }]]);
-    expect(third.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[notes, { status: 'regressed', runs: 1, since: third.start, sinceCommit: 'cccccccc', trend: [1, 0, 1] }]]);
+    expect(second.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[title, { status: 'recurring', runs: 2, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1, 1], commits: failedAtA }]]);
+    expect(third.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[notes, { status: 'regressed', runs: 1, since: third.start, sinceCommit: 'cccccccc', trend: [1, 0, 1], commits: run2To3 }]]);
+    expect(third.json.tests.find((t: { testId: string }) => t.testId === notesTest).commits).toEqual(run2To3);
     expect(third.data.resolvedClusters).toEqual([{ id: title, testIds: [titleTest] }]);
     expect([third.json.failureClusters.map((c: { tracking: unknown }) => c.tracking), third.json.resolvedClusters]).toEqual([
       third.data.clusters.map((c) => c.tracking),

@@ -1,5 +1,5 @@
 import type { ReportData, ReportTest } from '../../report-data/schema';
-import type { ClusterTracking } from '../../types';
+import type { ClusterTracking, CommitRange } from '../../types';
 import { isFailedTest } from '../../utils/flakiness';
 import { computeRunStats } from '../../utils/run-stats';
 import type { TestStatus } from '../components';
@@ -66,10 +66,18 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+export function commitsLabel(c: CommitRange): { text: string; title: string } {
+  const from = c.lastPassed?.commit;
+  const to = c.firstFailed.commit;
+  return from ? { text: `${from}..${to}`, title: `Last passed at ${from}, first failed at ${to}` } : { text: to, title: `First failed at ${to}` };
+}
+
 export function clusterLabel(t: ClusterTracking): { text: string; title?: string } {
-  if (t.status === 'new') return { text: 'New' };
-  if (t.status === 'regressed') return { text: 'Regressed' };
-  return { text: `Recurring, ${plural(t.runs, 'run')}`, title: `Since ${formatDate(t.since)}${t.sinceCommit ? ` at ${t.sinceCommit}` : ''}` };
+  const range = t.commits && commitsLabel(t.commits).title;
+  if (t.status === 'new') return { text: 'New', title: range };
+  if (t.status === 'regressed') return { text: 'Regressed', title: range };
+  const lastPassed = t.commits?.lastPassed ? `, last passed at ${t.commits.lastPassed.commit}` : '';
+  return { text: `Recurring, ${plural(t.runs, 'run')}`, title: `Since ${formatDate(t.since)}${t.sinceCommit ? ` at ${t.sinceCommit}` : ''}${lastPassed}` };
 }
 
 // Quote separators and line breaks; prefix formula characters so spreadsheets show them as text.

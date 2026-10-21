@@ -199,6 +199,8 @@ export interface SmartReporterOptions {
   // Phase 36: write <name>-metrics.prom (Prometheus text) and <name>-metrics.otlp.json (OTLP JSON) (default: false).
   // push also sends one of them to an endpoint.
   exportMetrics?: boolean | { push?: MetricsPushConfig };
+  // #73: list the files changed between the last pass and the first failure, from git in the local clone (default: false)
+  suspects?: boolean;
 }
 
 export interface MetricsPushConfig {
@@ -435,6 +437,20 @@ export interface TestResultData {
   a11y?: A11yResult;
   // Phase 4: Causal failure timeline
   timeline?: CausalTimeline;           // Failed attempts only
+  commits?: CommitRange;               // #73: new failures only
+}
+
+// #73: where a failure started, from the CI info history saved: the newest run before it that passed, and its first failed run
+export interface CommitRange {
+  lastPassed?: CommitRef;     // absent when no run in history passed, or that run had no commit
+  firstFailed: CommitRef;
+  url?: string;               // GitHub or GitLab page of the range, or of the first failed commit
+  suspects?: string[];        // files changed in the range, with suspects: true; absent when git could not tell
+}
+
+export interface CommitRef {
+  commit: string;             // short, for display
+  sha?: string;
 }
 
 // NEW: Retry Analysis
@@ -463,6 +479,7 @@ export interface ClusterTracking {
   since: string;              // start of the first of those runs
   sinceCommit?: string;       // short commit of that run, when CI gave one
   trend: number[];            // tests in the cluster per run in history, oldest first, this run last
+  commits?: CommitRange;      // absent when the first of those runs has no commit
 }
 
 // A cluster of the baseline run that went away this run

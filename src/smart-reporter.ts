@@ -88,6 +88,7 @@ import { compareAttemptTraces, type AttemptEvidence } from './analyzers/attempt-
 import type { CIInfo } from './types';
 import { LiveWriter, generateLiveReportPage } from './live';
 import { resolveOwnership, type OwnerInfo } from './analyzers/ownership';
+import { addSuspects, failureCommits } from './analyzers/commit-range';
 import type { ReportCoverage } from './report-data/schema';
 
 // ============================================================================
@@ -634,7 +635,7 @@ class SmartReporter implements Reporter {
         failureClusters,
         this.results,
         this.historyCollector.getHistory(),
-        { ...this.historyCollector.getCurrentRun(), commit: this.ciInfo?.commit },
+        { ...this.historyCollector.getCurrentRun(), ciInfo: this.ciInfo },
         this.historyCollector.getBaselineRun()?.runId,
       );
       // History saves each test's cluster id, and notifications read the tracking
@@ -713,7 +714,13 @@ class SmartReporter implements Reporter {
           this.options.thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2,
           new Set(Object.keys(history.tests)),
         );
+        for (const t of comparison.changes.newFailures) t.commits = failureCommits(t.testId, history, this.ciInfo);
       }
+    }
+
+    // #73: suspects run git, so they are opt-in
+    if (this.options.suspects) {
+      addSuspects([...this.results.map(r => r.commits), ...failureClusters.map(c => c.tracking?.commits)], this.outputDir, this.redact);
     }
 
     const outputPath = path.resolve(this.outputDir, this.options.outputFile ?? 'smart-report.html');

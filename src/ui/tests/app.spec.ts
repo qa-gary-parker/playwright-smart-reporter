@@ -243,6 +243,20 @@ test('Failure clusters labels each cluster from history with its trend, and Reso
   await expect(resolved.locator('.lines__value')).toHaveText(['cluster c0ffee01', 'cluster c0ffee01']);
 });
 
+test('a cluster names the commit it last passed at, and a new failure links its commits and lists the files changed', async ({ page }) => {
+  const compare = `https://github.com/acme/shop/compare/${'9f8e7d6c'.repeat(5)}...${'a1b2c3d4'.repeat(5)}`;
+  await page.goto(url('screen=insights&mode=light&commits=on'));
+  const clusters = page.locator('.panel', { has: page.getByRole('heading', { name: 'Failure clusters' }) });
+  await expect(clusters.locator('.signal').first()).toHaveAttribute('title', 'Since 6 Aug at a1b2c3d4, last passed at 9f8e7d6c');
+
+  await page.goto(url('mode=light&commits=on', `#/q/failures?test=${encodeURIComponent('[Desktop Chrome] demo.spec.ts::broken login - element not found')}`));
+  const detail = page.getByRole('article', { name: 'Test detail' });
+  const range = detail.getByRole('link', { name: '9f8e7d6c..a1b2c3d4' });
+  await expect(range).toHaveAttribute('href', compare);
+  await expect(range).toHaveAttribute('title', 'Last passed at 9f8e7d6c, first failed at a1b2c3d4');
+  await expect(detail.locator('details').filter({ hasText: /^Suspects/ }).locator('li')).toHaveText(['src/login/form.tsx', 'tests/demo.spec.ts']);
+});
+
 test('History shows the flakiness interval, or insufficient history below 5 runs', async ({ page }) => {
   const flakiness = page.locator('.history .statline > span', { hasText: 'Flakiness' });
   await page.goto(url('screen=flaky&mode=light'));

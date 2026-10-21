@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
-import type { TestResultData, FailureCluster, ClusterTracking, ResolvedCluster, TestHistory } from '../types';
+import type { TestResultData, FailureCluster, ClusterTracking, ResolvedCluster, TestHistory, CIInfo, RunSummary } from '../types';
+import { commitRange } from './commit-range';
 import { parseError, type StackFrame } from '../utils/error-stack';
 import { isPassedTest } from '../utils/flakiness';
 import { stripAnsiCodes, truncate } from '../utils/sanitizers';
@@ -92,7 +93,7 @@ export function trackClusters(
   clusters: FailureCluster[],
   results: TestResultData[],
   history: TestHistory,
-  current: { runId: string; timestamp: string; commit?: string },
+  current: { runId: string; timestamp: string; ciInfo?: CIInfo },
   baselineRunId?: string,
 ): ResolvedCluster[] | undefined {
   // An earlier attempt of this run is replaced by this one
@@ -125,6 +126,7 @@ export function trackClusters(
     let status: ClusterTracking['status'] = 'new';
     let start = runs.length;
     let wentAway = false;
+    let lastPassed: RunSummary | undefined;
     // Newest run first. A run where none of its tests ran, or that saved no cluster ids, neither counts nor ends the streak.
     for (let i = runs.length - 1; i >= 0; i--) {
       if (testsIn[i].length > 0) {
@@ -135,18 +137,21 @@ export function trackClusters(
         status = 'recurring';
         start = i;
       } else if ([...tests].some((t) => passed.get(runs[i].runId)?.has(t))) {
+        lastPassed ??= runs[i];
         if (status === 'recurring') break;
         wentAway = true;
       }
     }
-    const first = runs[start];
-    const sinceCommit = first ? first.ciInfo?.commit : current.commit;
+    const first = runs[start] ?? current;
+    const sinceCommit = first.ciInfo?.commit;
+    const commits = commitRange(lastPassed, first);
     cluster.tracking = {
       status,
       runs: testsIn.slice(start).filter((t) => t.length > 0).length + 1,
-      since: first ? first.timestamp : current.timestamp,
+      since: first.timestamp,
       ...(sinceCommit && { sinceCommit }),
       trend: [...testsIn.map((t) => t.length), cluster.count],
+      ...(commits && { commits }),
     };
   }
 

@@ -170,6 +170,23 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('shows where a new failure started, with the compare page and the first files changed in between', () => {
+    const url = `https://github.com/acme/shop/compare/${'a'.repeat(40)}...${'b'.repeat(40)}`;
+    const commits = {
+      lastPassed: { commit: 'aaaaaaaa', sha: 'a'.repeat(40) },
+      firstFailed: { commit: 'bbbbbbbb', sha: 'b'.repeat(40) },
+      url,
+      suspects: ['src/cart.ts', 'src/tax.ts', 'e2e/tests/cart.spec.ts', 'e2e/pages/cart.ts', 'e2e/fixtures.ts', 'package.json'],
+    };
+    const firstOnly = { firstFailed: { commit: 'bbbbbbbb' } };
+    const withCommits = (c: object) => renderSummary({ ...data, tests: data.tests.map((t) => (t.testId === 'b' ? { ...t, commits: c } : t)) as JsonExportData['tests'] }, { workspace: WORKSPACE });
+
+    expect(withCommits(commits)).toContain(
+      `| **New** \`totals \\| tax\`<br>Last passed at \`aaaaaaaa\`, first failed at \`bbbbbbbb\` ([compare](${url}))<br>Changed: \`src/cart.ts\`, \`src/tax.ts\`, \`e2e/tests/cart.spec.ts\`, \`e2e/pages/cart.ts\`, \`e2e/fixtures.ts\`, and 1 more | \`e2e/tests/cart.spec.ts:27\` |`,
+    );
+    expect(withCommits(firstOnly)).toContain('| **New** `totals \\| tax`<br>First failed at `bbbbbbbb` | `e2e/tests/cart.spec.ts:27` |');
+  });
+
   it('names the branch and commit of the baseline run under the totals', () => {
     const baselineRun = { ...run, ciInfo: { provider: 'github', branch: 'main', commit: 'abc12345' } };
     const out = renderSummary({ ...data, comparison: { ...data.comparison!, baselineRun } }, { workspace: WORKSPACE });

@@ -106,6 +106,7 @@ export interface JsonTestEntry {
   line?: number;
   column?: number;
   errorLocation?: TestResultData['errorLocation'];
+  commits?: TestResultData['commits'];
 }
 
 /** A test read back from the JSON export, with the fields the quality gates use. */
@@ -205,6 +206,7 @@ export function exportJsonData(
     line: r.line,
     column: r.column,
     errorLocation: r.errorLocation,
+    commits: r.commits,
   }));
 
   const clusters: JsonClusterEntry[] | undefined = failureClusters?.map(c => ({

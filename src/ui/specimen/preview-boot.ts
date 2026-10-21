@@ -36,6 +36,19 @@ if (screen === 'green') {
   data.resolvedClusters = [{ id: 'c0ffee0123456789', testIds: recovered.map((t) => t.testId) }];
 }
 
+// ?commits=on: where the recurring cluster and a new failure started, with the files changed in between for the failure.
+if (params.get('commits') === 'on') {
+  const range = {
+    lastPassed: { commit: '9f8e7d6c', sha: '9f8e7d6c'.repeat(5) },
+    firstFailed: { commit: 'a1b2c3d4', sha: 'a1b2c3d4'.repeat(5) },
+    url: `https://github.com/acme/shop/compare/${'9f8e7d6c'.repeat(5)}...${'a1b2c3d4'.repeat(5)}`,
+  };
+  for (const c of data.clusters) if (c.tracking?.status === 'recurring') c.tracking.commits = range;
+  const failure = data.tests.find((t) => t.testId === '[Desktop Chrome] demo.spec.ts::broken login - element not found')!;
+  failure.signals = [...failure.signals, 'new-failure'];
+  failure.commits = { ...range, suspects: ['src/login/form.tsx', 'tests/demo.spec.ts'] };
+}
+
 // ?off=gallery,trends turns those features off, as the reporter options would.
 for (const feature of params.get('off')?.split(',') ?? []) (data.config.features as unknown as Record<string, boolean>)[feature] = false;
 

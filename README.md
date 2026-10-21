@@ -1109,6 +1109,7 @@ reporter: [
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
     exportMetrics: false,       // true or { push: { url, format, headers } }: <name>-metrics.prom and .otlp.json (see Metrics Export)
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
+    suspects: false,            // list the files changed since a new failure last passed, with git (see First Failing Commit and Suspects)
     qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine, rules }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
@@ -1496,6 +1497,29 @@ History keeps the last `maxHistoryRuns` runs, so pull request runs can push the 
 ```
 
 When pull request and branch runs share one history file, raise `maxHistoryRuns` instead.
+
+### First Failing Commit and Suspects
+
+For each new failure, the reporter finds the last run it passed in and the first run it failed in after that. The commits come from the CI info in history. Each failure cluster gets the same range, from the runs its tests ran in.
+
+- The test detail shows the range, such as `9f8e7d6c..a1b2c3d4`. On GitHub and GitLab it links to the compare page. When no run in history passed, it shows the first failed commit only.
+- In Insights, the tooltip of a cluster's label names the commit it last passed at.
+- The job summary and the pull request comment show the range under each new failure.
+- The JSON export has the range in `tests[].commits` and `failureClusters[].tracking.commits`.
+
+A run without CI info has no commit, so a local run gets no range.
+
+To also list the files that changed in the range, set `suspects`:
+
+```typescript
+suspects: true,  // default: false
+```
+
+- The reporter runs `git diff --name-only <last passed>..<first failed>` once for each range, in the Playwright `rootDir` (the current directory with `relativeToCwd`). This git call is why `suspects` is off by default.
+- The test detail lists the files under **Suspects**. The job summary and the pull request comment list the first five.
+- `redact` also applies to the file names.
+- A shallow clone does not have the older commit, so it gets no suspects. The range still shows, and the reporter prints a note. On GitHub Actions, check out with `fetch-depth: 0`.
+- Without git, or outside a git repository, the range shows without suspects.
 
 ### GitHub Pull Requests
 

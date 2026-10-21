@@ -501,7 +501,7 @@ describe('trackClusters', () => {
     runId: `run-${n}`, timestamp: at(n), total: 1, passed: 0, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 1, passRate: null,
     ciInfo: { provider: 'github', commit: `c${n}` },
   });
-  const current = { runId: 'run-9', timestamp: at(9), commit: 'c9' };
+  const current = { runId: 'run-9', timestamp: at(9), ciInfo: { provider: 'github', commit: 'c9' } };
 
   // testId -> what it did in runs 1, 2, ...: failed with that cluster id, 'pass', 'skip', 'fail' (no cluster id saved), or null (not run)
   function historyOf(tests: Record<string, Array<string | null>>): TestHistory {
@@ -529,7 +529,9 @@ describe('trackClusters', () => {
 
     trackClusters(clusters, clusters[0].tests, historyOf({ a: ['A', 'pass'] }), current);
 
-    expect(clusters[0].tracking).toEqual({ status: 'regressed', runs: 1, since: at(9), sinceCommit: 'c9', trend: [1, 0, 1] });
+    expect(clusters[0].tracking).toEqual({
+      status: 'regressed', runs: 1, since: at(9), sinceCommit: 'c9', trend: [1, 0, 1], commits: { lastPassed: { commit: 'c2' }, firstFailed: { commit: 'c9' } },
+    });
   });
 
   it('labels a cluster no run had New, and one in the runs before Recurring from the run after it last went away', () => {
@@ -538,8 +540,8 @@ describe('trackClusters', () => {
     trackClusters(clusters, [], historyOf({ a: ['A', 'pass', 'A', 'A'], b: ['pass', 'pass', 'pass', 'pass'] }), current);
 
     expect(clusters.map((c) => c.tracking)).toEqual([
-      { status: 'recurring', runs: 3, since: at(3), sinceCommit: 'c3', trend: [1, 0, 1, 1, 1] },
-      { status: 'new', runs: 1, since: at(9), sinceCommit: 'c9', trend: [0, 0, 0, 0, 1] },
+      { status: 'recurring', runs: 3, since: at(3), sinceCommit: 'c3', trend: [1, 0, 1, 1, 1], commits: { lastPassed: { commit: 'c2' }, firstFailed: { commit: 'c3' } } },
+      { status: 'new', runs: 1, since: at(9), sinceCommit: 'c9', trend: [0, 0, 0, 0, 1], commits: { lastPassed: { commit: 'c4' }, firstFailed: { commit: 'c9' } } },
     ]);
   });
 
@@ -550,7 +552,7 @@ describe('trackClusters', () => {
 
     trackClusters(clusters, [], historyOf({ a: ['A', null, 'skip', 'fail', 'A'], b: ['A', null, null, null, 'pass'] }), current);
 
-    expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 3, since: at(1), sinceCommit: 'c1', trend: [2, 0, 0, 0, 1, 1] });
+    expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 3, since: at(1), sinceCommit: 'c1', trend: [2, 0, 0, 0, 1, 1], commits: { firstFailed: { commit: 'c1' } } });
   });
 
   it('leaves tracking unset when history cannot tell: no runs, or failures saved without cluster ids', () => {
@@ -569,7 +571,9 @@ describe('trackClusters', () => {
 
     trackClusters(clusters, [], historyOf({ a: ['pass', 'pass'] }), current);
 
-    expect(clusters[0].tracking).toEqual({ status: 'new', runs: 1, since: at(9), sinceCommit: 'c9', trend: [0, 0, 1] });
+    expect(clusters[0].tracking).toEqual({
+      status: 'new', runs: 1, since: at(9), sinceCommit: 'c9', trend: [0, 0, 1], commits: { lastPassed: { commit: 'c2' }, firstFailed: { commit: 'c9' } },
+    });
   });
 
   it('leaves out an earlier attempt of this run, which this run replaces', () => {
@@ -577,7 +581,7 @@ describe('trackClusters', () => {
 
     trackClusters(clusters, [], historyOf({ a: ['A', 'pass'] }), { runId: 'run-2', timestamp: at(2) });
 
-    expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 2, since: at(1), sinceCommit: 'c1', trend: [1, 1] });
+    expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 2, since: at(1), sinceCommit: 'c1', trend: [1, 1], commits: { firstFailed: { commit: 'c1' } } });
   });
 
   it('returns the clusters of the baseline run that went away, with their tests that passed this run', () => {

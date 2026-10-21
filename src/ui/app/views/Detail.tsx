@@ -15,7 +15,7 @@ import {
   statusLabel,
   type TestStatus,
 } from '../../components';
-import { displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
+import { commitsLabel, displayStatus, fileHref, formatDate, formatDuration, isFailing, location, plural, titlePath, type ReportTest } from '../data';
 import { failingStepIndex, failureSummary, parseExpectation, parseSnippet, requestFailed, timelineOf } from '../detail-model';
 import { MIN_SAMPLE_RUNS } from '../../../utils/stats';
 import { data, multiProject, navigate, route, sectionState, setSection, showToast } from '../store';
@@ -24,6 +24,7 @@ import { Lightbox, type MediaItem } from './Lightbox';
 import { Violations } from './Accessibility';
 import { Markdown } from './Markdown';
 import { CausalTimeline } from './Timeline';
+import type { CommitRange } from '../../../types';
 
 const SIGNAL_LABEL: Record<string, string> = {
   'new-failure': 'New failure',
@@ -41,6 +42,15 @@ function S({ title, meta, children, defaultOpen = true }: { title: string; meta?
     <Section title={title} meta={meta} open={open} onToggle={(o) => o !== open && setSection(title, o)}>
       {children}
     </Section>
+  );
+}
+
+function Commits({ c }: { c: CommitRange }) {
+  const { text, title } = commitsLabel(c);
+  return (
+    <a class="mono" href={c.url} title={title} target="_blank" rel="noreferrer">
+      {text}
+    </a>
   );
 }
 
@@ -362,6 +372,7 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
           {t.signals.map((s) => (
             <span class="signal">{SIGNAL_LABEL[s] ?? s}</span>
           ))}
+          {t.commits && <Commits c={t.commits} />}
           {(t.tags ?? []).map((tag) => (
             <button type="button" class="detail__chip" onClick={() => addFilter('tag', tag)} aria-label={`Filter by ${tag}`}>
               <FilterToken name="tag" value={tag} />
@@ -399,6 +410,15 @@ export function Detail({ t, onBack, onStep }: { t: ReportTest; onBack?: () => vo
       {snippet && (
         <S title="Source" meta={<span class="mono">{t.errorLocation ? `${t.errorLocation.file}:${t.errorLocation.line}` : location(t)}</span>}>
           <CodeFrame lines={snippet.lines} highlight={snippet.highlight} column={snippet.column} file={t.errorLocation?.file} />
+        </S>
+      )}
+      {t.commits?.suspects && (
+        <S title="Suspects" meta="files changed since the last pass">
+          <ul class="lines">
+            {t.commits.suspects.map((f) => (
+              <li class="lines__item mono">{f}</li>
+            ))}
+          </ul>
         </S>
       )}
       {timeline && (

@@ -1,4 +1,5 @@
 import type { JsonExportData } from '../generators/json-exporter';
+import type { CommitRange } from '../types';
 import { isWarning, ruleLabel } from '../gates/quality-gate-reporter';
 import { formatDuration } from '../utils/formatters';
 import { formatPassRate } from '../utils/run-stats';
@@ -6,6 +7,7 @@ import { failureLocation, isFailure, testLabel } from './annotations';
 
 const LIST_LIMIT = 10;
 const SLOWEST_LIMIT = 5;
+const SUSPECT_LIMIT = 5;
 
 // Code spans stop @mentions, #refs and HTML in test titles from rendering; pipes still need escaping inside tables.
 function code(text: string): string {
@@ -18,6 +20,15 @@ function code(text: string): string {
 
 function table(header: string[], rows: string[][]): string[] {
   return [`| ${header.join(' | ')} |`, `|${header.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${r.join(' | ')} |`)];
+}
+
+// Where a new failure started, and the files changed since it last passed
+function commitsLine(c: CommitRange): string {
+  const at = `${c.lastPassed ? `Last passed at ${code(c.lastPassed.commit)}, first` : 'First'} failed at ${code(c.firstFailed.commit)}`;
+  const link = c.url ? ` ([${c.lastPassed ? 'compare' : 'commit'}](${c.url}))` : '';
+  const files = c.suspects ?? [];
+  const extra = files.length > SUSPECT_LIMIT ? `, and ${files.length - SUSPECT_LIMIT} more` : '';
+  return `<br>${at}${link}${files.length ? `<br>Changed: ${files.slice(0, SUSPECT_LIMIT).map(code).join(', ')}${extra}` : ''}`;
 }
 
 function more(total: number): string[] {
@@ -82,7 +93,7 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
     out.push(...table(['Test', 'Location'], ordered.slice(0, LIST_LIMIT).map((t) => {
       const loc = failureLocation(t, data.metadata.rootDir, opts.workspace);
       const mark = newIds.has(t.testId) ? '**New** ' : absentIds.has(t.testId) ? '**Not in baseline** ' : '';
-      const label = `${mark}${code(testLabel(t))}`;
+      const label = `${mark}${code(testLabel(t))}${t.commits ? commitsLine(t.commits) : ''}`;
       return [label, code(loc.line !== undefined ? `${loc.file}:${loc.line}` : loc.file)];
     })), ...more(ordered.length));
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportTest } from '../../report-data/schema';
-import { clusterLabel, csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, suiteHealth, titlePath, trendStats } from './data';
+import { clusterLabel, commitsLabel, csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, suiteHealth, titlePath, trendStats } from './data';
 import { formatQuery, matchesQuery, parseQuery } from './filters';
 import { groupTests } from './grouping';
 import { QUEUES } from './queues';
@@ -139,6 +139,23 @@ describe('cluster labels', () => {
     expect(clusterLabel({ status: 'regressed', runs: 1, since, trend: [1, 0, 1] })).toEqual({ text: 'Regressed' });
     expect(clusterLabel({ status: 'recurring', runs: 4, since, sinceCommit: 'a1b2c3d4', trend: [1, 1, 1, 1] })).toEqual({ text: 'Recurring, 4 runs', title: 'Since 12 Oct at a1b2c3d4' });
     expect(clusterLabel({ status: 'recurring', runs: 2, since, trend: [1, 1] })).toEqual({ text: 'Recurring, 2 runs', title: 'Since 12 Oct' });
+  });
+
+  it('adds the commit a cluster last passed at to its title', () => {
+    const since = '2026-10-12T12:00:00.000Z';
+    const commits = { lastPassed: { commit: '9f8e7d6c' }, firstFailed: { commit: 'a1b2c3d4' } };
+    expect(clusterLabel({ status: 'new', runs: 1, since, trend: [1], commits })).toEqual({ text: 'New', title: 'Last passed at 9f8e7d6c, first failed at a1b2c3d4' });
+    expect(clusterLabel({ status: 'regressed', runs: 1, since, trend: [1, 0, 1], commits })).toEqual({ text: 'Regressed', title: 'Last passed at 9f8e7d6c, first failed at a1b2c3d4' });
+    expect(clusterLabel({ status: 'recurring', runs: 4, since, sinceCommit: 'a1b2c3d4', trend: [1, 1, 1, 1], commits })).toEqual({
+      text: 'Recurring, 4 runs',
+      title: 'Since 12 Oct at a1b2c3d4, last passed at 9f8e7d6c',
+    });
+  });
+
+  it('shows where a failure started as a git range, or only its first failed commit when no run passed', () => {
+    const firstFailed = { commit: 'bbbbbbbb', sha: 'b'.repeat(40) };
+    expect(commitsLabel({ lastPassed: { commit: 'aaaaaaaa' }, firstFailed })).toEqual({ text: 'aaaaaaaa..bbbbbbbb', title: 'Last passed at aaaaaaaa, first failed at bbbbbbbb' });
+    expect(commitsLabel({ firstFailed })).toEqual({ text: 'bbbbbbbb', title: 'First failed at bbbbbbbb' });
   });
 });
 
