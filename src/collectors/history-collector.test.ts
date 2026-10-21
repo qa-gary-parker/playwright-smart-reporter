@@ -725,8 +725,23 @@ describe('HistoryCollector', () => {
         expect(log.mock.calls).toEqual([["Smart Reporter: baseline.branch is 'target', but this run has no target branch, so it is compared with the previous run."]]);
       });
 
-      it('returns null when no run in history is on the branch', () => {
+      it('returns null, and says so, when no run in history is on the branch', () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         expect(load({ baseline: { branch: 'release' } }).getBaselineRun()).toBeNull();
+        expect(log.mock.calls).toEqual([["Smart Reporter: history has no run on the baseline branch 'release', so this run has no comparison."]]);
+      });
+
+      it('matches a Jenkins freestyle branch, which GIT_BRANCH records with its remote as origin/main', () => {
+        saveHistory({
+          runs: [],
+          tests: {},
+          summaries: [
+            { ...summary('run-jenkins-main', '2024-01-01T10:00:00Z'), ciInfo: { provider: 'jenkins', branch: 'origin/main' } },
+            { ...summary('run-jenkins-pr', '2024-01-02T10:00:00Z'), ciInfo: { provider: 'jenkins', branch: 'PR-5' } },
+          ],
+        });
+        const baseline = (branch: string) => load({ baseline: { branch } }).getBaselineRun()?.runId;
+        expect([baseline('main'), baseline('origin/main')]).toEqual(['run-jenkins-main', 'run-jenkins-main']);
       });
 
       it('with filterHistory, gives flakiness and performance only the entries of runs on the branch', () => {

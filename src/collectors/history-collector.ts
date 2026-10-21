@@ -92,7 +92,7 @@ export class HistoryCollector {
     this.setRunStart(Date.now());
 
     const branch = options.baseline?.branch;
-    this.baselineBranch = branch === 'target' ? detectCIInfo()?.targetBranch : branch;
+    this.baselineBranch = withoutRemote(branch === 'target' ? detectCIInfo()?.targetBranch : branch);
     if (branch === 'target' && !this.baselineBranch) {
       console.log("Smart Reporter: baseline.branch is 'target', but this run has no target branch, so it is compared with the previous run.");
     }
@@ -284,7 +284,7 @@ export class HistoryCollector {
   }
 
   private baselineBranchRuns(): RunSummary[] {
-    return (this.history.summaries ?? []).filter(s => s.ciInfo?.branch === this.baselineBranch);
+    return (this.history.summaries ?? []).filter(s => withoutRemote(s.ciInfo?.branch) === this.baselineBranch);
   }
 
   /**
@@ -325,8 +325,16 @@ export class HistoryCollector {
 
     // Otherwise, the latest run on the baseline branch, or the previous run
     const runs = this.baselineBranch ? this.baselineBranchRuns() : this.history.summaries;
+    if (this.baselineBranch && runs.length === 0) {
+      console.log(`Smart Reporter: history has no run on the baseline branch '${this.baselineBranch}', so this run has no comparison.`);
+    }
     return runs.length > 0 ? runs[runs.length - 1] : null;
   }
+}
+
+// Jenkins freestyle jobs record GIT_BRANCH with the remote, as origin/main
+function withoutRemote(branch: string | undefined): string | undefined {
+  return branch?.replace(/^origin\//, '');
 }
 
 // Moves history saved under a test's old id (current id -> old id) to its current one. Every test

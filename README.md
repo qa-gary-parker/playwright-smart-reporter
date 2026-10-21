@@ -1348,10 +1348,10 @@ baseline: {
 },
 ```
 
-- The branch of a run is the `ciInfo.branch` that history recorded for it. Runs without a branch, such as local runs and runs saved before 4.0.0, never match.
+- The branch of a run is the `ciInfo.branch` that history recorded for it. Runs without a branch, such as local runs and runs saved before 4.0.0, never match. A leading `origin/`, which Jenkins freestyle jobs record in `GIT_BRANCH`, is ignored, so `origin/main` matches `main`.
 - `'target'` takes the target branch from CI: GitHub Actions, GitLab, Jenkins, Azure DevOps and Buildkite. A run without a target branch, such as a push to `main`, is compared with the previous run, and the reporter prints a note.
 - `baselineRunId` takes precedence over `baseline.branch`.
-- When no run in history is on the branch, the run has no comparison.
+- When no run in history is on the branch, the run has no comparison, and the reporter prints a note.
 - The Compare tab, the job summary and the pull request comment name the branch and commit of the baseline run.
 
 History keeps the last `maxHistoryRuns` runs, so pull request runs can push the target branch's runs out. Restore the target branch's history in pull request builds, and save history only from branch builds. On GitHub Actions:
