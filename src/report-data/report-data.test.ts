@@ -34,19 +34,20 @@ describe('buildReportData', () => {
     // The skipped test is left out of the pass rate: 3 of 4.
     expect(data.summary).toMatchObject({ total: 5, passed: 3, failed: 1, skipped: 1, flaky: 1, passRate: 75, duration: 5_000 });
     expect(data.meta.duration).toBe(5_000);
-    expect(data.schemaVersion).toBe(3);
+    expect(data.schemaVersion).toBe(4);
   });
 
   it('derives signals, cluster ids, and comparison ids', () => {
     const regressed = result({ testId: 'r1', performanceTrend: '↑ 40% slower', performanceMetrics: { averageDuration: 100, currentDuration: 140, percentChange: 40, absoluteChange: 40, threshold: 0.2, isRegression: true, isImprovement: false, severity: 'medium' } });
+    const notRunInBaseline = result({ testId: 'n1' });
     const data = buildReportData(
-      input([FAILED, FLAKY, regressed], {
+      input([FAILED, FLAKY, regressed, notRunInBaseline], {
         failureClusters: [{ id: 'c1', errorType: 'Timeout', count: 1, tests: [FAILED] }],
         quarantinedTestIds: new Set(['k1']),
         comparison: {
           baselineRun: { runId: 'b', timestamp: '', total: 3, passed: 3, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 1, passRate: 100 },
           currentRun: { runId: 'c', timestamp: '', total: 3, passed: 2, failed: 1, skipped: 0, flaky: 1, slow: 1, duration: 1, passRate: 66 },
-          changes: { newFailures: [FAILED], fixedTests: [], newTests: [], regressions: [regressed], improvements: [] },
+          changes: { newFailures: [FAILED], fixedTests: [], newTests: [], regressions: [regressed], improvements: [], notInBaseline: [notRunInBaseline] },
         },
       }),
       2_000,
@@ -56,8 +57,9 @@ describe('buildReportData', () => {
     expect(byId.f1.clusterId).toBe('c1');
     expect(byId.k1.signals).toEqual(['flaky', 'quarantined']);
     expect(byId.r1.signals).toEqual(['regression', 'slow']);
+    expect(byId.n1.signals).toEqual([]);
     expect(data.clusters).toEqual([{ id: 'c1', errorType: 'Timeout', testIds: ['f1'], aiSuggestion: undefined }]);
-    expect(data.comparison?.changes).toEqual({ newFailures: ['f1'], fixedTests: [], newTests: [], regressions: ['r1'], improvements: [] });
+    expect(data.comparison?.changes).toEqual({ newFailures: ['f1'], fixedTests: [], newTests: [], regressions: ['r1'], improvements: [], notInBaseline: ['n1'] });
     expect(data.config.features.comparison).toBe(true);
   });
 

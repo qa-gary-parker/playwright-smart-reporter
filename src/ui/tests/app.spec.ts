@@ -315,3 +315,17 @@ test('attachment links survive a # or % in the file name', async ({ page }) => {
   const download = page.getByRole('article', { name: 'Test detail' }).getByRole('link', { name: 'Download' });
   expect(await download.getAttribute('href')).toBe('./traces/pays%20%231%20at%20100%25-trace-0.zip');
 });
+
+test('the Compare tab lists tests that did not run in the baseline run in their own group', async ({ page }) => {
+  await page.goto(url('mode=light', '#/history/compare'));
+  const tree = page.getByRole('tree', { name: 'Changes since the baseline run' });
+  await expect(tree.getByRole('treeitem', { level: 1 })).toHaveText([
+    /^New failures\s*0$/,
+    /^Performance regressions\s*3$/,
+    /^Fixed\s*0$/,
+    /^Performance improvements\s*1$/,
+    /^New tests\s*0$/,
+    /^Not in baseline run\s*1$/,
+  ]);
+  await expect(tree.getByRole('treeitem', { level: 2 }).last()).toContainText('homepage loads and displays heading');
+});

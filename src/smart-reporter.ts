@@ -626,12 +626,13 @@ class SmartReporter implements Reporter {
         const baselineTests = new Map<string, TestResultData>();
         const history = this.historyCollector.getHistory();
 
-        // Reconstruct baseline test results: each test's last entry, or with baselineRunId its entry for that run
+        // Reconstruct baseline test results from each test's entry for the baseline run
         // (history saved before entries carried a run id cannot tell, so it keeps the last entry).
-        const pinned = !!options.baselineRunId && Object.values(history.tests).some(entries => entries.some(e => e.runId === baselineRun.runId));
+        const byRunId = Object.values(history.tests).some(entries => entries.some(e => e.runId === baselineRun.runId));
+        const resultsById = new Map(this.results.map(r => [r.testId, r]));
         for (const [testId, entries] of Object.entries(history.tests)) {
-          const entry = pinned ? entries.filter(e => e.runId === baselineRun.runId).pop() : entries[entries.length - 1];
-          const matchingTest = this.results.find(r => r.testId === testId);
+          const entry = byRunId ? entries.filter(e => e.runId === baselineRun.runId).pop() : entries[entries.length - 1];
+          const matchingTest = resultsById.get(testId);
 
           if (entry && matchingTest) {
             baselineTests.set(testId, {
@@ -650,6 +651,7 @@ class SmartReporter implements Reporter {
           baselineRun,
           baselineTests,
           this.options.thresholds?.performanceRegression ?? this.options.performanceThreshold ?? 0.2,
+          new Set(Object.keys(history.tests)),
         );
       }
     }

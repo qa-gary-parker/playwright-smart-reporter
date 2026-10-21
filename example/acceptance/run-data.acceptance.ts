@@ -175,6 +175,36 @@ describe('comparison', () => {
     expect(playwright(out)).toEqual({ total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0 });
     expect(reportData(out).comparison?.changes.fixedTests).toEqual([]);
   }, TIMEOUT);
+
+  // Run A has both tests, run B (the baseline) only the first block, as a --grep or --shard run would.
+  const both = ['--grep', 'first block|fails when asked', '--retries=0'];
+  const baselineOnly = ['--grep', 'first block', '--retries=0'];
+
+  it('compares against the baseline run only: a test that did not run in it is not fixed, it is not in the baseline', () => {
+    const out = path.join(tmp, 'partial-baseline-fixed');
+    const options = { exportJson: true };
+    runSuite(out, options, both, { ACCEPTANCE_FAIL: '1' });
+    runSuite(out, options, baselineOnly);
+    runSuite(out, options, both);
+
+    const { comparison } = reportData(out);
+    expect(comparison?.baselineRun.total).toBe(1);
+    expect(comparison?.changes).toMatchObject({ fixedTests: [], newFailures: [], newTests: [], notInBaseline: [id('fails when asked')] });
+    const json = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+    expect(json.comparison.changes.notInBaseline.map((t: { testId: string }) => t.testId)).toEqual([id('fails when asked')]);
+  }, TIMEOUT);
+
+  it('fails noNewFailures for a test that fails now and did not run in the baseline run', () => {
+    const out = path.join(tmp, 'partial-baseline-failed');
+    const options = { qualityGates: { noNewFailures: true } };
+    runSuite(out, options, both);
+    runSuite(out, options, baselineOnly);
+    runSuite(out, options, both, { ACCEPTANCE_FAIL: '1' });
+
+    const data = reportData(out);
+    expect(data.comparison?.changes).toMatchObject({ newFailures: [], notInBaseline: [id('fails when asked')] });
+    expect(data.gates?.rules).toEqual([{ rule: 'noNewFailures', passed: false, actual: '1', threshold: '≤ 0' }]);
+  }, TIMEOUT);
 });
 
 describe('interrupted and not-run tests', () => {

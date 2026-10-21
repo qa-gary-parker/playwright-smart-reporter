@@ -8,21 +8,23 @@ export function buildComparison(
   baselineSummary: RunSummary,
   baselineTests: Map<string, TestResultData>,
   threshold = 0.2,
+  testsWithHistory: Set<string> = new Set(),
 ): RunComparison {
   const changes: ComparisonChanges = {
     newFailures: [],
     fixedTests: [],
     newTests: [],
     regressions: [],
-    improvements: []
+    improvements: [],
+    notInBaseline: []
   };
 
   for (const test of currentTests) {
     const baselineTest = baselineTests.get(test.testId);
 
     if (!baselineTest) {
-      // New test
-      changes.newTests.push(test);
+      // A test with history that did not run in the baseline run is not new
+      (testsWithHistory.has(test.testId) ? changes.notInBaseline : changes.newTests).push(test);
       continue;
     }
 

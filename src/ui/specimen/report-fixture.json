@@ -1,5 +1,5 @@
 {
- "schemaVersion": 3,
+ "schemaVersion": 4,
  "meta": {
   "generatedAt": "2026-09-01T10:36:10.000Z",
   "reporterVersion": "3.0.0",
@@ -233,6 +233,9 @@
    ],
    "improvements": [
     "[Mobile Chrome] feature-demo.spec.ts::flaky network-dependent check"
+   ],
+   "notInBaseline": [
+    "[Desktop Chrome] feature-demo.spec.ts::homepage loads and displays heading"
    ]
   }
  },

@@ -61,6 +61,7 @@ function createComparison(overrides: Partial<RunComparison> = {}): RunComparison
       newTests: [],
       regressions: [],
       improvements: [],
+      notInBaseline: [],
     },
     ...overrides,
   };
@@ -425,6 +426,7 @@ describe('QualityGateEvaluator', () => {
           newTests: [],
           regressions: [],
           improvements: [],
+          notInBaseline: [],
         },
       });
       const result = evaluator.evaluate(
@@ -438,6 +440,32 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.actual).toBe('1');
       // Read as a value like the other rules: "1 ≤ 0" in the terminal, a 0 limit in the summary table.
       expect(rule?.threshold).toBe('≤ 0');
+    });
+
+    it('counts a failing test that did not run in the baseline run as a new failure', () => {
+      const comparison = createComparison({
+        changes: {
+          newFailures: [],
+          fixedTests: [],
+          newTests: [],
+          regressions: [],
+          improvements: [],
+          notInBaseline: [
+            createTestResult({ testId: 'failed', status: 'failed', outcome: 'unexpected' }),
+            createTestResult({ testId: 'passed', status: 'passed', outcome: 'expected' }),
+            createTestResult({ testId: 'expected-failure', status: 'failed', outcome: 'expected' }),
+          ],
+        },
+      });
+      const result = evaluator.evaluate({ noNewFailures: true }, [createTestResult()], comparison);
+      expect(result.rules).toEqual([{ rule: 'noNewFailures', passed: false, actual: '1', threshold: '≤ 0' }]);
+    });
+
+    it('reads a comparison saved before notInBaseline existed', () => {
+      const { notInBaseline: _, ...changes } = createComparison().changes;
+      const comparison = { ...createComparison(), changes } as unknown as RunComparison;
+      const result = evaluator.evaluate({ noNewFailures: true }, [createTestResult()], comparison);
+      expect(result.rules).toEqual([{ rule: 'noNewFailures', passed: true, actual: '0', threshold: '≤ 0' }]);
     });
 
     it('is skipped when no comparison data is provided', () => {

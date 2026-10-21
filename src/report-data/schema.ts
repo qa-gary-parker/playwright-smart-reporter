@@ -12,7 +12,7 @@ import type {
   ThemeConfig,
 } from '../types';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export type Signal = 'new-failure' | 'regression' | 'flaky' | 'quarantined' | 'slow' | 'fixed' | 'new';
 
@@ -44,7 +44,7 @@ export interface ReportSummary {
   grades: Record<'A' | 'B' | 'C' | 'D' | 'F', number>;
 }
 
-export type ComparisonKey = 'newFailures' | 'fixedTests' | 'newTests' | 'regressions' | 'improvements';
+export type ComparisonKey = 'newFailures' | 'fixedTests' | 'newTests' | 'regressions' | 'improvements' | 'notInBaseline';
 
 export interface ReportComparison {
   baselineRun: RunSummary;

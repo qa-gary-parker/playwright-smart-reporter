@@ -109,6 +109,7 @@ const COMPARE_GROUPS: Array<[ComparisonKey, string]> = [
   ['fixedTests', 'Fixed'],
   ['improvements', 'Performance improvements'],
   ['newTests', 'New tests'],
+  ['notInBaseline', 'Not in baseline run'],
 ];
 
 function Compare() {

@@ -194,7 +194,7 @@ Insights is the landing view and holds the run metrics:
 
 - **Trends:** bar charts of pass rate, duration, flaky tests, and slow tests per recorded run, including the current run, which is highlighted. A line shows the three-run average, and a dot marks a run more than two standard deviations from the mean. With `enableHistoryDrilldown: true`, click a bar to open that run read only.
 - **Reliability:** a heatmap of test against run, coloured by outcome. It lists up to 100 tests that did not pass in at least one recorded run, most unstable first.
-- **Compare:** pass rate, duration, test count, and flaky count against the baseline run, then new failures, performance regressions, fixed tests, performance improvements, and new tests. The baseline is the previous run, or `baselineRunId`.
+- **Compare:** pass rate, duration, test count, and flaky count against the baseline run, then new failures, performance regressions, fixed tests, performance improvements, new tests, and tests not in the baseline run. The baseline is the previous run, or `baselineRunId`. Each test is compared with its result in that run only. A test that ran in an earlier run but not in the baseline run (for example after a `--grep` or `--shard` run) is listed as not in the baseline run, not as fixed, new, or a new failure.
 
 ![Reliability heatmap](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-history-reliability-dark.png)
 *History, Reliability tab*
@@ -697,6 +697,8 @@ reporter: [
 ```
 
 The result shows in the top bar and in the Quality gate panel in Insights, and is logged at the end of the run. A breached gate fails the Playwright run (exit code `1`), even when every test passed.
+
+`noNewFailures` counts tests that failed now and passed in the baseline run. It also counts a failing test that did not run in the baseline run, so a run compared with a partial baseline does not pass by default.
 
 `minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
 
@@ -1253,7 +1255,7 @@ The reporter automatically detects GitHub Actions, GitLab CI, CircleCI, Jenkins,
 
 Show the run where reviewers already look:
 
-- **Job summary:** pass rate, quality gate result, failures (new failures first), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
+- **Job summary:** pass rate, quality gate result, failures (new failures first, and failures that did not run in the baseline run marked), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
 - **Annotations:** an error on the line of each failing assertion, not on the test declaration.
 - **Pull request comment:** the same summary as one comment. Each run updates that comment, so re-runs do not add more comments.
 
@@ -1358,7 +1360,7 @@ steps:
 
 ### Sharded Runs
 
-For consistent history across parallel shards, set `runId`:
+For consistent history across parallel shards, set `runId`. Without it, each shard saves its own run, so after the histories are merged the next run compares with one shard only, and the tests of the other shards show as not in the baseline run:
 
 ```typescript
 reporter: [

@@ -66,12 +66,17 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
   if (failures.length > 0) {
     // New failures (failed now, passed in the baseline run) are listed first and marked.
     const newIds = new Set((data.comparison?.changes.newFailures ?? []).map((t) => t.testId));
+    const absentIds = new Set((data.comparison?.changes.notInBaseline ?? []).map((t) => t.testId));
     const fresh = failures.filter((t) => newIds.has(t.testId));
+    const absent = failures.filter((t) => absentIds.has(t.testId)).length;
     const ordered = [...fresh, ...failures.filter((t) => !newIds.has(t.testId))];
-    out.push('', data.comparison ? `### Failures (${failures.length}, ${fresh.length} new)` : `### Failures (${failures.length})`, '');
+    out.push('', data.comparison
+      ? `### Failures (${failures.length}, ${fresh.length} new${absent ? `, ${absent} not in baseline` : ''})`
+      : `### Failures (${failures.length})`, '');
     out.push(...table(['Test', 'Location'], ordered.slice(0, LIST_LIMIT).map((t) => {
       const loc = failureLocation(t, data.metadata.rootDir, opts.workspace);
-      const label = newIds.has(t.testId) ? `**New** ${code(testLabel(t))}` : code(testLabel(t));
+      const mark = newIds.has(t.testId) ? '**New** ' : absentIds.has(t.testId) ? '**Not in baseline** ' : '';
+      const label = `${mark}${code(testLabel(t))}`;
       return [label, code(loc.line !== undefined ? `${loc.file}:${loc.line}` : loc.file)];
     })), ...more(ordered.length));
   }

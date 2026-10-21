@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import type { CoverageSummary } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade, type RunStats } from '../utils/run-stats';
+import { isFailedTest } from '../utils/flakiness';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 
@@ -166,7 +167,9 @@ export class QualityGateEvaluator {
       };
     }
 
-    const newFailureCount = comparison.changes.newFailures.length;
+    // A failing test that did not run in the baseline run may be new, so a partial baseline cannot pass it silently.
+    // JSON exported before 4.0.0 has no notInBaseline.
+    const newFailureCount = comparison.changes.newFailures.length + (comparison.changes.notInBaseline ?? []).filter(isFailedTest).length;
 
     return {
       rule: 'noNewFailures',

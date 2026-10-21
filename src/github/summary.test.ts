@@ -31,7 +31,7 @@ const data: JsonExportData = {
   comparison: {
     baselineRun: run,
     currentRun: run,
-    changes: { newFailures: [timedOut], fixedTests: [], newTests: [], regressions: [], improvements: [] },
+    changes: { newFailures: [timedOut], fixedTests: [], newTests: [], regressions: [], improvements: [], notInBaseline: [] },
   },
   qualityGates: {
     passed: false,
@@ -119,6 +119,19 @@ describe('renderSummary', () => {
 |---|---|
 | \`checkout @smoke [Desktop Chrome]\` | \`e2e/tests/cart.spec.ts:6\` |
 | \`totals \\| tax\` | \`e2e/tests/cart.spec.ts:27\` |
+`);
+  });
+
+  it('marks a failure that did not run in the baseline run and counts it in the heading', () => {
+    const checkout = { testId: 'a', title: 'checkout @smoke', file: 'cart.spec.ts', status: 'failed', duration: 4200, retry: 1, steps: [], history: [] } as TestResultData;
+    const comparison = { ...data.comparison!, changes: { ...data.comparison!.changes, notInBaseline: [checkout] } };
+    const out = renderSummary({ ...data, comparison }, { workspace: WORKSPACE });
+    expect(out).toContain(`### Failures (2, 1 new, 1 not in baseline)
+
+| Test | Location |
+|---|---|
+| **New** \`totals \\| tax\` | \`e2e/tests/cart.spec.ts:27\` |
+| **Not in baseline** \`checkout @smoke [Desktop Chrome]\` | \`e2e/tests/cart.spec.ts:6\` |
 `);
   });
 

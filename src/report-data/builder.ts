@@ -50,7 +50,7 @@ export interface ReportInput {
   coverage?: ReportCoverage;
 }
 
-const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements'];
+const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements', 'notInBaseline'];
 
 export function summarize(results: TestResultData[], duration: number): ReportSummary {
   // The per-test 'flaky' signal also reads history; the run's flaky count is passed on retry only.

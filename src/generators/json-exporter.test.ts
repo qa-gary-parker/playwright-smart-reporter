@@ -261,6 +261,7 @@ describe('json-exporter', () => {
           newTests: [],
           regressions: [],
           improvements: [],
+          notInBaseline: [],
         },
       };
 

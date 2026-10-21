@@ -435,6 +435,7 @@ export interface ComparisonChanges {
   newTests: TestResultData[];
   regressions: TestResultData[];  // Got slower
   improvements: TestResultData[]; // Got faster
+  notInBaseline: TestResultData[]; // Has history, but did not run in the baseline run
 }
 
 // NEW: AI Recommendations

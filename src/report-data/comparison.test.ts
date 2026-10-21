@@ -91,4 +91,18 @@ describe('buildComparison', () => {
     expect(comparison.changes.newTests).toHaveLength(1);
     expect(comparison.changes.newTests[0].testId).toBe('new-test');
   });
+
+  it('puts a test with history that did not run in the baseline run in notInBaseline, not in newTests', () => {
+    const currentTests = [
+      createMinimalTestResult({ testId: 'ran-before', status: 'passed' }),
+      createMinimalTestResult({ testId: 'never-ran', status: 'passed' }),
+    ];
+    const withHistory = new Set(['ran-before']);
+
+    const { changes } = buildComparison(currentTests, createRunSummary(), createRunSummary(), new Map(), 0.2, withHistory);
+
+    expect(changes.notInBaseline.map((t) => t.testId)).toEqual(['ran-before']);
+    expect(changes.newTests.map((t) => t.testId)).toEqual(['never-ran']);
+    expect(changes.fixedTests).toEqual([]);
+  });
 });
