@@ -945,6 +945,47 @@ reporter: [
 
 The report's export menu also downloads the current results as JSON or CSV, and opens a **Summary card** (`e`) that copies a Markdown summary of the run. When the run wrote them, the menu also links to the full JSON data, JUnit XML, CTRF JSON, and the failure bundle for agents.
 
+### Metrics Export (Prometheus and OpenTelemetry)
+
+`exportMetrics: true` writes the run's metrics next to the HTML report, so Grafana, Datadog and other tools can keep trends longer than the history window:
+
+- `<name>-metrics.prom`: Prometheus text format.
+- `<name>-metrics.otlp.json`: OTLP JSON (`ExportMetricsServiceRequest`).
+
+```typescript
+reporter: [
+  ['playwright-smart-reporter', {
+    exportMetrics: true,
+    // Also send one of the files after the run, to a Pushgateway:
+    // exportMetrics: { push: { url: 'http://pushgateway:9091/metrics/job/playwright' } },
+    // or to an OTLP/HTTP receiver:
+    // exportMetrics: { push: { url: 'https://otlp.example.com/v1/metrics', format: 'otlp', headers: { Authorization: 'Bearer <token>' } } },
+  }],
+]
+```
+
+| Metric | Labels | Value |
+|---|---|---|
+| `smart_reporter_tests` | `branch`, `project`, `suite` | Tests |
+| `smart_reporter_tests_passed` | `branch`, `project`, `suite` | Tests that passed, passed on a retry, or failed as `test.fail()` expected |
+| `smart_reporter_tests_failed` | `branch`, `project`, `suite` | Tests that failed, including a `test.fail()` test that passed |
+| `smart_reporter_tests_flaky` | `branch`, `project`, `suite` | Tests that passed on a retry |
+| `smart_reporter_tests_skipped` | `branch`, `project`, `suite` | Tests that did not run: skipped, never started, or interrupted |
+| `smart_reporter_pass_ratio` | `branch`, `project`, `suite` | Passed tests out of the tests that ran, 0 to 1 |
+| `smart_reporter_retry_waste_seconds` | `branch`, `project`, `suite` | Time in the attempts that Playwright retried |
+| `smart_reporter_run_duration_seconds` | `branch` | Duration of the run |
+| `smart_reporter_test_duration_seconds` | `branch`, `project`, `suite`, `test_id` | Duration of the last attempt of each test that ran |
+
+- Every metric is a gauge for this run. The counts and the pass ratio use the same rules as the report.
+- `suite` is the test file. `project` is the Playwright project name, and is left out for a project with no name. `branch` comes from [CI auto-detection](#ci-auto-detection), and is left out when no CI is detected.
+- A suite where no test ran has no `smart_reporter_pass_ratio` sample, so the value is never NaN. The pass ratio of the whole run is `sum(smart_reporter_tests_passed) / (sum(smart_reporter_tests) - sum(smart_reporter_tests_skipped))`.
+- `smart_reporter_test_duration_seconds` has one series for each test that ran.
+- `redact` does not change label values. They are test ids, file paths and project and branch names, which no report file redacts.
+
+`push` sends one `POST` after the run: the Prometheus file as `text/plain; version=0.0.4`, or with `format: 'otlp'` the OTLP file as `application/json`. `headers` are added to the request. The push stops after 10 seconds. A failed push is logged and does not change the result of the run.
+
+A Pushgateway `POST` replaces the metrics with the same names in the group of the URL. To keep runs apart, for example one per branch, add a grouping key to the URL: `/metrics/job/playwright/branch/main`.
+
 ### Custom Branding
 
 Customise the report title, logo, and footer:
@@ -1060,6 +1101,7 @@ reporter: [
     exportJunit: false,
     exportCtrf: false,          // <name>-ctrf.json
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
+    exportMetrics: false,       // true or { push: { url, format, headers } }: <name>-metrics.prom and .otlp.json (see Metrics Export)
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
     qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, rules }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }

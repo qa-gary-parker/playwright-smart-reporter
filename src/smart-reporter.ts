@@ -70,6 +70,7 @@ import { exportJsonData } from './generators/json-exporter';
 import { writeFailureBundle } from './agent/failure-bundle';
 import { exportJunitXml } from './generators/junit-exporter';
 import { exportCtrfReport } from './generators/ctrf-exporter';
+import { exportMetrics, pushMetrics } from './generators/metrics-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { firstFailureMessage } from './notifiers/notification-manager';
@@ -909,6 +910,18 @@ class SmartReporter implements Reporter {
         console.log(`   CTRF JSON: ${ctrfPath}`);
       } catch (err) {
         console.warn('⚠️  CTRF export failed:', err);
+      }
+    }
+
+    if (this.options.exportMetrics) {
+      try {
+        const now = Date.now();
+        const metrics = exportMetrics(this.results, { duration: now - this.startTime, branch: this.ciInfo?.branch, time: now }, exportDir, reportInput.outputBasename);
+        console.log(`   Metrics: ${metrics.files.join(', ')}`);
+        const push = typeof this.options.exportMetrics === 'object' ? this.options.exportMetrics.push : undefined;
+        if (push) await pushMetrics(push, metrics);
+      } catch (err) {
+        console.warn('⚠️  Metrics export failed:', err);
       }
     }
 

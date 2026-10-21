@@ -1,0 +1,45 @@
+# HELP smart_reporter_tests Tests in the run.
+# TYPE smart_reporter_tests gauge
+smart_reporter_tests{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 5
+smart_reporter_tests{branch="feature/cart",project="chromium",suite="search.spec.ts"} 1
+smart_reporter_tests{branch="feature/cart",suite="api/users.spec.ts"} 2
+# HELP smart_reporter_tests_passed Tests that passed, passed on a retry, or failed as test.fail() expected.
+# TYPE smart_reporter_tests_passed gauge
+smart_reporter_tests_passed{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 3
+smart_reporter_tests_passed{branch="feature/cart",project="chromium",suite="search.spec.ts"} 0
+smart_reporter_tests_passed{branch="feature/cart",suite="api/users.spec.ts"} 1
+# HELP smart_reporter_tests_failed Tests that failed, including a test.fail() test that passed.
+# TYPE smart_reporter_tests_failed gauge
+smart_reporter_tests_failed{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 1
+smart_reporter_tests_failed{branch="feature/cart",project="chromium",suite="search.spec.ts"} 0
+smart_reporter_tests_failed{branch="feature/cart",suite="api/users.spec.ts"} 1
+# HELP smart_reporter_tests_flaky Tests that passed on a retry.
+# TYPE smart_reporter_tests_flaky gauge
+smart_reporter_tests_flaky{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 1
+smart_reporter_tests_flaky{branch="feature/cart",project="chromium",suite="search.spec.ts"} 0
+smart_reporter_tests_flaky{branch="feature/cart",suite="api/users.spec.ts"} 0
+# HELP smart_reporter_tests_skipped Tests that did not run: skipped, never started, or interrupted.
+# TYPE smart_reporter_tests_skipped gauge
+smart_reporter_tests_skipped{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 1
+smart_reporter_tests_skipped{branch="feature/cart",project="chromium",suite="search.spec.ts"} 1
+smart_reporter_tests_skipped{branch="feature/cart",suite="api/users.spec.ts"} 0
+# HELP smart_reporter_pass_ratio Passed tests out of the tests that ran. No sample for a suite where no test ran.
+# TYPE smart_reporter_pass_ratio gauge
+smart_reporter_pass_ratio{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 0.75
+smart_reporter_pass_ratio{branch="feature/cart",suite="api/users.spec.ts"} 0.5
+# HELP smart_reporter_retry_waste_seconds Time in the attempts that Playwright retried.
+# TYPE smart_reporter_retry_waste_seconds gauge
+smart_reporter_retry_waste_seconds{branch="feature/cart",project="chromium",suite="cart.spec.ts"} 2.5
+smart_reporter_retry_waste_seconds{branch="feature/cart",project="chromium",suite="search.spec.ts"} 0
+smart_reporter_retry_waste_seconds{branch="feature/cart",suite="api/users.spec.ts"} 0
+# HELP smart_reporter_run_duration_seconds Duration of the run.
+# TYPE smart_reporter_run_duration_seconds gauge
+smart_reporter_run_duration_seconds{branch="feature/cart"} 65.432
+# HELP smart_reporter_test_duration_seconds Duration of the last attempt of each test that ran.
+# TYPE smart_reporter_test_duration_seconds gauge
+smart_reporter_test_duration_seconds{branch="feature/cart",project="chromium",suite="cart.spec.ts",test_id="[chromium] cart.spec.ts::adds item"} 1.2
+smart_reporter_test_duration_seconds{branch="feature/cart",project="chromium",suite="cart.spec.ts",test_id="[chromium] cart.spec.ts::login"} 0.3
+smart_reporter_test_duration_seconds{branch="feature/cart",project="chromium",suite="cart.spec.ts",test_id="[chromium] cart.spec.ts::known bug"} 0.007
+smart_reporter_test_duration_seconds{branch="feature/cart",project="chromium",suite="cart.spec.ts",test_id="[chromium] cart.spec.ts::checkout › says \"hi\" C:\\temp\nline 2"} 0.45
+smart_reporter_test_duration_seconds{branch="feature/cart",suite="api/users.spec.ts",test_id="api/users.spec.ts::lists users"} 0.08
+smart_reporter_test_duration_seconds{branch="feature/cart",suite="api/users.spec.ts",test_id="api/users.spec.ts::deletes user"} 0.095

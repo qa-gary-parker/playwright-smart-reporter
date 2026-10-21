@@ -196,6 +196,15 @@ export interface SmartReporterOptions {
   redact?: boolean | { patterns?: Array<string | RegExp> };
   // Phase 31: CI price per minute; with it, the efficiency panel prices the retry waste (default: off)
   ciCostPerMinute?: number;
+  // Phase 36: write <name>-metrics.prom (Prometheus text) and <name>-metrics.otlp.json (OTLP JSON) (default: false).
+  // push also sends one of them to an endpoint.
+  exportMetrics?: boolean | { push?: MetricsPushConfig };
+}
+
+export interface MetricsPushConfig {
+  url: string;                      // e.g. a Pushgateway's /metrics/job/<job>, or an OTLP/HTTP receiver's /v1/metrics
+  format?: 'prometheus' | 'otlp';   // Default: 'prometheus'
+  headers?: Record<string, string>; // e.g. Authorization
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';

@@ -1,5 +1,7 @@
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
+import { createServer, type Server } from 'http';
+import type { AddressInfo } from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -567,5 +569,98 @@ describe('JUnit export', () => {
     expect(xml).toContain('<testsuites name="Smart Reporter" tests="1" failures="0" errors="0" skipped="0" ');
     expect(xml.match(/<(failure|flakyFailure) [^>]*>/g)).toEqual(['<flakyFailure type="AssertionError" message="Error: expect(received).toBe(expected) // Object.is equality">']);
     expect(xml).toMatch(/<flakyFailure [^>]*><stackTrace>Error: expect\(received\)\.toBe\(expected\) \/\/ Object\.is equality\n\nExpected: 1\nReceived: 0\n {4}at [^<]*run-data\.fixtures\.ts:\d+:\d+<\/stackTrace><\/flakyFailure>\n/);
+  }, TIMEOUT);
+});
+
+describe('metrics export', () => {
+  interface PwSuite { title: string; suites?: PwSuite[]; specs?: Array<{ title: string; tests: Array<{ results: Array<{ status: string; duration: number }> }> }> }
+  // Each test's describe path and title, and its attempts, from Playwright's JSON reporter
+  const pwTests = (out: string) => {
+    const walk = (s: PwSuite, titles: string[]): Array<{ title: string; attempts: Array<{ status: string; duration: number }> }> => [
+      ...(s.specs ?? []).map((spec) => ({ title: [...titles, spec.title].join(' › '), attempts: spec.tests[0].results })),
+      ...(s.suites ?? []).flatMap((child) => walk(child, [...titles, child.title])),
+    ];
+    return (JSON.parse(fs.readFileSync(path.join(out, 'pw.json'), 'utf8')).suites as PwSuite[]).flatMap((s) => walk(s, []));
+  };
+  const seconds = (ms: number) => String(Math.round(ms) / 1000);
+
+  // A stub Pushgateway that records every request.
+  let server: Server;
+  let baseUrl: string;
+  const requests: Array<{ method?: string; url?: string; contentType?: string; body: string }> = [];
+
+  beforeAll(async () => {
+    server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        requests.push({ method: req.method, url: req.url, contentType: req.headers['content-type'], body });
+        res.writeHead(200);
+        res.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+
+  it('writes no metrics file by default', () => {
+    const out = path.join(tmp, 'metrics-off');
+    runSuite(out, {}, ['--grep', 'passes$']);
+
+    expect(fs.readdirSync(out).filter((f) => f.includes('metrics'))).toEqual([]);
+  }, TIMEOUT);
+
+  it('writes the counts, retry waste and test durations Playwright reports, and pushes the Prometheus file to the endpoint', async () => {
+    const out = path.join(tmp, 'metrics');
+    const options = { exportMetrics: { push: { url: `${baseUrl}/metrics/job/acceptance` } } };
+    // spawnSync would block this process, so the stub could not answer while the suite runs.
+    const run = spawn(process.execPath, [CLI, 'test', `--config=${CONFIG}`, '--grep', 'passes$|same title|expected failure that fails|passes on retry|skipped when asked'], {
+      cwd: ROOT,
+      env: {
+        ...process.env, ACCEPTANCE_OUT: out, ACCEPTANCE_OPTIONS: JSON.stringify(options), ACCEPTANCE_MATCH: FILE, ACCEPTANCE_SKIP: '1', ACCEPTANCE_PROJECTS: 'chromium',
+        GITHUB_ACTIONS: 'true', GITHUB_HEAD_REF: 'feature/metrics', GITHUB_EVENT_PATH: '',
+      },
+      stdio: 'ignore',
+    });
+    const status = await new Promise((resolve, reject) => {
+      run.on('error', reject);
+      run.on('close', resolve);
+    });
+
+    expect(status).toBe(1);
+    const prom = fs.readFileSync(path.join(out, 'smart-report-metrics.prom'), 'utf8');
+    expect(requests).toEqual([{ method: 'POST', url: '/metrics/job/acceptance', contentType: 'text/plain; version=0.0.4', body: prom }]);
+
+    const pw = playwright(out);
+    const tests = pwTests(out);
+    const retryWaste = tests.flatMap((t) => t.attempts.slice(0, -1)).reduce((sum, a) => sum + a.duration, 0);
+    expect(pw).toEqual({ total: 7, passed: 4, failed: 2, skipped: 1, flaky: 1 });
+    expect(retryWaste).toBeGreaterThan(0);
+
+    const at = 'branch="feature/metrics",project="chromium",suite="run-data.fixtures.ts"';
+    const series = Object.fromEntries(prom.split('\n').filter((l) => l && !l.startsWith('#')).map((l) => [l.slice(0, l.lastIndexOf(' ')), l.slice(l.lastIndexOf(' ') + 1)]));
+    const runDuration = 'smart_reporter_run_duration_seconds{branch="feature/metrics"}';
+    const { [runDuration]: duration, ...rest } = series;
+    expect(rest).toEqual({
+      [`smart_reporter_tests{${at}}`]: String(pw.total),
+      [`smart_reporter_tests_passed{${at}}`]: String(pw.passed),
+      [`smart_reporter_tests_failed{${at}}`]: String(pw.failed),
+      [`smart_reporter_tests_flaky{${at}}`]: String(pw.flaky),
+      [`smart_reporter_tests_skipped{${at}}`]: String(pw.skipped),
+      [`smart_reporter_pass_ratio{${at}}`]: String(pw.passed / (pw.total - pw.skipped)),
+      [`smart_reporter_retry_waste_seconds{${at}}`]: seconds(retryWaste),
+      ...Object.fromEntries(tests.filter((t) => t.attempts.at(-1)!.status !== 'skipped').map((t) => [
+        `smart_reporter_test_duration_seconds{${at},test_id="[chromium] ${FILE}::${t.title}"}`, seconds(t.attempts.at(-1)!.duration),
+      ])),
+    });
+    // The run clock: Playwright's run duration, plus the reporter's time in onEnd before the export
+    const pwDuration = JSON.parse(fs.readFileSync(path.join(out, 'pw.json'), 'utf8')).stats.duration;
+    expect(Number(duration)).toBeGreaterThanOrEqual(Math.round(pwDuration) / 1000);
+    expect(Number(duration)).toBeLessThan(Math.round(pwDuration) / 1000 + 5);
   }, TIMEOUT);
 });
