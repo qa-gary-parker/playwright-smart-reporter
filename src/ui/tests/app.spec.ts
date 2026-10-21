@@ -21,9 +21,9 @@ test('j and k move the selection through the list and the hash follows', async (
   const selected = tree.getByRole('treeitem', { selected: true });
   await expect(selected).toContainText('pays with a saved card');
   await page.keyboard.press('j');
-  await expect(selected).toContainText('incorrect text content causes failure');
+  await expect(selected).toContainText('navigation links are present');
   const hashQuery = new URLSearchParams(new URL(page.url()).hash.split('?')[1]);
-  expect(hashQuery.get('test')).toBe('[Desktop Chrome] feature-demo.spec.ts::incorrect text content causes failure');
+  expect(hashQuery.get('test')).toBe('[Mobile Chrome] feature-demo.spec.ts::navigation links are present');
   await page.keyboard.press('k');
   await expect(selected).toContainText('pays with a saved card');
 });
@@ -232,11 +232,11 @@ test('Most flaky lists the tests history classifies as flaky or unstable, with t
 test('Failure clusters labels each cluster from history with its trend, and Resolved clusters lists the tests that recovered', async ({ page }) => {
   await page.goto(url('screen=insights&mode=light'));
   const clusters = page.locator('.panel', { has: page.getByRole('heading', { name: 'Failure clusters' }) });
-  await expect(clusters.locator('.signal')).toHaveText(['Recurring, 4 runs', 'New']);
+  await expect(clusters.locator('.signal')).toHaveText([...Array(6).fill('Recurring, 4 runs'), 'New']);
   await expect(clusters.locator('.signal').first()).toHaveAttribute('title', 'Since 6 Aug at a1b2c3d4');
   expect(await clusters.locator('.spark').evaluateAll((sparks) => sparks.map((s) => s.getAttribute('aria-label')))).toEqual([
-    'Tests in this cluster per run: 0, 0, 0, 0, 0, 0, 8, 9, 10, 11',
-    'Tests in this cluster per run: 0, 0, 0, 0, 0, 0, 0, 0, 0, 3',
+    ...[2, 2, 2, 3, 2, 2].map((n) => `Tests in this cluster per run: 0, 0, 0, 0, 0, 0, ${n}, ${n}, ${n}, ${n}`),
+    'Tests in this cluster per run: 0, 0, 0, 0, 0, 0, 0, 0, 0, 1',
   ]);
   const resolved = page.locator('.panel', { has: page.getByRole('heading', { name: 'Resolved clusters' }) });
   await expect(resolved.locator('.lines__label')).toHaveText(['homepage loads and displays heading', 'homepage loads successfully']);

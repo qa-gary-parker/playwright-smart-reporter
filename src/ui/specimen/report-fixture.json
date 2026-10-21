@@ -35,10 +35,10 @@
   "passed": 37,
   "failed": 13,
   "skipped": 6,
-  "flaky": 5,
+  "flaky": 3,
   "slow": 3,
   "newTests": 0,
-  "passRate": 66,
+  "passRate": 74,
   "duration": 98583,
   "grades": {
    "A": 39,
@@ -50,28 +50,52 @@
  },
  "clusters": [
   {
-   "id": "47536c14",
-   "errorType": "Assertion: toBeVisible",
+   "id": "33cc5939b21a58ac",
+   "errorType": "toBeVisible on locator('h2') at parallel/test2.spec.ts:5",
    "testIds": [
     "[Desktop Chrome] parallel/test2.spec.ts::h2 should be visible",
-    "[Mobile Chrome] parallel/test2.spec.ts::h2 should be visible",
+    "[Mobile Chrome] parallel/test2.spec.ts::h2 should be visible"
+   ]
+  },
+  {
+   "id": "b402675365d7df5f",
+   "errorType": "toBeVisible on locator('#login-button-that-does-not-exist') at demo.spec.ts:17",
+   "testIds": [
     "[Mobile Chrome] demo.spec.ts::broken login - element not found",
-    "[Desktop Chrome] demo.spec.ts::broken login - element not found",
+    "[Desktop Chrome] demo.spec.ts::broken login - element not found"
+   ]
+  },
+  {
+   "id": "5ae14a6e388dc6e6",
+   "errorType": "toBeVisible on locator('#nonexistent-element') at feature-demo.spec.ts:25",
+   "testIds": [
     "[Desktop Chrome] feature-demo.spec.ts::missing element causes failure",
+    "[Mobile Chrome] feature-demo.spec.ts::missing element causes failure"
+   ]
+  },
+  {
+   "id": "04a9fd7e7d51eebd",
+   "errorType": "toBeVisible on getByRole('link', { name: 'Docs' }) at feature-demo.spec.ts:18",
+   "testIds": [
     "[Mobile Chrome] feature-demo.spec.ts::navigation links are present",
-    "[Mobile Chrome] demo.spec.ts::regression test for bug #123",
-    "[Mobile Chrome] feature-demo.spec.ts::missing element causes failure",
-    "[Mobile Chrome] demo.spec.ts::documentation link works",
     "[Mobile Chrome] feature-demo.spec.ts::@regression docs link navigates correctly",
     "[Mobile Chrome] feature-demo.spec.ts::multi-step user journey"
    ]
   },
   {
-   "id": "14211d8",
-   "errorType": "Assertion: toHaveText",
+   "id": "a79ed46dec376303",
+   "errorType": "toHaveText on locator('h1') at feature-demo.spec.ts:30",
    "testIds": [
     "[Desktop Chrome] feature-demo.spec.ts::incorrect text content causes failure",
     "[Mobile Chrome] feature-demo.spec.ts::incorrect text content causes failure"
+   ]
+  },
+  {
+   "id": "54c63b849a6dffe5",
+   "errorType": "toBeVisible on getByRole('link', { name: 'Docs' }) at demo.spec.ts:72",
+   "testIds": [
+    "[Mobile Chrome] demo.spec.ts::regression test for bug #123",
+    "[Mobile Chrome] demo.spec.ts::documentation link works"
    ]
   }
  ],
@@ -2046,7 +2070,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "33cc5939b21a58ac",
    "signals": []
   },
   {
@@ -2753,7 +2777,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "33cc5939b21a58ac",
    "signals": []
   },
   {
@@ -3252,7 +3276,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "b402675365d7df5f",
    "signals": []
   },
   {
@@ -3751,7 +3775,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "b402675365d7df5f",
    "signals": []
   },
   {
@@ -4250,7 +4274,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "5ae14a6e388dc6e6",
    "signals": []
   },
   {
@@ -4749,7 +4773,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "04a9fd7e7d51eebd",
    "signals": []
   },
   {
@@ -5253,7 +5277,7 @@
      ]
     }
    ],
-   "clusterId": "14211d8",
+   "clusterId": "a79ed46dec376303",
    "signals": []
   },
   {
@@ -8544,7 +8568,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "54c63b849a6dffe5",
    "signals": []
   },
   {
@@ -9307,7 +9331,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "5ae14a6e388dc6e6",
    "signals": []
   },
   {
@@ -11967,7 +11991,7 @@
      ]
     }
    ],
-   "clusterId": "14211d8",
+   "clusterId": "a79ed46dec376303",
    "signals": []
   },
   {
@@ -13135,7 +13159,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "54c63b849a6dffe5",
    "signals": []
   },
   {
@@ -13847,7 +13871,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "04a9fd7e7d51eebd",
    "signals": []
   },
   {
@@ -15724,7 +15748,7 @@
      ]
     }
    ],
-   "clusterId": "47536c14",
+   "clusterId": "04a9fd7e7d51eebd",
    "signals": []
   },
   {

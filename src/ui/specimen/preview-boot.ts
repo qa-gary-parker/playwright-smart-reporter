@@ -1,14 +1,14 @@
 import type { ReportData } from '../../report-data/schema';
 import fixture from './report-fixture.json';
 import { summarizeA11y } from '../../analyzers/a11y-analyzer';
-import { SYNTHETIC, SYNTHETIC_COVERAGE } from './synthetic';
+import { SYNTHETIC, SYNTHETIC_CLUSTER, SYNTHETIC_COVERAGE } from './synthetic';
 
 const params = new URLSearchParams(location.search);
 const screen = params.get('screen') ?? 'failures';
 const data = JSON.parse(JSON.stringify(fixture)) as ReportData;
-const textCluster = data.clusters.find((c) => /toHaveText/.test(c.errorType));
-data.tests = [{ ...SYNTHETIC, clusterId: textCluster?.id }, ...data.tests];
-if (textCluster) textCluster.testIds = [SYNTHETIC.testId, ...textCluster.testIds];
+const syntheticCluster = { ...SYNTHETIC_CLUSTER, testIds: [...SYNTHETIC_CLUSTER.testIds] };
+data.tests = [{ ...SYNTHETIC, clusterId: syntheticCluster.id }, ...data.tests];
+data.clusters = [...data.clusters, syntheticCluster];
 data.a11y = summarizeA11y(data.tests);
 data.coverage = SYNTHETIC_COVERAGE;
 
@@ -23,14 +23,14 @@ if (screen === 'green') {
   }
   data.clusters = [];
 } else {
-  // Cluster tracking as history gives it: the text cluster is new, the other failed in the last 4 runs,
+  // Cluster tracking as history gives it: the synthetic cluster is new, the others failed in the last 4 runs,
   // and a cluster of the baseline run went away.
   const runs = data.trends;
   for (const c of data.clusters) {
     const n = c.testIds.length;
-    c.tracking = c === textCluster
+    c.tracking = c === syntheticCluster
       ? { status: 'new', runs: 1, since: runs[runs.length - 1].timestamp, trend: runs.map((_, i) => (i === runs.length - 1 ? n : 0)) }
-      : { status: 'recurring', runs: 4, since: runs[runs.length - 4].timestamp, sinceCommit: 'a1b2c3d4', trend: runs.map((_, i) => (i < runs.length - 4 ? 0 : n - (runs.length - 1 - i))) };
+      : { status: 'recurring', runs: 4, since: runs[runs.length - 4].timestamp, sinceCommit: 'a1b2c3d4', trend: runs.map((_, i) => (i < runs.length - 4 ? 0 : n)) };
   }
   const recovered = data.tests.filter((t) => t.status === 'passed' && t.outcome === 'expected').slice(0, 2);
   data.resolvedClusters = [{ id: 'c0ffee0123456789', testIds: recovered.map((t) => t.testId) }];
