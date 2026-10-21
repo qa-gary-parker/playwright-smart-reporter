@@ -15,6 +15,16 @@
 - All breaking changes ship together now as 4.0.0. They are: AI opt-in (#56), skipped tests left out of the pass rate (#48), qualified JUnit names (#55), and a baseline taken from one run (#50).
 - Scope is every bug plus every part of an enhancement that fits.
 
+**Delivered 2026-10-21 (branch `v4`):**
+- All 37 phases are done, one commit or more per phase. Phase 14 is folded into Phase 19.
+- The Python bridge fix is in the same PR. The `app.js` size budget is 136 KB (was 128 KB).
+- No `clusterKey` hook is built. The fingerprint is fixed, so 4.0.0 adds no extension API.
+- Two breaking changes are outside Release A: an unknown `qualityGates` key stops the run (Phase 25), and the quarantine file is cleared when nothing qualifies (Phase 35).
+- `noNewFailures` and `noNewFlaky` also count a failing or flaky test with no history, and tests not in the baseline run.
+- `noNewClusters` is skipped with "no history" when the window has no runs, and with "no cluster history" when it has failures but no cluster ids. Otherwise it evaluates, so after green runs any cluster is New.
+- Cluster ids are 16-hex SHA-256 prefixes without the line number. Earlier-attempt evidence is kept for flaky tests only.
+- Phase 21 shows the baseline run's branch and commit whenever they are recorded. Phase 37 uses REST through `gh api`, not `gh issue create`, because a GraphQL 403 cannot be detected.
+
 ---
 
 ## Baseline (2026-10-16, master @ 6f809cb, v3.0.0)
@@ -456,7 +466,7 @@ Pruning orphan `history-runs/` snapshots stays in scope and moves to Phase 19.
   - Mask digits, UUIDs, hex ids, quoted values and URLs.
   - Generate a readable label.
   - Ids use a stronger hash, because they will be stored.
-  - Add an optional `clusterKey` hook. It is new; check it against the deferred extensibility non-goal and record the decision.
+  - Add an optional `clusterKey` hook. It is new; check it against the deferred extensibility non-goal and record the decision. Decision: not built (see TLDR).
 - **Acceptance evidence:**
   - Two timeouts on different locators give 2 clusters.
   - The same assertion with different numbers gives 1 cluster.
@@ -615,7 +625,7 @@ Pruning orphan `history-runs/` snapshots stays in scope and moves to Phase 19.
 - Phases 3, 4, 8 and 13 change numbers users already watch. Each CHANGELOG entry states the old value and the new value for an example run.
 - `test:ui` screenshot baselines: Phases 3, 13, 16, 22, 23 and 31–35 touch the UI. Regenerate baselines only in Docker. List every intended baseline change in the PR.
 - Python parity drift: no automated test exists. Each phase that adds an option updates `converter.py` and its tests by hand.
-- Scope creep into the deferred extensibility API: the `clusterKey` hook (Phase 22) is the only new hook. Any other hook needs a decision.
+- Scope creep into the deferred extensibility API: the `clusterKey` hook (Phase 22) was the only proposed hook, and it was not built. Any hook needs a decision.
 
 ## Corrections for the issue thread (for Gary to post; not posted)
 - **#47:** the suggested float compare fails at exact boundaries. The fix uses integer cross-multiplication.
