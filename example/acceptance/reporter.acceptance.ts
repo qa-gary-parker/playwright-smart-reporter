@@ -348,10 +348,8 @@ describe('failure clustering', () => {
     const third = run('notes', 'c');
     const [notes, title] = first.data.clusters.map((c) => c.id);
 
-    expect(first.data.clusters.map((c) => [c.testIds, c.tracking])).toEqual([
-      [[notesTest], { status: 'new', runs: 1, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1] }],
-      [[titleTest], { status: 'new', runs: 1, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1] }],
-    ]);
+    // The first run has no history to compare with
+    expect(first.data.clusters.map((c) => [c.testIds, c.tracking])).toEqual([[[notesTest], undefined], [[titleTest], undefined]]);
     expect(second.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[title, { status: 'recurring', runs: 2, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1, 1] }]]);
     expect(third.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[notes, { status: 'regressed', runs: 1, since: third.start, sinceCommit: 'cccccccc', trend: [1, 0, 1] }]]);
     expect(third.data.resolvedClusters).toEqual([{ id: title, testIds: [titleTest] }]);
@@ -364,6 +362,21 @@ describe('failure clustering', () => {
       [notes, undefined, notes],
       [title, title, undefined],
     ]);
+  });
+
+  it('noNewClusters fails only on a cluster that no run in history had, and is skipped with no cluster history', () => {
+    const out = path.join(tmp, 'no-new-clusters');
+    const gate = (broken: string) => {
+      runSuite(out, { qualityGates: { noNewClusters: true } }, ['--retries=0', '--grep', 'draft'], 'test', { ACCEPTANCE_MATCH: 'cluster.fixtures.ts', BROKEN_DRAFTS: broken });
+      return reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).gates?.rules;
+    };
+    const rule = (passed: boolean, actual: string) => [{ rule: 'noNewClusters', passed, actual, threshold: '≤ 0' }];
+
+    expect(gate('notes')).toEqual([{ rule: 'noNewClusters', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no cluster history' }]);
+    expect(gate('')).toEqual(rule(true, '0'));
+    expect(gate('title')).toEqual(rule(false, '1'));
+    // notes came back (regressed) and title failed again (recurring): neither is new
+    expect(gate('notes,title')).toEqual(rule(true, '0'));
   });
 });
 

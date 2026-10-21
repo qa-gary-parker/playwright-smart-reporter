@@ -649,6 +649,8 @@ export interface QualityGateConfig {
   maxDurationRegression?: number;
   // #70: fail on a test that passed on a retry now and on the first attempt in the baseline run
   noNewFlaky?: boolean;
+  // #74: fail on a failure cluster that no run in history had
+  noNewClusters?: boolean;
 
   // #70: rules with a scope or a severity, evaluated after the rules above
   rules?: QualityGateRule[];

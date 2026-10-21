@@ -12,6 +12,7 @@ export const ruleLabels: Record<string, string> = {
   minCoverage: 'Min line coverage',
   maxDurationRegression: 'Max duration regression',
   noNewFlaky: 'No new flaky tests',
+  noNewClusters: 'No new clusters',
 };
 
 /** The rule's id, or its label with its scope, so two rules of the same kind can be told apart. */

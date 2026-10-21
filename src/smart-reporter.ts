@@ -625,9 +625,10 @@ class SmartReporter implements Reporter {
     this.liveWriter.complete(Date.now() - this.startTime);
 
     // Get failure clusters, and track them against the runs before this one (history saves this run last)
+    const clustering = this.options.enableFailureClustering !== false;
     let failureClusters: FailureCluster[] = [];
     let resolvedClusters: ResolvedCluster[] | undefined;
-    if (this.options.enableFailureClustering !== false) {
+    if (clustering) {
       failureClusters = this.failureClusterer.clusterFailures(this.results);
       resolvedClusters = trackClusters(
         failureClusters,
@@ -783,7 +784,8 @@ class SmartReporter implements Reporter {
     if (this.options.qualityGates) {
       try {
         const evaluator = new QualityGateEvaluator();
-        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary);
+        const clusters = clustering ? failureClusters.map((c) => ({ testIds: c.tests.map((t) => t.testId), tracking: c.tracking })) : undefined;
+        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary, clusters);
       } catch (err) {
         console.warn('⚠️  Quality gate evaluation failed:', err);
       }
@@ -867,7 +869,8 @@ class SmartReporter implements Reporter {
           this.startTime,
           this.options,
           comparison,
-          failureClusters,
+          // Left out when clustering is off, so the CLI gate skips noNewClusters
+          clustering ? failureClusters : undefined,
           exportDir,
           reportInput.outputBasename,
           qualityGateResult,

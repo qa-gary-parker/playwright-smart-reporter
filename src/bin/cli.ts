@@ -91,7 +91,7 @@ Options:
   const results = data.tests.map(toTestResultData);
 
   const evaluator = new QualityGateEvaluator();
-  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary);
+  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary, data.failureClusters);
 
   console.log(formatGateReport(result));
 

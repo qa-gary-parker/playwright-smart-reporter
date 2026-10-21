@@ -553,6 +553,25 @@ describe('trackClusters', () => {
     expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 3, since: at(1), sinceCommit: 'c1', trend: [2, 0, 0, 0, 1, 1] });
   });
 
+  it('leaves tracking unset when history cannot tell: no runs, or failures saved without cluster ids', () => {
+    const clusters = [cluster('A', 'a')];
+
+    trackClusters(clusters, [], { runs: [], tests: {}, summaries: [] }, current);
+    expect(clusters.map((c) => c.tracking)).toEqual([undefined]);
+
+    // Saved before 4.0.0, or with clustering off
+    trackClusters(clusters, [], historyOf({ a: ['fail', 'pass'] }), current);
+    expect(clusters.map((c) => c.tracking)).toEqual([undefined]);
+  });
+
+  it('compares with a history that had no failures, so every cluster is new', () => {
+    const clusters = [cluster('A', 'a')];
+
+    trackClusters(clusters, [], historyOf({ a: ['pass', 'pass'] }), current);
+
+    expect(clusters[0].tracking).toEqual({ status: 'new', runs: 1, since: at(9), sinceCommit: 'c9', trend: [0, 0, 1] });
+  });
+
   it('leaves out an earlier attempt of this run, which this run replaces', () => {
     const clusters = [cluster('A', 'a')];
 

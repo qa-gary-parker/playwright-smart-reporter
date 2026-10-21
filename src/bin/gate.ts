@@ -5,7 +5,7 @@ import * as path from 'path';
 import type { QualityGateConfig, RunComparison } from '../types';
 import { GATE_RULES, QualityGateEvaluator, validateQualityGates } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
-import { toTestResultData, type JsonTestEntry } from '../generators/json-exporter';
+import { toTestResultData, type JsonClusterEntry, type JsonTestEntry } from '../generators/json-exporter';
 import type { CoverageSummary } from '../report-data/schema';
 
 interface GateOptions {
@@ -20,6 +20,7 @@ interface GateOptions {
   minCoverage?: number;
   maxDurationRegression?: number;
   noNewFlaky?: boolean;
+  noNewClusters?: boolean;
 }
 
 function printUsage(): void {
@@ -40,6 +41,7 @@ Options:
   --min-coverage <n>          Minimum line coverage percentage (fails when no coverage was collected)
   --max-duration-regression <n>  Maximum % the tests run longer than the median of their passing runs
   --no-new-flaky              Fail if a test that passed first time in the baseline run passed on a retry now
+  --no-new-clusters           Fail if a failure cluster is new: no run in history had it
   -h, --help                  Show this help message
 
 Examples:
@@ -116,6 +118,9 @@ function parseArgs(argv: string[]): GateOptions {
       case '--no-new-flaky':
         options.noNewFlaky = true;
         break;
+      case '--no-new-clusters':
+        options.noNewClusters = true;
+        break;
       case '--min-coverage':
         options.minCoverage = number(arg, ++i);
         break;
@@ -152,6 +157,7 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   if (options.minCoverage !== undefined) config.minCoverage = options.minCoverage;
   if (options.maxDurationRegression !== undefined) config.maxDurationRegression = options.maxDurationRegression;
   if (options.noNewFlaky !== undefined) config.noNewFlaky = options.noNewFlaky;
+  if (options.noNewClusters !== undefined) config.noNewClusters = options.noNewClusters;
 
   return config;
 }
@@ -195,9 +201,10 @@ function main(): void {
   const results = tests.map(toTestResultData);
   const comparison = report.comparison as RunComparison | undefined;
   const coverage = (report.coverage as { summary?: CoverageSummary } | undefined)?.summary;
+  const clusters = report.failureClusters as JsonClusterEntry[] | undefined;
 
   const evaluator = new QualityGateEvaluator();
-  const gateResult = evaluator.evaluate(config, results, comparison, coverage);
+  const gateResult = evaluator.evaluate(config, results, comparison, coverage, clusters);
 
   console.log(formatGateReport(gateResult));
 

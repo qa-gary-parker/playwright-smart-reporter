@@ -8,14 +8,17 @@ import type {
   ComparisonChanges,
   A11yImpact,
 } from '../types';
-import type { CoverageSummary } from '../report-data/schema';
+import type { CoverageSummary, ReportCluster } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade, type RunStats } from '../utils/run-stats';
 import { isFailedTest } from '../utils/flakiness';
 import { compilePattern } from '../analyzers/ownership';
 
+// The run's failure clusters. The evaluator gets none when clustering is off.
+type GateClusters = Array<Pick<ReportCluster, 'testIds' | 'tracking'>>;
+
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 
-export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
+export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky', 'noNewClusters'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
 const SCOPE_KEYS = ['tag', 'project', 'file', 'owner'] as const satisfies ReadonlyArray<keyof QualityGateScope>;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -96,13 +99,14 @@ export class QualityGateEvaluator {
     results: TestResultData[],
     comparison?: RunComparison,
     coverage?: CoverageSummary,
+    clusters?: GateClusters,
   ): QualityGateResult {
     const { rules: entries = [], ...flat } = config;
-    const rules = this.evaluateRules(flat, results, comparison, coverage);
+    const rules = this.evaluateRules(flat, results, comparison, coverage, clusters);
 
     for (const { id, scope, severity, ...rule } of entries) {
       const tests = scope ? results.filter(inScope(scope)) : results;
-      const [result] = this.evaluateRules(rule, tests, scope ? scopeComparison(comparison, tests) : comparison, coverage);
+      const [result] = this.evaluateRules(rule, tests, scope ? scopeComparison(comparison, tests) : comparison, coverage, clusters);
       if (!result) continue;
       const scopeText = scope && describeScope(scope);
       rules.push({
@@ -122,6 +126,7 @@ export class QualityGateEvaluator {
     results: TestResultData[],
     comparison?: RunComparison,
     coverage?: CoverageSummary,
+    clusters?: GateClusters,
   ): QualityGateRuleResult[] {
     const rules: QualityGateRuleResult[] = [];
     const stats = computeRunStats(results);
@@ -165,8 +170,23 @@ export class QualityGateEvaluator {
     if (config.noNewFlaky === true) {
       rules.push(this.evaluateNoNewFlaky(comparison));
     }
+    if (config.noNewClusters === true) {
+      rules.push(this.evaluateNoNewClusters(results, clusters));
+    }
 
     return rules;
+  }
+
+  // The clusters with a test among results, so a scoped rule counts its own. A cluster without tracking
+  // means history had no cluster ids to compare with.
+  private evaluateNoNewClusters(results: TestResultData[], clusters?: GateClusters): QualityGateRuleResult {
+    const skipped = (skipReason: string): QualityGateRuleResult => ({ rule: 'noNewClusters', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason });
+    if (!clusters) return skipped('clustering off');
+    const ids = new Set(results.map(r => r.testId));
+    const inScope = clusters.filter(c => c.testIds.some(id => ids.has(id)));
+    if (inScope.some(c => !c.tracking)) return skipped('no cluster history');
+    const count = inScope.filter(c => c.tracking!.status === 'new').length;
+    return { rule: 'noNewClusters', passed: count === 0, actual: String(count), threshold: '≤ 0' };
   }
 
   // The tests the performance analyzer compared: passed now, with enough passing runs for a median.

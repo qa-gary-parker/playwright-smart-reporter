@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { exportJsonData } from '../generators/json-exporter';
-import type { A11yImpact, TestResultData } from '../types';
+import type { A11yImpact, ClusterTracking, TestResultData } from '../types';
 
 // Runs the real CLIs as child processes so the assertions are on the process exit code.
 let dir: string;
@@ -52,6 +52,12 @@ beforeAll(() => {
   ], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'scoped');
   const performanceMetrics = { averageDuration: 1000, currentDuration: 1300, percentChange: 30, absoluteChange: 300, threshold: 0.2, isRegression: true, isImprovement: false, severity: 'medium' } as const;
   exportJsonData([test('slow', 'slow.spec.ts', 'expected', { duration: 1300, performanceMetrics })], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'timed');
+  const [pay, cart] = [test('pay', 'pay.spec.ts', 'unexpected', {}), test('cart', 'cart.spec.ts', 'unexpected', {})];
+  const tracking = (status: ClusterTracking['status']) => ({ status, runs: 1, since: '2026-10-21T00:00:00.000Z', trend: [1] });
+  exportJsonData([pay, cart], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, [
+    { id: 'c1', errorType: 'x', count: 1, tests: [pay], tracking: tracking('new') },
+    { id: 'c2', errorType: 'y', count: 1, tests: [cart], tracking: tracking('recurring') },
+  ], dir, 'clustered');
 });
 
 afterAll(() => {
@@ -124,7 +130,7 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
     const res = runCli(['gate', '--config', config, '--data', 'scanned-data.json']);
     expect(res.status).toBe(1);
     expect(res.stderr).toBe(
-      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky.',
+      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters.',
     );
   });
 });
@@ -161,7 +167,7 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) scoped rules', () => {
 
   it('exits 1 on an unknown key in a rule, in both CLIs', () => {
     const config = writeJson('bogus-gates.json', { rules: [{ bogus: 1 }] });
-    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky.';
+    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters.';
     expect(runCli(['gate', '--config', config, '--data', 'scoped-data.json'])).toMatchObject({ status: 1, stderr: message });
     const res = spawnSync(process.execPath, [bundle('gate'), '--input', 'scoped-data.json', '--config', config], { cwd: dir, encoding: 'utf-8' });
     expect([res.status, res.stderr.trim()]).toEqual([1, message]);
@@ -197,6 +203,15 @@ describe('gate CLI (src/bin/gate.ts) flags', () => {
     expect(status).toBe(1);
     expect(stdout).toContain('✗ Max duration regression 30% ≤ 20%');
     expect(stdout).toContain('○ No new flaky tests   (skipped — no comparison data)');
+  });
+
+  it('evaluates noNewClusters from the cluster tracking in the JSON export, in both CLIs, and skips it without clusters', () => {
+    const failed = '✗ No new clusters      1 ≤ 0';
+    expect(runGate(['--input', 'clustered-data.json', '--no-new-clusters'])).toMatchObject({ status: 1, stdout: expect.stringContaining(failed) });
+    const config = writeJson('cluster-gates.json', { noNewClusters: true });
+    const res = spawnSync(process.execPath, [bundle('cli'), 'gate', '--config', config, '--data', 'clustered-data.json'], { cwd: dir, encoding: 'utf-8' });
+    expect([res.status, res.stdout.includes(failed)]).toEqual([1, true]);
+    expect(runGate(['--input', 'scanned-data.json', '--no-new-clusters'])).toMatchObject({ status: 0, stdout: expect.stringContaining('○ No new clusters      (skipped — clustering off)') });
   });
 
   it('says why --min-stability-grade is skipped when no test has a grade', () => {

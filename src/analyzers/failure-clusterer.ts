@@ -100,6 +100,8 @@ export function trackClusters(
   // runId -> cluster id -> tests that failed with it, and runId -> tests that passed
   const failed = new Map<string, Map<string, string[]>>();
   const passed = new Map<string, Set<string>>();
+  // runIds with a failure saved without a cluster id: before 4.0.0, or with clustering off
+  const unclustered = new Set<string>();
   for (const [testId, entries] of Object.entries(history.tests)) {
     for (const e of entries) {
       if (!e.runId) continue;
@@ -109,11 +111,15 @@ export function trackClusters(
         failed.set(e.runId, byCluster);
       } else if (e.passed && !e.skipped) {
         passed.set(e.runId, (passed.get(e.runId) ?? new Set()).add(testId));
+      } else if (!e.skipped) {
+        unclustered.add(e.runId);
       }
     }
   }
+  // Without runs, or with failures but no cluster ids, history cannot tell a new cluster from an old one: no tracking
+  const tracked = runs.length > 0 && (runs.some((r) => failed.has(r.runId)) || !runs.some((r) => unclustered.has(r.runId)));
 
-  for (const cluster of clusters) {
+  for (const cluster of tracked ? clusters : []) {
     const testsIn = runs.map((r) => failed.get(r.runId)?.get(cluster.id) ?? []);
     const tests = new Set([...cluster.tests.map((t) => t.testId), ...testsIn.flat()]);
     let status: ClusterTracking['status'] = 'new';

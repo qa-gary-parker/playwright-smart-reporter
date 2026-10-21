@@ -8,6 +8,7 @@ import type {
   RunSummary,
   StabilityScore,
   A11yImpact,
+  ClusterTracking,
 } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
@@ -881,6 +882,39 @@ describe('QualityGateEvaluator', () => {
     });
   });
 
+  // #74: failure clusters that no run in history had
+  describe('noNewClusters', () => {
+    const failing = (testId: string, tags?: string[]) => createTestResult({ testId, tags, status: 'failed', outcome: 'unexpected' });
+    const cluster = (testId: string, status?: ClusterTracking['status']) => ({ testIds: [testId], ...(status && { tracking: { status, runs: 1, since: '', trend: [1] } }) });
+    const results = [failing('a', ['@critical']), failing('b'), failing('c')];
+
+    it('fails only on a cluster that no run in history had', () => {
+      expect(evaluator.evaluate({ noNewClusters: true }, results, undefined, undefined, [cluster('a', 'new'), cluster('b', 'recurring'), cluster('c', 'regressed')])).toEqual({
+        passed: false,
+        rules: [{ rule: 'noNewClusters', passed: false, actual: '1', threshold: '≤ 0' }],
+      });
+      expect(evaluator.evaluate({ noNewClusters: true }, results, undefined, undefined, [cluster('b', 'recurring'), cluster('c', 'regressed')]).rules).toEqual([
+        { rule: 'noNewClusters', passed: true, actual: '0', threshold: '≤ 0' },
+      ]);
+    });
+
+    it('counts the clusters that have a test in scope', () => {
+      const rules = [{ scope: { tag: '@critical' }, noNewClusters: true }];
+      expect(evaluator.evaluate({ rules }, results, undefined, undefined, [cluster('a', 'recurring'), cluster('b', 'new')]).rules).toEqual([
+        { rule: 'noNewClusters', passed: true, actual: '0', threshold: '≤ 0', scope: 'tag @critical' },
+      ]);
+      expect(evaluator.evaluate({ rules }, results, undefined, undefined, [cluster('a', 'new'), cluster('b', 'new')]).rules).toEqual([
+        { rule: 'noNewClusters', passed: false, actual: '1', threshold: '≤ 0', scope: 'tag @critical' },
+      ]);
+    });
+
+    it('is skipped when clustering is off, and when history has no cluster ids to compare with', () => {
+      const skipped = (skipReason: string) => [{ rule: 'noNewClusters', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason }];
+      expect(evaluator.evaluate({ noNewClusters: true }, results).rules).toEqual(skipped('clustering off'));
+      expect(evaluator.evaluate({ noNewClusters: true }, results, undefined, undefined, [cluster('a', 'new'), cluster('b')]).rules).toEqual(skipped('no cluster history'));
+    });
+  });
+
   // #70: scoped rules and warn severity
   describe('rules', () => {
     const failed = { status: 'failed', outcome: 'unexpected' } as const;
@@ -962,7 +996,7 @@ describe('QualityGateEvaluator', () => {
   });
 
   describe('validateQualityGates', () => {
-    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky';
+    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters';
 
     it.each<[string, unknown, string]>([
       ['an unknown key in a rule', { rules: [{ bogus: 1 }] }, `unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, ${RULES}.`],

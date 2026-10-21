@@ -138,7 +138,7 @@ export function toTestResultData(entry: JsonTestEntry): TestResultData {
   };
 }
 
-interface JsonClusterEntry {
+export interface JsonClusterEntry {
   id: string;
   errorType: string;
   count: number;

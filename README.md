@@ -287,13 +287,15 @@ The cluster id is the first 16 hex characters of a SHA-256 of the fingerprint. T
 
 #### Clusters across runs
 
-History saves the cluster id of each failed test. The reporter compares each cluster with the runs in history:
+History saves the cluster id of each failed test. The reporter compares each cluster with the runs in history, which are the last `maxHistoryRuns` runs (default 10):
 
 - **New:** no run in history has the cluster.
 - **Recurring, N runs:** the cluster failed in the runs before this one. N counts the runs since the cluster last went away, this run included. The label's tooltip gives the start of the first of those runs, and its commit when CI gives one.
 - **Regressed:** the cluster went away in an earlier run and came back in this run.
 
-A cluster went away in a run when one of its tests passed and no test failed with it. A run where none of its tests ran does not count. Runs saved before 4.0.0 have no cluster ids, so the first run after an upgrade labels every cluster New.
+A cluster went away in a run when one of its tests passed and no test failed with it. A run where none of its tests ran does not count.
+
+A cluster has no label when history cannot tell a new cluster from an old one. That is the first run, and a history with failures but no cluster ids. Runs saved before 4.0.0, or with `enableFailureClustering: false`, save no cluster ids. A history with no failures can tell: every cluster is then New.
 
 Each cluster also has a trend: the number of its tests in each run in history, then this run. **Resolved clusters** lists the clusters of the baseline run that went away, with their tests that passed in this run. The JSON export has the same data in `failureClusters[].tracking` and `resolvedClusters`.
 
@@ -768,6 +770,8 @@ The result shows in the top bar and in the Quality gate panel in Insights, and i
 
 `noNewFlaky: true` counts tests that passed on a retry now and passed on the first attempt in the baseline run. Like `noNewFailures`, it also counts a flaky test that did not run in the baseline run, including a new test. The CLI skips it for a JSON export from before 4.0.0.
 
+`noNewClusters: true` counts failure clusters that are New: no run in history has them (see [Clusters across runs](#clusters-across-runs)). A recurring or regressed cluster does not count. The history is the last `maxHistoryRuns` runs, so a cluster last seen before them counts as new. A scoped rule counts the clusters with a test in scope. The rule is skipped with `enableFailureClustering: false`, and when history cannot tell a new cluster from an old one. The CLI reads `failureClusters` in the JSON export, which is left out when clustering is off.
+
 `maxDurationRegression: 20` fails the gate when the tests run more than 20% longer than the median of their passing runs. It adds up the tests that passed and have 5 passing runs, this run included (the tests that get a duration trend), so one test's jitter does not decide the gate. It is skipped when no test has that history.
 
 `minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
@@ -804,7 +808,7 @@ npx playwright-smart-reporter gate --config gates.json --data smart-report-data.
 
 `--data` defaults to `smart-report-data.json`. Exit codes: `0` = all gates passed, `1` = a gate failed or the input is missing.
 
-To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, `--min-coverage`, `--max-duration-regression` and `--no-new-flaky`.
+To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, `--min-coverage`, `--max-duration-regression`, `--no-new-flaky` and `--no-new-clusters`.
 
 ### Flaky Test Quarantine
 
@@ -1103,7 +1107,7 @@ reporter: [
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
     exportMetrics: false,       // true or { push: { url, format, headers } }: <name>-metrics.prom and .otlp.json (see Metrics Export)
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
-    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, rules }
+    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, rules }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
     live: {},                   // { enabled, outputFile: '.smart-live-results.jsonl', dashboard, notifyOnFirstFailure }
