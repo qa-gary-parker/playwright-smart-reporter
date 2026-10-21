@@ -274,9 +274,7 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.recoveredTests.length).toBe(1);
-      expect(result.recoveredTests[0].testId).toBe('test-recovered');
-      expect(result.recoveredTests[0].stableForRuns).toBeGreaterThanOrEqual(3);
+      expect(result.recoveredTests).toEqual([{ testId: 'test-recovered', stableForRuns: 4 }]);
     });
 
     it('detects performance regression (>20% slower)', () => {
@@ -302,9 +300,7 @@ describe('HealthDigest', () => {
 
       const result = digest.analyze(history, createOptions());
 
-      expect(result.performanceTrends.length).toBe(1);
-      expect(result.performanceTrends[0].testId).toBe('test-slow');
-      expect(result.performanceTrends[0].percentChange).toBeGreaterThan(20);
+      expect(result.performanceTrends).toEqual([{ testId: 'test-slow', percentChange: 50 }]);
     });
 
     it('compares the median of passing runs, so slow failures and one slow pass neither hide nor fake a regression', () => {
