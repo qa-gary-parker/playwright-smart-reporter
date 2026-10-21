@@ -1,8 +1,10 @@
-import type { JsonExportData } from '../generators/json-exporter';
+import type { JsonClusterEntry, JsonExportData } from '../generators/json-exporter';
 import type { CommitRange } from '../types';
 import { isWarning, ruleLabel } from '../gates/quality-gate-reporter';
+import { parseError } from '../utils/error-stack';
 import { formatDuration } from '../utils/formatters';
 import { formatPassRate } from '../utils/run-stats';
+import { truncate } from '../utils/sanitizers';
 import { failureLocation, isFailure, testLabel } from './annotations';
 
 const LIST_LIMIT = 10;
@@ -119,4 +121,27 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
 
   if (opts.reportUrl) out.push('', `[Open the full report](${opts.reportUrl})`);
   return `${out.join('\n')}\n`;
+}
+
+// GitHub rejects issue titles over 256 characters
+const TITLE_LIMIT = 256;
+
+/** Title and body of the GitHub issue for a new failure cluster; the label and error pass through redact. */
+export function renderClusterIssue(data: JsonExportData, cluster: JsonClusterEntry, opts: SummaryOptions & { redact: (text: string) => string }): { title: string; body: string } {
+  const label = opts.redact(cluster.errorType);
+  const ids = new Set(cluster.testIds);
+  const tests = data.tests.filter((t) => ids.has(t.testId));
+  const error = opts.redact((tests[0]?.error && parseError(tests[0].error).message) || 'No error message');
+  const fence = '`'.repeat(Math.max(3, ...(error.match(/`+/g) ?? []).map((r) => r.length + 1)));
+
+  const out = [`**New failure cluster:** ${code(label)}`, '', `${tests.length} test${tests.length === 1 ? '' : 's'} in cluster ${code(cluster.id)}:`, ''];
+  out.push(...table(['Test', 'Location'], tests.slice(0, LIST_LIMIT).map((t) => {
+    const loc = failureLocation(t, data.metadata.rootDir, opts.workspace);
+    return [code(testLabel(t)), code(loc.line !== undefined ? `${loc.file}:${loc.line}` : loc.file)];
+  })), ...more(tests.length));
+  out.push('', fence, error, fence);
+  const commits = cluster.tracking?.commits;
+  if (commits) out.push('', `**Commits:**${commitsLine(commits)}`);
+  if (opts.reportUrl) out.push('', `[Open the full report](${opts.reportUrl})`);
+  return { title: truncate(`New failure cluster: ${label}`, TITLE_LIMIT), body: `${out.join('\n')}\n` };
 }

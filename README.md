@@ -1569,6 +1569,7 @@ jobs:
 | `data` | `smart-report-data.json` | Path to the JSON export |
 | `report-url` | workflow run page | Link to the uploaded report |
 | `github-token` | `github.token` | Token for the pull request comment |
+| `issues` | `false` | Open one issue per new failure cluster. See [GitHub Issues](#github-issues) |
 
 - The comment is written only for `pull_request` and `pull_request_target` events. Other events get the summary and annotations.
 - `pull_request` runs from forks get a read-only token. The action skips the comment and still writes the summary and annotations. A 403 response does the same and shows a warning. The step does not fail.
@@ -1582,6 +1583,35 @@ npx playwright-smart-reporter github --data smart-report-data.json --report-url 
 ```
 
 It needs the `gh` CLI and `GH_TOKEN` for the comment. Outside GitHub Actions it prints the summary to stdout.
+
+### GitHub Issues
+
+The `github` command can open one GitHub issue for each New failure cluster (see [Clusters across runs](#clusters-across-runs)). It is off by default. Turn it on with `issues: true` on the action, or `--issues` on the command, and give the job `issues: write`:
+
+```yaml
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # ...
+      - uses: qa-gary-parker/playwright-smart-reporter@v3.0.0
+        if: always() && github.ref == 'refs/heads/main'
+        with:
+          data: smart-report-data.json
+          issues: true
+```
+
+```bash
+npx playwright-smart-reporter github --data smart-report-data.json --issues
+```
+
+- Only New clusters get an issue. Recurring and Regressed clusters, and clusters without a label because history cannot tell, get none. Keep the history file between CI runs, or every run has no labels.
+- The issue has the cluster label, the affected tests and their location, the error message, the commit range and the changed files when known, and a link to the report or the run.
+- The error message gets the same redaction as the annotations. With `redact` on, the JSON export is already redacted with your patterns.
+- The body starts with a hidden marker that holds the cluster id. When an open issue has the marker of a cluster, a later run adds a comment to that issue instead of opening a second one. A closed issue does not count, so a cluster that comes back as New gets a new issue.
+- One run files at most 5 clusters, largest first. The log says how many it left out.
+- Without `issues: write`, the command logs a warning and exits with 0, as for the pull request comment. It needs `GITHUB_REPOSITORY`, which GitHub Actions sets.
+- Run it on your default branch. On a pull request, a new cluster is often caused by the change under review.
 
 ### Azure DevOps
 

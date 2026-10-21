@@ -15,7 +15,7 @@ Commands:
   digest    Generate a test health digest from history
   failures  Print the redacted failure bundle for coding agents
   mcp       Serve the failure bundle to coding agents over MCP (stdio)
-  github    Publish a JSON export to GitHub (job summary, annotations, PR comment)
+  github    Publish a JSON export to GitHub (job summary, annotations, PR comment, opt-in issues)
 
 Run playwright-smart-reporter <command> --help for command-specific help.
 `);
@@ -210,6 +210,9 @@ and annotations only. Requires the gh CLI with GH_TOKEN set for the comment.
 Options:
   --data <path>         Path to smart-report-data.json (default: smart-report-data.json)
   --report-url <url>    Link to the uploaded report (default: the workflow run page)
+  --issues              Open one GitHub issue per new failure cluster (at most 5 per run,
+                        largest first), or comment on the cluster's open issue. Needs
+                        \`issues: write\`; a 403 logs a warning and the exit code stays 0.
   --help                Show this help
 `);
     return;
@@ -219,6 +222,7 @@ Options:
   process.exitCode = runGithubCommand({
     dataPath: parseFlag('--data') ?? 'smart-report-data.json',
     reportUrl: parseFlag('--report-url'),
+    issues: hasFlag('--issues'),
   });
 }
 

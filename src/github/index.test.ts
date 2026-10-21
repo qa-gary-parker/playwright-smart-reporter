@@ -168,3 +168,153 @@ describe('runGithubCommand', () => {
     expect(logs[0]).toMatch(/^::error::Cannot read Smart Reporter data at .*missing\.json: ENOENT.*Run the tests with exportJson: true\.$/);
   });
 });
+
+describe('runGithubCommand --issues', () => {
+  const SECRET = 'super-secret-env-value-123';
+  const ID = '0123456789abcdef';
+  const MARKER = `<!-- playwright-smart-reporter cluster:${ID} -->`;
+  const COMPARE = 'https://github.com/acme/shop/compare/aaa...bbb';
+  const LIST = ['api', '--paginate', 'repos/acme/shop/issues?state=open&per_page=100', '--jq', '.[] | select(.body // "" | contains("<!-- playwright-smart-reporter cluster:")) | {number, body}'];
+  const CREATE = ['api', '--method', 'POST', 'repos/acme/shop/issues', '--input', '-', '--jq', '.number'];
+  const BODY = [
+    `**New failure cluster:** \`login failed with token [REDACTED] at cart.spec.ts:8\``,
+    '',
+    `1 test in cluster \`${ID}\`:`,
+    '',
+    '| Test | Location |',
+    '|---|---|',
+    '| `checkout` | `e2e/cart.spec.ts:8` |',
+    '',
+    '```',
+    'Error: login failed with token [REDACTED]',
+    '```',
+    '',
+    `**Commits:**<br>Last passed at \`aaaaaaaa\`, first failed at \`bbbbbbbb\` ([compare](${COMPARE}))<br>Changed: \`src/cart.ts\``,
+    '',
+    '[Open the full report](https://example.test/report#/q/failures)',
+    '',
+  ].join('\n');
+
+  type Status = 'new' | 'recurring' | 'regressed';
+  // null: history could not tell, so the cluster has no tracking
+  const cluster = (id: string, count = 1, status: Status | null = 'new') => ({
+    id,
+    errorType: `login failed with token ${SECRET} at cart.spec.ts:8`,
+    count,
+    testIds: ['a'],
+    tracking: status === null ? undefined : {
+      status, runs: 1, since: '2026-10-08T10:00:00.000Z', trend: [0, count],
+      commits: { lastPassed: { commit: 'aaaaaaaa' }, firstFailed: { commit: 'bbbbbbbb' }, url: COMPARE, suspects: ['src/cart.ts'] },
+    },
+  });
+  const ok = (stdout = '') => ({ status: 0, stdout, stderr: '' });
+
+  let dir: string;
+  let logs: string[];
+  let calls: { args: string[]; body?: unknown }[];
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gh-issues-'));
+    logs = [];
+    calls = [];
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  function run(clusters: unknown[], responses: GhResult[] = [], issues = true): number {
+    const tests = [{ ...data.tests[0], error: `Error: login failed with token ${SECRET}` }];
+    fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ ...data, tests, failureClusters: clusters }));
+    const gh: GhRunner = (args, stdin) => {
+      calls.push({ args, body: stdin === undefined ? undefined : JSON.parse(stdin) });
+      const next = responses.shift();
+      if (!next) throw new Error(`unexpected gh call: ${args.join(' ')}`);
+      return next;
+    };
+    return runGithubCommand(
+      { dataPath: path.join(dir, 'data.json'), reportUrl: 'https://example.test/report', issues },
+      {
+        env: { GITHUB_WORKSPACE: WORKSPACE, GITHUB_STEP_SUMMARY: path.join(dir, 'summary.md'), GITHUB_REPOSITORY: 'acme/shop', API_TOKEN: SECRET },
+        cwd: '/elsewhere',
+        gh,
+        log: (l) => logs.push(l),
+      },
+    );
+  }
+
+  it('creates one issue for a new cluster, with the marker and the redacted error', () => {
+    const code = run([cluster(ID)], [ok(), ok('12\n')]);
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      { args: LIST, body: undefined },
+      { args: CREATE, body: { title: 'New failure cluster: login failed with token [REDACTED] at cart.spec.ts:8', body: `${MARKER}\n${BODY}` } },
+    ]);
+    expect(logs.slice(1)).toEqual([
+      `Issue #12 created for new failure cluster ${ID}.`,
+      'Pull request comment skipped: not a pull request event (none).',
+    ]);
+  });
+
+  it('comments on the open issue that carries the marker of the cluster instead of opening a second one', () => {
+    const code = run([cluster(ID)], [
+      ok([
+        JSON.stringify({ number: 7, body: '<!-- playwright-smart-reporter cluster:fedcba9876543210 -->\nother' }),
+        JSON.stringify({ number: 9, body: `${MARKER}\nearlier run` }),
+      ].join('\n')),
+      ok('{}'),
+    ]);
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      { args: LIST, body: undefined },
+      { args: ['api', '--method', 'POST', 'repos/acme/shop/issues/9/comments', '--input', '-'], body: { body: BODY } },
+    ]);
+    expect(logs[1]).toBe(`Comment added to issue #9 for new failure cluster ${ID}.`);
+  });
+
+  it('makes no gh call for recurring, regressed or untracked clusters', () => {
+    const code = run([cluster('1111111111111111', 1, 'recurring'), cluster('2222222222222222', 1, 'regressed'), cluster('3333333333333333', 1, null)]);
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(logs[1]).toBe('Issues skipped: no new failure clusters in this run.');
+  });
+
+  it('makes no gh call for a new cluster unless issues are turned on', () => {
+    const code = run([cluster(ID)], [], false);
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([]);
+    expect(logs.slice(1)).toEqual(['Pull request comment skipped: not a pull request event (none).']);
+  });
+
+  it('files at most 5 clusters per run, largest first, and says how many it left out', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((c) => c.repeat(16));
+    const counts = [1, 7, 3, 6, 2, 5, 4];
+    const code = run(ids.map((id, i) => cluster(id, counts[i])), [ok(), ...[1, 2, 3, 4, 5].map((n) => ok(`${n}\n`))]);
+
+    expect(code).toBe(0);
+    expect(calls.slice(1).map((c) => (c.body as { body: string }).body.split('\n')[0]))
+      .toEqual(['b', 'd', 'f', 'g', 'c'].map((c) => `<!-- playwright-smart-reporter cluster:${c.repeat(16)} -->`));
+    expect(logs.slice(1, 7)).toEqual([
+      ...['b', 'd', 'f', 'g', 'c'].map((c, i) => `Issue #${i + 1} created for new failure cluster ${c.repeat(16)}.`),
+      '2 more new failure cluster(s) not filed: at most 5 issues per run.',
+    ]);
+  });
+
+  it('cuts the title to the 256 characters GitHub accepts', () => {
+    run([{ ...cluster(ID), errorType: 'x'.repeat(300) }], [ok(), ok('12\n')]);
+
+    expect((calls[1].body as { title: string }).title).toBe(`New failure cluster: ${'x'.repeat(232)}...`);
+  });
+
+  it('keeps the step green with a warning when the token cannot write issues (HTTP 403)', () => {
+    const code = run([cluster(ID)], [ok(), { status: 1, stdout: '', stderr: 'gh: Resource not accessible by integration (HTTP 403)' }]);
+
+    expect(code).toBe(0);
+    expect(calls.map((c) => c.args)).toEqual([LIST, CREATE]);
+    expect(logs.slice(1)).toEqual([
+      '::warning::Issues skipped: the token lacks issues: write (HTTP 403).',
+      'Pull request comment skipped: not a pull request event (none).',
+    ]);
+  });
+});

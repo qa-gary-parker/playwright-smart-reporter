@@ -45,13 +45,11 @@ export function resolveCommentTarget(eventName: string | undefined, event: PullR
   return { comment: true, repo, number: pr.number };
 }
 
-export type UpsertResult =
-  | { outcome: 'created' }
-  | { outcome: 'updated' }
-  | { outcome: 'forbidden'; detail: string }
-  | { outcome: 'failed'; detail: string };
+export type GhFailure = { outcome: 'forbidden'; detail: string } | { outcome: 'failed'; detail: string };
 
-function failure(r: GhResult): UpsertResult {
+export type UpsertResult = { outcome: 'created' } | { outcome: 'updated' } | GhFailure;
+
+export function failure(r: GhResult): GhFailure {
   const detail = (r.stderr || r.stdout).trim();
   return /HTTP 403/.test(detail) ? { outcome: 'forbidden', detail } : { outcome: 'failed', detail };
 }

@@ -2,12 +2,14 @@ import * as fs from 'fs';
 import { createRedactor } from '../agent/redact';
 import type { JsonExportData } from '../generators/json-exporter';
 import { buildAnnotations, isFailure, MAX_ANNOTATIONS } from './annotations';
-import { renderSummary } from './summary';
-import { resolveCommentTarget, runGh, upsertStickyComment, type GhRunner, type PullRequestEvent, type UpsertResult } from './pr-comment';
+import { fileClusterIssues, MAX_ISSUES, type FiledIssue } from './issues';
+import { renderClusterIssue, renderSummary } from './summary';
+import { resolveCommentTarget, runGh, upsertStickyComment, type GhFailure, type GhRunner, type PullRequestEvent, type UpsertResult } from './pr-comment';
 
 export interface GithubCommandOptions {
   dataPath: string;
   reportUrl?: string;
+  issues?: boolean;
 }
 
 export interface GithubCommandDeps {
@@ -30,6 +32,29 @@ function readEvent(eventPath: string | undefined): PullRequestEvent | undefined 
   } catch {
     return undefined;
   }
+}
+
+// One issue per new cluster, largest first. Problems degrade to a warning, as for the PR comment.
+function publishIssues(data: JsonExportData, opts: Parameters<typeof renderClusterIssue>[2], { env, gh, log }: GithubCommandDeps): void {
+  const fresh = (data.failureClusters ?? []).filter((c) => c.tracking?.status === 'new').sort((a, b) => b.count - a.count);
+  if (fresh.length === 0) return log('Issues skipped: no new failure clusters in this run.');
+  if (!env.GITHUB_REPOSITORY) return log('Issues skipped: GITHUB_REPOSITORY is not set.');
+
+  const issues = fresh.slice(0, MAX_ISSUES).map((c) => ({ clusterId: c.id, ...renderClusterIssue(data, c, opts) }));
+  let result: { filed: FiledIssue[]; error?: GhFailure };
+  try {
+    result = fileClusterIssues(env.GITHUB_REPOSITORY, issues, gh);
+  } catch (err) {
+    result = { filed: [], error: { outcome: 'failed', detail: err instanceof Error ? err.message : String(err) } };
+  }
+  for (const i of result.filed) {
+    log(i.outcome === 'created'
+      ? `Issue #${i.number} created for new failure cluster ${i.clusterId}.`
+      : `Comment added to issue #${i.number} for new failure cluster ${i.clusterId}.`);
+  }
+  if (fresh.length > MAX_ISSUES) log(`${fresh.length - MAX_ISSUES} more new failure cluster(s) not filed: at most ${MAX_ISSUES} issues per run.`);
+  if (result.error?.outcome === 'forbidden') log('::warning::Issues skipped: the token lacks issues: write (HTTP 403).');
+  else if (result.error) log(`::warning::Issues failed: ${result.error.detail.split('\n')[0]}`);
 }
 
 /**
@@ -57,7 +82,8 @@ export function runGithubCommand(opts: GithubCommandOptions, deps: GithubCommand
 
   // The report opens on Insights; a failed run's link goes straight to the failures instead.
   const reportUrl = opts.reportUrl && !opts.reportUrl.includes('#') && data.tests.some(isFailure) ? `${opts.reportUrl}#/q/failures` : opts.reportUrl;
-  const markdown = renderSummary(data, { reportUrl: reportUrl || runUrl(env), workspace: env.GITHUB_WORKSPACE || deps.cwd });
+  const summaryOptions = { reportUrl: reportUrl || runUrl(env), workspace: env.GITHUB_WORKSPACE || deps.cwd };
+  const markdown = renderSummary(data, summaryOptions);
 
   if (env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
@@ -66,11 +92,14 @@ export function runGithubCommand(opts: GithubCommandOptions, deps: GithubCommand
   }
 
   // GitHub masks only registered secrets, so annotations get the same redaction as the failure bundle.
-  const annotations = buildAnnotations(data, env.GITHUB_WORKSPACE || deps.cwd, createRedactor(env).string);
+  const redact = createRedactor(env).string;
+  const annotations = buildAnnotations(data, env.GITHUB_WORKSPACE || deps.cwd, redact);
   annotations.lines.forEach(log);
   if (annotations.omitted > 0) {
     log(`${annotations.omitted} more failure(s) not annotated: GitHub shows at most ${MAX_ANNOTATIONS} error annotations per step.`);
   }
+
+  if (opts.issues) publishIssues(data, { ...summaryOptions, redact }, deps);
 
   const target = resolveCommentTarget(env.GITHUB_EVENT_NAME, readEvent(env.GITHUB_EVENT_PATH), env.GITHUB_REPOSITORY);
   if (!target.comment) {
