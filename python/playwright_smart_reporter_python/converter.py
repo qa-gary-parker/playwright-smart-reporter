@@ -131,6 +131,7 @@ def convert_pytest_json(pytest_json_path: Path) -> Dict[str, Any]:
             "redact": False,
             # pytest writes no live results file
             "live": {"enabled": False},
+            "ciCostPerMinute": None,
         },
     }
 

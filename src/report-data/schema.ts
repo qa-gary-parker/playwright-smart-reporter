@@ -8,6 +8,7 @@ import type {
   QualityGateResult,
   QuarantineEntry,
   ResolvedCluster,
+  RunEfficiency,
   RunSnapshotFile,
   RunSummary,
   TestResultData,
@@ -112,6 +113,8 @@ export interface ReportData {
   a11y?: A11ySummary;
   // Phase 6: Code coverage
   coverage?: ReportCoverage;
+  // Phase 31: CI efficiency (absent in reports written before 4.0.0)
+  efficiency?: RunEfficiency;
 }
 
 // Percentages follow Istanbul: floored to 2 decimals, 100 when total is 0.

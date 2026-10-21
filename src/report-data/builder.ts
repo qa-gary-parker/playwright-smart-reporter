@@ -16,6 +16,7 @@ import type {
   TestResultData,
 } from '../types';
 import { summarizeA11y } from '../analyzers/a11y-analyzer';
+import { summarizeEfficiency } from '../analyzers/efficiency';
 import { isFlakyTest } from '../utils/flakiness';
 import { buildRunSummary, computeRunStats } from '../utils/run-stats';
 import {
@@ -51,6 +52,8 @@ export interface ReportInput {
   // Phase 6: Code coverage is merged by the reporter before gates run, so it arrives ready-built.
   coverage?: ReportCoverage;
   shard?: { current: number; total: number };
+  // Playwright's FullResult start and duration, and whether merge-reports replayed the run. Default: startTime, the report duration, not merged.
+  run?: { start: number; duration: number; merged: boolean };
 }
 
 const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements', 'notInBaseline'];
@@ -120,6 +123,8 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
   });
 
   const summary = summarize(results, now - input.startTime);
+  const trends = withCurrentRun(input, summary.duration);
+  const run = input.run ?? { start: input.startTime, duration: summary.duration, merged: false };
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
@@ -159,7 +164,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     tests,
     clusters,
     resolvedClusters: input.resolvedClusters,
-    trends: withCurrentRun(input, summary.duration),
+    trends,
     comparison: comparison && {
       baselineRun: comparison.baselineRun,
       currentRun: comparison.currentRun,
@@ -178,5 +183,16 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     ownership: summarizeOwnership(tests),
     a11y: summarizeA11y(results),
     coverage: input.coverage,
+    efficiency: summarizeEfficiency({
+      results,
+      history: input.history,
+      runIds: trends.map((r) => r.runId),
+      runId: runIdOf(input),
+      runStart: run.start,
+      runDuration: run.duration,
+      shard: input.shard,
+      merged: run.merged,
+      costPerMinute: options.ciCostPerMinute,
+    }),
   };
 }

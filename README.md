@@ -185,7 +185,7 @@ Insights is the landing view and holds the run metrics:
 - A stats row: failed (with the number of new failures and of failures that did not run in the baseline run; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
 - An outcome bar: passed, failed, flaky, skipped.
 - The pass rate is the passed tests out of the tests that ran. Skipped tests are left out, so a run with no failures shows 100%. When every test was skipped, the pass rate is `n/a` (`null` in the JSON export and history) and there is no health grade. The report, history, JSON export, PDF, gates and notifications use this same pass rate.
-- Panels: AI summary, Quality gate, Failure clusters (each with its New, Recurring or Regressed label and a trend), Resolved clusters (when there is a baseline run), At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
+- Panels: AI summary, Quality gate, Failure clusters (each with its New, Recurring or Regressed label and a trend), Resolved clusters (when there is a baseline run), At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Efficiency (see [CI Efficiency](#ci-efficiency)), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
 
 ### History
 
@@ -421,6 +421,21 @@ A test with fewer than `minRuns` non-skipped runs (this run included) gets `insu
 Forecast risks are recorded per run in the history file under `forecasts` (`runId -> testId -> risk`; risk 0 is omitted) and pruned to `maxHistoryRuns`, so the forecast's accuracy can be checked later. `playwright-smart-reporter-merge-history` keeps the `forecasts` of every merged run.
 
 To replay the forecast over recorded history from a clone of this repository: `npm run build && node scripts/backtest-forecast.mjs <dir containing test-history.json>`.
+
+### CI Efficiency
+
+The Efficiency panel in Insights, and `efficiency` in the JSON export, show where the CI time of the run went. Times in the JSON are in ms.
+
+| Metric | What it measures |
+|--------|------------------|
+| Retry waste | Time in the attempts that Playwright retried (every attempt but the last). For the run, per test (`retryWasteByTest`), and per recorded run (`retryWasteTrend`). A run saved before 4.0.0 that had retries shows `null`. |
+| Long tail | The share of the test time (every attempt of every test) that the slowest 5% and 10% of the tests take. |
+| Setup gap | Time from the start of the run to the first test start: global setup, web server, and worker start. |
+| Shard wall time | Duration of this shard, in a `--shard` run. |
+| Worker utilisation | Busy time of each worker slot (`parallelIndex`) from the first test start to the last test end, and the idle rest. |
+| Cost | With `ciCostPerMinute`, the minutes of retry waste times that price. Off by default. |
+
+A report from `merge-reports` has no shard or worker data. Playwright does not record which shard ran a test, and the worker numbers repeat in every shard. Retry waste, long tail, and setup gap still show. The setup gap is measured from the start of the earliest shard.
 
 ### Ownership and Routing
 
@@ -1024,6 +1039,7 @@ reporter: [
     forecast: {},               // { enabled: true, minRuns: 5, threshold: 0.5 }
     ownership: {},              // { enabled, source: 'auto', codeownersPath }; on when CODEOWNERS exists
     accessibility: undefined,   // { enabled, standard: 'WCAG2AA', include, exclude, selector, failOnSeverity }; opt-in
+    ciCostPerMinute: undefined, // CI price per minute; prices the retry waste in the Efficiency panel; opt-in
 
     // Report customisation & exports
     theme: { preset: 'default' },  // default, light, dark, high-contrast, ocean, sunset, dracula, cyberpunk, forest, rose

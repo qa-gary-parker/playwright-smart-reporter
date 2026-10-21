@@ -5,6 +5,7 @@ import * as path from 'path';
 // options as JSON and ACCEPTANCE_MATCH the fixture file, so one config serves every scenario.
 // Fixtures are not named *.spec.ts so the demo configs skip them.
 // ACCEPTANCE_PROJECTS names the projects, comma-separated. Without it the run has one unnamed project.
+// ACCEPTANCE_BLOB adds a blob report in that folder, for merge-reports.
 const out = process.env.ACCEPTANCE_OUT ?? path.join(__dirname, 'out');
 const options = JSON.parse(process.env.ACCEPTANCE_OPTIONS ?? '{}');
 const projects = process.env.ACCEPTANCE_PROJECTS ? process.env.ACCEPTANCE_PROJECTS.split(',').map((name) => ({ name })) : undefined;
@@ -19,6 +20,7 @@ export default defineConfig({
   reporter: [
     // ACCEPTANCE_WITHOUT_TAGS runs the smart reporter as on Playwright before 1.42, with no test.tags.
     ...(process.env.ACCEPTANCE_WITHOUT_TAGS ? [[path.join(__dirname, 'without-tags.reporter.ts')] as const] : []),
+    ...(process.env.ACCEPTANCE_BLOB ? [['blob', { outputDir: process.env.ACCEPTANCE_BLOB }] as const] : []),
     [path.join(__dirname, '../../dist/smart-reporter.js'), {
       outputFile: path.join(out, 'smart-report.html'),
       historyFile: path.join(out, 'test-history.json'),

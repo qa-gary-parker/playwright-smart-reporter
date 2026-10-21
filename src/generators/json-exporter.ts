@@ -13,6 +13,7 @@ import type {
   QualityGateResult,
   CIInfo,
   StabilityScore,
+  RunEfficiency,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
@@ -64,6 +65,8 @@ export interface JsonExportData {
     summary: CoverageSummary;
     files: Array<CoverageSummary & { path: string }>;
   };
+  // Phase 31: CI efficiency
+  efficiency?: RunEfficiency;
 }
 
 export interface JsonTestEntry {
@@ -154,6 +157,7 @@ export function exportJsonData(
   rootDir?: string,
   coverage?: ReportCoverage,
   resolvedClusters?: ResolvedCluster[],
+  efficiency?: RunEfficiency,
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -240,6 +244,7 @@ export function exportJsonData(
       summary: coverage.summary,
       files: coverage.files.map(({ path, lines, functions, branches }) => ({ path, lines, functions, branches })),
     },
+    efficiency,
   };
 
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));

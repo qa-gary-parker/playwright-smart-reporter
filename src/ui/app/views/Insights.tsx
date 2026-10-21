@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { clusterLabel, displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
+import { clusterLabel, displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts, plural, suiteHealth, type ReportData, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
@@ -32,6 +32,39 @@ function TestLines({ tests, value }: { tests: ReportTest[]; value: (t: ReportTes
         </li>
       ))}
     </ul>
+  );
+}
+
+function Line({ label, value, children }: { label: string; value: string; children?: ComponentChildren }) {
+  return (
+    <li class="lines__item">
+      <span class="lines__label">{label}</span>
+      {children}
+      <span class="lines__value mono">{value}</span>
+    </li>
+  );
+}
+
+function Efficiency({ e }: { e: NonNullable<ReportData['efficiency']> }) {
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    <Panel title="Efficiency" meta={e.shard ? `shard ${e.shard.current} of ${e.shard.total}` : undefined}>
+      <ul class="lines">
+        <Line label={`Retry waste${e.cost ? `, ${e.cost.retryWaste} at ${e.cost.perMinute}/min` : ''}`} value={formatDuration(e.retryWaste)}>
+          <Sparkline label="Retry waste, recent runs" values={e.retryWasteTrend.flatMap((r) => r.retryWaste ?? [])} width={64} height={20} />
+        </Line>
+        {e.longTail.map((l) => (
+          <Line label={`Slowest ${l.percent}% (${plural(l.tests, 'test')})`} value={`${pct(l.share)} of test time`} />
+        ))}
+        {e.setupGap !== undefined && <Line label="Setup before the first test" value={formatDuration(e.setupGap)} />}
+        {e.shard && <Line label="Shard wall time" value={formatDuration(e.shard.wallTime)} />}
+        {e.workers && <Line label="Worker utilisation" value={pct(e.workers.utilisation)} />}
+        {e.workers?.slots.map((s) => (
+          <Line label={`Worker ${s.slot}, ${plural(s.attempts, 'attempt')}`} value={`${formatDuration(s.busy)} busy, ${formatDuration(s.idle)} idle`} />
+        ))}
+      </ul>
+      {e.merged && <p class="panel__empty">Merged report: merge-reports does not record which shard or worker ran a test.</p>}
+    </Panel>
   );
 }
 
@@ -194,6 +227,7 @@ export function Insights() {
             </ul>
           </Panel>
         )}
+        {d.efficiency && <Efficiency e={d.efficiency} />}
         <Panel title="Regressions">
           <TestLines tests={tests.filter((t) => t.signals.includes('regression')).slice(0, 8)} value={(t) => (t.performanceMetrics ? `+${Math.round(t.performanceMetrics.percentChange)}%` : formatDuration(t.duration))} />
         </Panel>

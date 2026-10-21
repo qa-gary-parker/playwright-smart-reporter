@@ -447,6 +447,61 @@ describe('execution metadata', () => {
   }, TIMEOUT);
 });
 
+describe('efficiency', () => {
+  interface PwResult { retry: number; parallelIndex: number; startTime: string; duration: number }
+  interface PwSuite { suites?: PwSuite[]; specs?: Array<{ tests: Array<{ results: PwResult[] }> }> }
+  const pwRun = (out: string) => {
+    const json = JSON.parse(fs.readFileSync(path.join(out, 'pw.json'), 'utf8'));
+    const walk = (s: PwSuite): PwResult[][] => [...(s.specs ?? []).flatMap((spec) => spec.tests.map((t) => t.results)), ...(s.suites ?? []).flatMap(walk)];
+    return { stats: json.stats as { startTime: string; duration: number }, tests: (json.suites as PwSuite[]).flatMap(walk) };
+  };
+  const GREP = ['--grep', 'passes$|passes on retry|same title', '--fully-parallel'];
+
+  it('takes retry waste, worker time and the setup gap from the attempts Playwright reports', () => {
+    const out = path.join(tmp, 'efficiency');
+    runSuite(out, { exportJson: true, ciCostPerMinute: 60 }, [...GREP, '--workers=2']);
+
+    const pw = pwRun(out);
+    const attempts = pw.tests.flat();
+    const retryWaste = pw.tests.flatMap((results) => results.slice(0, -1)).reduce((sum, r) => sum + r.duration, 0);
+    const slots = [0, 1].map((slot) => {
+      const on = attempts.filter((r) => r.parallelIndex === slot);
+      return [slot, on.length, on.reduce((sum, r) => sum + r.duration, 0)];
+    });
+    const e = reportData(out).efficiency!;
+    expect(retryWaste).toBeGreaterThan(0);
+    expect(e.retryWaste).toBe(retryWaste);
+    expect(e.cost).toEqual({ perMinute: 60, retryWaste: Math.round(retryWaste / 10) / 100 });
+    expect(e.workers!.slots.map((s) => [s.slot, s.attempts, s.busy])).toEqual(slots);
+    expect(e.setupGap).toBe(Math.min(...attempts.map((r) => Date.parse(r.startTime))) - Date.parse(pw.stats.startTime));
+    expect(e.shard).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8')).efficiency).toEqual(e);
+  }, TIMEOUT);
+
+  it('gives a shard its wall time, and leaves out the shard and workers once merge-reports joins the shards', () => {
+    const blobs = path.join(tmp, 'efficiency-blobs');
+    fs.mkdirSync(blobs, { recursive: true });
+    const shards = [1, 2].map((n) => {
+      const out = path.join(tmp, `efficiency-shard${n}`);
+      runSuite(out, {}, [...GREP, `--shard=${n}/2`], { ACCEPTANCE_BLOB: path.join(out, 'blob') });
+      for (const f of fs.readdirSync(path.join(out, 'blob'))) fs.copyFileSync(path.join(out, 'blob', f), path.join(blobs, f));
+      return out;
+    });
+    expect(reportData(shards[1]).efficiency!.shard).toEqual({ current: 2, total: 2, wallTime: pwRun(shards[1]).stats.duration });
+
+    const out = path.join(tmp, 'efficiency-merged');
+    const merge = spawnSync(process.execPath, [CLI, 'merge-reports', `--config=${CONFIG}`, blobs], {
+      cwd: ROOT,
+      env: { ...process.env, ACCEPTANCE_OUT: out, ACCEPTANCE_OPTIONS: '{}' },
+      encoding: 'utf8',
+    });
+    expect(merge.status).toBe(0);
+    const e = reportData(out).efficiency!;
+    expect([e.merged, e.shard, e.workers]).toEqual([true, undefined, undefined]);
+    expect(e.retryWaste).toBe(shards.reduce((sum, s) => sum + reportData(s).efficiency!.retryWaste, 0));
+  }, TIMEOUT);
+});
+
 describe('JUnit export', () => {
   const junitFile = (out: string) => path.join(out, 'smart-report-junit.xml');
 

@@ -194,6 +194,8 @@ export interface SmartReporterOptions {
   exportCtrf?: boolean;            // Write <name>-ctrf.json (Common Test Report Format) alongside HTML
   // Mask secrets in test text before any report file is written (default: false). patterns adds regular expressions.
   redact?: boolean | { patterns?: Array<string | RegExp> };
+  // Phase 31: CI price per minute; with it, the efficiency panel prices the retry waste (default: off)
+  ciCostPerMinute?: number;
 }
 
 export type AIProviderName = 'anthropic' | 'openai' | 'gemini' | 'ollama' | 'openai-compatible';
@@ -572,6 +574,25 @@ export interface NetworkLogData {
     slowest: NetworkLogEntry | null;
     errors: NetworkLogEntry[];          // Status >= 400
   };
+}
+
+// ============================================================================
+// Phase 31: CI efficiency (all times in ms)
+// ============================================================================
+
+export interface RunEfficiency {
+  retryWaste: number;                                         // time in the attempts Playwright retried
+  retryWasteByTest: Array<{ testId: string; waste: number }>; // most first
+  retryWasteTrend: Array<{ runId: string; retryWaste: number | null }>; // null: history cannot tell
+  testTime: number;                                           // every attempt of every test
+  // The slowest percent of the tests that ran, by their time over every attempt, and their share of testTime
+  longTail: Array<{ percent: number; tests: number; time: number; share: number; testIds: string[] }>;
+  setupGap?: number;                                          // run start to the first attempt start
+  shard?: { current: number; total: number; wallTime: number };
+  // Worker slots (parallelIndex) from the first attempt start to the last attempt end
+  workers?: { span: number; utilisation: number; slots: Array<{ slot: number; attempts: number; busy: number; idle: number }> };
+  merged?: true;                                              // merge-reports: shard and workers are unknown
+  cost?: { perMinute: number; retryWaste: number };           // ciCostPerMinute × minutes of retry waste
 }
 
 // ============================================================================

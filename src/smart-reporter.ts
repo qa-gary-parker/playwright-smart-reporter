@@ -131,6 +131,7 @@ class SmartReporter implements Reporter {
   private resultsMap: Map<string, TestResultData> = new Map(); // Track final result per test
   private outputDir: string = '';
   private startTime: number = 0;
+  private begunAt: number = 0;
   private fullConfig: FullConfig | null = null;
   private runnerErrors: string[] = [];
   private ciInfo?: CIInfo;
@@ -197,6 +198,7 @@ class SmartReporter implements Reporter {
    */
   onBegin(config: FullConfig, suite: Suite): void {
     this.startTime = Date.now();
+    this.begunAt = this.startTime;
     // Issue #20: Support path resolution relative to current working directory
     // When relativeToCwd is true, use process.cwd() instead of config.rootDir
     this.outputDir = this.options.relativeToCwd ? process.cwd() : config.rootDir;
@@ -606,6 +608,9 @@ class SmartReporter implements Reporter {
     // A run that stopped before a retry leaves attempts unsettled
     for (const r of this.results) this.settleAttemptEvidence(r);
 
+    // merge-reports calls onBegin after every test ran
+    const merged = this.results.some((r) => r.attempts?.some((a) => a.startTime !== undefined && a.startTime < this.begunAt));
+
     // Durations below are Date.now() - startTime. merge-reports calls onBegin at merge time,
     // so start the clock from the run's own duration instead. Playwright's duration is fractional;
     // round it so the history run id stays a whole number.
@@ -821,6 +826,7 @@ class SmartReporter implements Reporter {
       aiSuiteHealthSummary,
       coverage,
       shard: this.fullConfig?.shard ?? undefined,
+      run: { start: result.startTime?.getTime() ?? this.startTime, duration: result.duration, merged },
     };
 
     const reportData = buildReportData(reportInput);
@@ -867,6 +873,7 @@ class SmartReporter implements Reporter {
           this.outputDir,
           coverage,
           resolvedClusters,
+          reportData.efficiency,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {
