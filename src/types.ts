@@ -221,6 +221,7 @@ export interface TestHistoryEntry {
   // Phase 4: Causal failure timeline
   stepDurations?: Record<string, number>;  // test.step title -> duration (ms), the slow-step baseline
   clusterId?: string;  // the failure cluster of a failed test
+  retryWaste?: number;  // ms spent in the attempts Playwright retried; absent when it retried none
 }
 
 export interface RunSummary {
@@ -334,6 +335,10 @@ export interface AttemptData {
   duration: number;
   error?: string;
   steps: StepData[];
+  // Where and when the attempt ran (Playwright's TestResult); absent for a test that never started
+  workerIndex?: number;
+  parallelIndex?: number;
+  startTime?: number;  // epoch ms
   // Set on attempts before the final one of a flaky test; the final attempt's evidence is on the test itself.
   attachments?: Pick<AttachmentData, 'screenshots' | 'videos' | 'traces'>;
   tracePath?: string;

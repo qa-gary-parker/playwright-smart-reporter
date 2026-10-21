@@ -50,6 +50,7 @@ export interface ReportInput {
   aiSuiteHealthSummary?: string;
   // Phase 6: Code coverage is merged by the reporter before gates run, so it arrives ready-built.
   coverage?: ReportCoverage;
+  shard?: { current: number; total: number };
 }
 
 const COMPARISON_KEYS: ComparisonKey[] = ['newFailures', 'fixedTests', 'newTests', 'regressions', 'improvements', 'notInBaseline'];
@@ -130,6 +131,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
       ci: input.ciInfo,
       projectName: options.projectName,
       outputBasename: input.outputBasename ?? 'smart-report',
+      ...(input.shard && { shard: input.shard }),
     },
     config: {
       theme: options.theme,

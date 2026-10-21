@@ -54,6 +54,11 @@ export function computeRunStats(results: Array<Pick<TestResultData, 'status' | '
   };
 }
 
+/** ms spent in the attempts Playwright retried: every attempt but the last. */
+export function retryWasteOf(result: Pick<TestResultData, 'attempts'>): number {
+  return (result.attempts ?? []).slice(0, -1).reduce((sum, a) => sum + a.duration, 0);
+}
+
 const GRADES = ['F', 'D', 'C', 'B', 'A'] as const;
 
 /** The run's grade: its tests' grades averaged as F=1 to A=5, rounded. Undefined when no test has a grade. */

@@ -422,6 +422,31 @@ describe('flaky', () => {
   }, TIMEOUT);
 });
 
+describe('execution metadata', () => {
+  interface PwResult { retry: number; workerIndex: number; parallelIndex: number; startTime: string; duration: number }
+  interface PwSuite { suites?: PwSuite[]; specs?: Array<{ title: string; tests: Array<{ results: PwResult[] }> }> }
+  const pwAttempts = (out: string) => {
+    const walk = (s: PwSuite): Array<[string, number, number, number, number, number]> => [
+      ...(s.specs ?? []).flatMap((spec) => spec.tests.flatMap((t) => t.results.map((r) =>
+        [spec.title, r.retry, r.workerIndex, r.parallelIndex, Date.parse(r.startTime), r.duration] as [string, number, number, number, number, number]))),
+      ...(s.suites ?? []).flatMap(walk),
+    ];
+    return JSON.parse(fs.readFileSync(path.join(out, 'pw.json'), 'utf8')).suites.flatMap(walk).sort();
+  };
+
+  it('keeps the worker, worker slot and start of every attempt, and the time spent in retried attempts', () => {
+    const out = path.join(tmp, 'execution-metadata');
+    runSuite(out, {}, ['--grep', 'passes$|passes on retry|same title', '--workers=2', '--fully-parallel']);
+
+    const attempts = reportData(out).tests.flatMap((t) => (t.attempts ?? []).map((a) => [t.title, a.retry, a.workerIndex, a.parallelIndex, a.startTime, a.duration]));
+    expect(attempts.sort()).toEqual(pwAttempts(out));
+    expect([...new Set(attempts.map((a) => a[3]))].sort()).toEqual([0, 1]);
+    const retried = pwAttempts(out).filter(([title, retry]) => title === 'passes on retry' && retry === 0);
+    expect(history(out).tests[id('passes on retry')].map((e) => e.retryWaste)).toEqual([retried[0][5]]);
+    expect(history(out).tests[id('passes')].map((e) => e.retryWaste)).toEqual([undefined]);
+  }, TIMEOUT);
+});
+
 describe('JUnit export', () => {
   const junitFile = (out: string) => path.join(out, 'smart-report-junit.xml');
 

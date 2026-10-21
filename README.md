@@ -1627,7 +1627,7 @@ export default defineConfig({
 - A breached quality gate in the reporter options now fails the Playwright run (exit code `1`). In 2.x it was only logged.
 - New options are opt-in, except three that are on by default: `enableCausalTimeline`, `forecast`, and `ownership` (only when a CODEOWNERS file exists). Opt-in: `accessibility`, `exportCtrf`, `exportFailures`, and code coverage (import `test` from `playwright-smart-reporter/coverage`). `assetMode` defaults to `'auto'`.
 - From 4.0.0, AI analysis is off by default. A provider key in the environment no longer turns it on. Set `enableAIRecommendations: true` to turn it on. The `ai` options only choose the provider.
-- The history file gains `stepDurations` per test entry and `forecasts` per run.
+- The history file gains `stepDurations` and `retryWaste` (ms spent in attempts that were retried) per test entry, and `forecasts` per run.
 - `maxEmbeddedSize` has no effect. Traces are copied to `traces/` next to the report and are never embedded. The option is kept so existing configs still type-check.
 
 ## FAQ

@@ -504,7 +504,10 @@ class SmartReporter implements Reporter {
     }
 
     const existingResult = this.resultsMap.get(testId);
-    const attempt: AttemptData = { retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps };
+    const attempt: AttemptData = {
+      retry: result.retry, status: result.status, duration: result.duration, error: testData.error, steps,
+      ...(result.workerIndex >= 0 && { workerIndex: result.workerIndex, parallelIndex: result.parallelIndex, startTime: result.startTime.getTime() }),
+    };
     testData.attempts = [...(existingResult?.attempts ?? []), attempt].sort((a, b) => a.retry - b.retry);
 
     // Build Playwright-style prompt for AI analysis and Copy AI prompt (no binaries)
@@ -817,6 +820,7 @@ class SmartReporter implements Reporter {
       quarantineThreshold: this.options.quarantine?.threshold,
       aiSuiteHealthSummary,
       coverage,
+      shard: this.fullConfig?.shard ?? undefined,
     };
 
     const reportData = buildReportData(reportInput);

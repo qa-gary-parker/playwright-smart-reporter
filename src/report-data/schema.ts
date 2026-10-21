@@ -76,6 +76,7 @@ export interface ReportData {
     ci?: CIInfo;
     projectName?: string;
     outputBasename: string;
+    shard?: { current: number; total: number };  // Playwright's config.shard; absent unsharded and under merge-reports
   };
   config: {
     theme?: ThemeConfig;

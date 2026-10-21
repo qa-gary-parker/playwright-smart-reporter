@@ -128,6 +128,11 @@ describe('buildReportData', () => {
     expect(buildReportData(input([])).coverage).toBeUndefined();
   });
 
+  it('records the shard the run covered', () => {
+    expect(buildReportData(input([], { shard: { current: 2, total: 3 } })).meta.shard).toEqual({ current: 2, total: 3 });
+    expect('shard' in buildReportData(input([])).meta).toBe(false);
+  });
+
   it('adds the current run to the trend once', () => {
     const past = { runId: 'run-1', timestamp: '2026-01-01T00:00:00.000Z', total: 1, passed: 1, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 5, passRate: 100 };
     const data = buildReportData(input([FAILED, result({ testId: 'p1' })], { history: { runs: [], tests: {}, summaries: [past] } }), 3_000);

@@ -249,6 +249,21 @@ describe('HistoryCollector', () => {
       expect(history.tests['test-1'][0].retry).toBe(2);
     });
 
+    it('records the time spent in the attempts Playwright retried as retry waste', () => {
+      const collector = new HistoryCollector({}, outputDir);
+      collector.loadHistory();
+
+      const attempt = (retry: number, duration: number, status: TestResultData['status'] = 'failed') => ({ retry, status, duration, steps: [] });
+      collector.updateHistory([
+        createTestResult({ testId: 'test-1', retry: 2, duration: 50, attempts: [attempt(0, 1200), attempt(1, 300), attempt(2, 50, 'passed')] }),
+        createTestResult({ testId: 'test-2', attempts: [attempt(0, 1000, 'passed')] }),
+      ]);
+
+      const { tests } = collector.getHistory();
+      expect(tests['test-1'][0].retryWaste).toBe(1500);
+      expect('retryWaste' in tests['test-2'][0]).toBe(false);
+    });
+
     it('records test.step durations as the slow-step baseline', () => {
       const collector = new HistoryCollector({}, outputDir);
       collector.loadHistory();

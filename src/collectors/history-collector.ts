@@ -3,7 +3,7 @@ import * as path from 'path';
 import type { TestHistory, TestHistoryEntry, TestResultData, RunSummary, RunMetadata, SmartReporterOptions, RunSnapshotFile, TestResultSnapshot, HistoryRunFile } from '../types';
 import { detectCIInfo, isPassedTest, isSkippedTest, renderMarkdownLite } from '../utils';
 import { sanitizeFilename } from '../utils/sanitizers';
-import { buildRunSummary } from '../utils/run-stats';
+import { buildRunSummary, retryWasteOf } from '../utils/run-stats';
 import { readHistoryFile, readRunFiles, rebuildHistory, runsDirOf } from '../utils/history-merge';
 import { stepDurationsOf } from '../analyzers/causal-timeline';
 
@@ -131,16 +131,20 @@ export class HistoryCollector {
     const run: HistoryRunFile = {
       version: 1,
       summary: buildRunSummary(results, { ...this.currentRun, duration: Date.now() - this.startTime, ciInfo: detectCIInfo() }),
-      tests: Object.fromEntries(results.map((result): [string, TestHistoryEntry] => [result.testId, {
-        passed: isPassedTest(result),
-        duration: result.duration,
-        timestamp,
-        runId,
-        skipped: isSkippedTest(result),
-        retry: result.retry,
-        ...this.stepDurationsEntry(result),
-        ...(result.failureCluster && { clusterId: result.failureCluster.id }),
-      }])),
+      tests: Object.fromEntries(results.map((result): [string, TestHistoryEntry] => {
+        const retryWaste = retryWasteOf(result);
+        return [result.testId, {
+          passed: isPassedTest(result),
+          duration: result.duration,
+          timestamp,
+          runId,
+          skipped: isSkippedTest(result),
+          retry: result.retry,
+          ...this.stepDurationsEntry(result),
+          ...(result.failureCluster && { clusterId: result.failureCluster.id }),
+          ...(retryWaste > 0 && { retryWaste }),
+        }];
+      })),
       ...(forecasts && { forecasts }),
     };
 
