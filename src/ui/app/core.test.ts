@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportTest } from '../../report-data/schema';
-import { csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, suiteHealth, titlePath, trendStats } from './data';
+import { clusterLabel, csvCell, displayStatus, formatDuration, isFailing, outcomeCounts, suiteHealth, titlePath, trendStats } from './data';
 import { formatQuery, matchesQuery, parseQuery } from './filters';
 import { groupTests } from './grouping';
 import { QUEUES } from './queues';
@@ -119,6 +119,16 @@ describe('grouping', () => {
       ['(none)', ['l']],
       ['sign in', ['b']],
     ]);
+  });
+});
+
+describe('cluster labels', () => {
+  it('names a cluster New, Regressed, or Recurring with its runs, and titles a recurring one with its start', () => {
+    const since = '2026-10-12T12:00:00.000Z';
+    expect(clusterLabel({ status: 'new', runs: 1, since, trend: [1] })).toEqual({ text: 'New' });
+    expect(clusterLabel({ status: 'regressed', runs: 1, since, trend: [1, 0, 1] })).toEqual({ text: 'Regressed' });
+    expect(clusterLabel({ status: 'recurring', runs: 4, since, sinceCommit: 'a1b2c3d4', trend: [1, 1, 1, 1] })).toEqual({ text: 'Recurring, 4 runs', title: 'Since 12 Oct at a1b2c3d4' });
+    expect(clusterLabel({ status: 'recurring', runs: 2, since, trend: [1, 1] })).toEqual({ text: 'Recurring, 2 runs', title: 'Since 12 Oct' });
   });
 });
 

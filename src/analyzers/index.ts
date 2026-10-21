@@ -5,7 +5,7 @@
 export { FlakinessAnalyzer } from './flakiness-analyzer';
 export { PerformanceAnalyzer } from './performance-analyzer';
 export { RetryAnalyzer } from './retry-analyzer';
-export { FailureClusterer } from './failure-clusterer';
+export { FailureClusterer, trackClusters } from './failure-clusterer';
 export { StabilityScorer } from './stability-scorer';
 export { AIAnalyzer } from './ai-analyzer';
 export { forecastRun } from './flake-forecast';

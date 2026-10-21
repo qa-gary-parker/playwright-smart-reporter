@@ -37,6 +37,7 @@ export interface NotificationCondition {
   maxPassRate?: number;
   tags?: string[];
   stabilityGradeDrop?: boolean;
+  newClusters?: boolean;  // a failed test is in a cluster that no run in history had
 }
 
 export interface NotificationConfig {
@@ -219,6 +220,7 @@ export interface TestHistoryEntry {
 
   // Phase 4: Causal failure timeline
   stepDurations?: Record<string, number>;  // test.step title -> duration (ms), the slow-step baseline
+  clusterId?: string;  // the failure cluster of a failed test
 }
 
 export interface RunSummary {
@@ -435,6 +437,22 @@ export interface FailureCluster {
   count: number;              // Number of tests in this cluster
   tests: TestResultData[];
   aiSuggestion?: string;      // Single suggestion for the cluster
+  tracking?: ClusterTracking;
+}
+
+// How a cluster of this run relates to the runs in history. A cluster went away in a run when one of its tests passed and none failed with it.
+export interface ClusterTracking {
+  status: 'new' | 'recurring' | 'regressed'; // regressed: it went away in a run after it was last seen
+  runs: number;               // runs it failed in since it last went away, this run included; 1 unless recurring
+  since: string;              // start of the first of those runs
+  sinceCommit?: string;       // short commit of that run, when CI gave one
+  trend: number[];            // tests in the cluster per run in history, oldest first, this run last
+}
+
+// A cluster of the baseline run that went away this run
+export interface ResolvedCluster {
+  id: string;
+  testIds: string[];          // its tests in the baseline run that passed this run
 }
 
 // NEW: Stability Scoring

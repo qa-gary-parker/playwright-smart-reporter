@@ -262,7 +262,46 @@ describe('failure clustering', () => {
     ]);
     expect(first.map((c) => c.id)).toEqual([expect.stringMatching(/^[0-9a-f]{16}$/), expect.stringMatching(/^[0-9a-f]{16}$/), expect.stringMatching(/^[0-9a-f]{16}$/)]);
     expect(new Set(first.map((c) => c.id)).size).toBe(3);
-    expect(second).toEqual(first);
+    // Each run has its own history, so only the start of the run in tracking differs
+    const untracked = (clusters: ReportData['clusters']) => clusters.map(({ tracking: _tracking, ...c }) => c);
+    expect(untracked(second)).toEqual(untracked(first));
+  });
+
+  it('labels a cluster seen in run 1, gone in run 2 and back in run 3 Regressed, and lists the cluster that went away as resolved', () => {
+    const out = path.join(tmp, 'cluster-tracking');
+    const run = (broken: string, sha: string) => {
+      const { status } = runSuite(out, { exportJson: true }, ['--retries=0', '--grep', 'draft'], 'test', {
+        ACCEPTANCE_MATCH: 'cluster.fixtures.ts', BROKEN_DRAFTS: broken, GITHUB_ACTIONS: 'true', GITHUB_EVENT_PATH: '', GITHUB_SHA: sha.repeat(40),
+      });
+      expect(status).toBe(1);
+      const data = reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8'));
+      const json = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+      return { data, json, start: new Date(data.meta.startTime).toISOString() };
+    };
+    const notesTest = 'cluster.fixtures.ts::keeps the notes draft';
+    const titleTest = 'cluster.fixtures.ts::keeps the title draft';
+
+    const first = run('notes,title', 'a');
+    const second = run('title', 'b');
+    const third = run('notes', 'c');
+    const [notes, title] = first.data.clusters.map((c) => c.id);
+
+    expect(first.data.clusters.map((c) => [c.testIds, c.tracking])).toEqual([
+      [[notesTest], { status: 'new', runs: 1, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1] }],
+      [[titleTest], { status: 'new', runs: 1, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1] }],
+    ]);
+    expect(second.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[title, { status: 'recurring', runs: 2, since: first.start, sinceCommit: 'aaaaaaaa', trend: [1, 1] }]]);
+    expect(third.data.clusters.map((c) => [c.id, c.tracking])).toEqual([[notes, { status: 'regressed', runs: 1, since: third.start, sinceCommit: 'cccccccc', trend: [1, 0, 1] }]]);
+    expect(third.data.resolvedClusters).toEqual([{ id: title, testIds: [titleTest] }]);
+    expect([third.json.failureClusters.map((c: { tracking: unknown }) => c.tracking), third.json.resolvedClusters]).toEqual([
+      third.data.clusters.map((c) => c.tracking),
+      third.data.resolvedClusters,
+    ]);
+    const saved = JSON.parse(fs.readFileSync(path.join(out, 'test-history.json'), 'utf8')).tests;
+    expect([saved[notesTest].map((e: { clusterId?: string }) => e.clusterId), saved[titleTest].map((e: { clusterId?: string }) => e.clusterId)]).toEqual([
+      [notes, undefined, notes],
+      [title, title, undefined],
+    ]);
   });
 });
 

@@ -50,6 +50,7 @@ function evaluateConditions(conditions: NotificationCondition, ctx: Notification
     // A lower grade is a later letter: A < B < C < D < F.
     if (ctx.grade <= baselineGrade) return false;
   }
+  if (conditions.newClusters && !results.some(r => isFailedTest(r) && r.failureCluster?.tracking?.status === 'new')) return false;
   return true;
 }
 
@@ -97,7 +98,7 @@ export class NotificationManager {
       try {
         const owned = ownedBy(config);
         if (owned && !owned(test)) continue;
-        // Conditions see only this test, so minFailures above 1 and stabilityGradeDrop never pass
+        // Conditions see only this test, before clustering, so minFailures above 1, stabilityGradeDrop and newClusters never pass
         if (config.conditions && !evaluateConditions(config.conditions, buildContext([test], Date.now()), [test])) continue;
         const notifier = config.channel === 'slack' ? new SlackNotifier(config.config.webhookUrl) : new TeamsNotifier(config.config.webhookUrl);
         await notifier.sendMessage(message);

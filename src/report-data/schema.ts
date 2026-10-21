@@ -2,10 +2,12 @@ import type {
   A11ySummary,
   BrandingConfig,
   CIInfo,
+  ClusterTracking,
   FlakeForecast,
   ForecastSummary,
   QualityGateResult,
   QuarantineEntry,
+  ResolvedCluster,
   RunSnapshotFile,
   RunSummary,
   TestResultData,
@@ -28,6 +30,7 @@ export interface ReportCluster {
   errorType: string;
   testIds: string[];
   aiSuggestion?: string;
+  tracking?: ClusterTracking;
 }
 
 export interface ReportSummary {
@@ -84,6 +87,8 @@ export interface ReportData {
   summary: ReportSummary;
   tests: ReportTest[];
   clusters: ReportCluster[];
+  // Clustering on and a baseline run only
+  resolvedClusters?: ResolvedCluster[];
   trends: RunSummary[];
   comparison?: ReportComparison;
   historySnapshots?: Record<string, RunSnapshotFile>;

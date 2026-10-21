@@ -6,6 +6,8 @@ import type {
   SmartReporterOptions,
   RunComparison,
   FailureCluster,
+  ClusterTracking,
+  ResolvedCluster,
   A11yResult,
   CausalTimeline,
   QualityGateResult,
@@ -47,6 +49,7 @@ export interface JsonExportData {
   };
   tests: JsonTestEntry[];
   failureClusters?: JsonClusterEntry[];
+  resolvedClusters?: ResolvedCluster[];
   comparison?: RunComparison;
   history?: {
     runCount: number;
@@ -103,6 +106,7 @@ interface JsonClusterEntry {
   count: number;
   testIds: string[];
   aiSuggestion?: string;
+  tracking?: ClusterTracking;
 }
 
 export function exportJsonData(
@@ -117,6 +121,7 @@ export function exportJsonData(
   qualityGateResult?: QualityGateResult,
   rootDir?: string,
   coverage?: ReportCoverage,
+  resolvedClusters?: ResolvedCluster[],
 ): string {
   const baseDir = outputDir ?? (
     options.outputFile
@@ -167,6 +172,7 @@ export function exportJsonData(
     count: c.count,
     testIds: c.tests.map(t => t.testId),
     aiSuggestion: c.aiSuggestion,
+    tracking: c.tracking,
   }));
 
   const data: JsonExportData = {
@@ -189,6 +195,7 @@ export function exportJsonData(
     },
     tests,
     failureClusters: clusters,
+    resolvedClusters,
     comparison,
     history: {
       runCount: history.runs.length,

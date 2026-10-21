@@ -7,6 +7,7 @@ import type {
   FailureCluster,
   QualityGateResult,
   QuarantineEntry,
+  ResolvedCluster,
   RunComparison,
   RunSnapshotFile,
   RunSummary,
@@ -37,6 +38,7 @@ export interface ReportInput {
   comparison?: RunComparison;
   historyRunSnapshots?: Record<string, RunSnapshotFile>;
   failureClusters?: FailureCluster[];
+  resolvedClusters?: ResolvedCluster[];
   ciInfo?: CIInfo;
   outputBasename?: string;
   // The live results file relative to the report, which is where the Live view fetches it from.
@@ -96,7 +98,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
   const clusterOf = new Map<string, string>();
   const clusters = (input.failureClusters ?? []).map((c) => {
     for (const t of c.tests) clusterOf.set(t.testId, c.id);
-    return { id: c.id, errorType: c.errorType, testIds: c.tests.map((t) => t.testId), aiSuggestion: c.aiSuggestion };
+    return { id: c.id, errorType: c.errorType, testIds: c.tests.map((t) => t.testId), aiSuggestion: c.aiSuggestion, tracking: c.tracking };
   });
 
   const forecast = forecastRun(results, options.forecast);
@@ -154,6 +156,7 @@ export function buildReportData(input: ReportInput, now: number = Date.now()): R
     summary,
     tests,
     clusters,
+    resolvedClusters: input.resolvedClusters,
     trends: withCurrentRun(input, summary.duration),
     comparison: comparison && {
       baselineRun: comparison.baselineRun,

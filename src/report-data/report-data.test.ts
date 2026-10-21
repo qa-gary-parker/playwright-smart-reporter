@@ -63,6 +63,16 @@ describe('buildReportData', () => {
     expect(data.config.features.comparison).toBe(true);
   });
 
+  it('carries the tracking of each cluster and the clusters of the baseline run that went away', () => {
+    const tracking = { status: 'recurring' as const, runs: 2, since: '2026-10-01T12:00:00.000Z', sinceCommit: 'c1', trend: [1, 1] };
+    const data = buildReportData(input([FAILED], {
+      failureClusters: [{ id: 'c1', errorType: 'Timeout', count: 1, tests: [FAILED], tracking }],
+      resolvedClusters: [{ id: 'c0', testIds: ['p1'] }],
+    }));
+    expect(data.clusters).toEqual([{ id: 'c1', errorType: 'Timeout', testIds: ['f1'], tracking }]);
+    expect(data.resolvedClusters).toEqual([{ id: 'c0', testIds: ['p1'] }]);
+  });
+
   it('drops the circular cluster back-reference and embedded trace data', () => {
     const withCluster = { ...FAILED, traceData: 'data:application/zip;base64,AAAA' } as TestResultData;
     withCluster.failureCluster = { id: 'c1', errorType: 'x', count: 1, tests: [withCluster] };

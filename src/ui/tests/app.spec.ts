@@ -229,6 +229,20 @@ test('Most flaky lists the tests history classifies as flaky or unstable, with t
   await expect(panel.locator('.lines__value')).toHaveText(['99% of 11 runs', '99% of 11 runs', '64% of 11 runs', '45% of 11 runs']);
 });
 
+test('Failure clusters labels each cluster from history with its trend, and Resolved clusters lists the tests that recovered', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light'));
+  const clusters = page.locator('.panel', { has: page.getByRole('heading', { name: 'Failure clusters' }) });
+  await expect(clusters.locator('.signal')).toHaveText(['Recurring, 4 runs', 'New']);
+  await expect(clusters.locator('.signal').first()).toHaveAttribute('title', 'Since 6 Aug at a1b2c3d4');
+  expect(await clusters.locator('.spark').evaluateAll((sparks) => sparks.map((s) => s.getAttribute('aria-label')))).toEqual([
+    'Tests in this cluster per run: 0, 0, 0, 0, 0, 0, 8, 9, 10, 11',
+    'Tests in this cluster per run: 0, 0, 0, 0, 0, 0, 0, 0, 0, 3',
+  ]);
+  const resolved = page.locator('.panel', { has: page.getByRole('heading', { name: 'Resolved clusters' }) });
+  await expect(resolved.locator('.lines__label')).toHaveText(['homepage loads and displays heading', 'homepage loads successfully']);
+  await expect(resolved.locator('.lines__value')).toHaveText(['cluster c0ffee01', 'cluster c0ffee01']);
+});
+
 test('History shows the flakiness interval, or insufficient history below 5 runs', async ({ page }) => {
   const flakiness = page.locator('.history .statline > span', { hasText: 'Flakiness' });
   await page.goto(url('screen=flaky&mode=light'));

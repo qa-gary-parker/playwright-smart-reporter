@@ -27,6 +27,8 @@ import type {
   QuarantineFile,
   HistoryRunFile,
   QuarantineEvent,
+  FailureCluster,
+  ResolvedCluster,
 } from './types';
 
 // ============================================================================
@@ -54,6 +56,7 @@ import {
   StabilityScorer,
   AIAnalyzer,
   forecastRun,
+  trackClusters,
 } from './analyzers';
 
 // ============================================================================
@@ -610,8 +613,21 @@ class SmartReporter implements Reporter {
     // The file is truncated automatically on the next run via LiveWriter.start().
     this.liveWriter.complete(Date.now() - this.startTime);
 
-    // Get failure clusters
-    const failureClusters = this.options.enableFailureClustering === false ? [] : this.failureClusterer.clusterFailures(this.results);
+    // Get failure clusters, and track them against the runs before this one (history saves this run last)
+    let failureClusters: FailureCluster[] = [];
+    let resolvedClusters: ResolvedCluster[] | undefined;
+    if (this.options.enableFailureClustering !== false) {
+      failureClusters = this.failureClusterer.clusterFailures(this.results);
+      resolvedClusters = trackClusters(
+        failureClusters,
+        this.results,
+        this.historyCollector.getHistory(),
+        { ...this.historyCollector.getCurrentRun(), commit: this.ciInfo?.commit },
+        this.historyCollector.getBaselineRun()?.runId,
+      );
+      // History saves each test's cluster id, and notifications read the tracking
+      this.failureClusterer.assignClusters(this.results, failureClusters);
+    }
 
     // Run AI analysis on failures and clusters if enabled
     const options = this.historyCollector.getOptions();
@@ -788,6 +804,7 @@ class SmartReporter implements Reporter {
       comparison,
       historyRunSnapshots,
       failureClusters,
+      resolvedClusters,
       ciInfo: this.ciInfo,
       outputBasename: path.basename(outputPath, '.html'),
       liveFile: this.options.live?.enabled ? path.relative(path.dirname(outputPath), path.resolve(this.liveWriter.getOutputPath())).split(path.sep).join('/') : undefined,
@@ -842,6 +859,7 @@ class SmartReporter implements Reporter {
           qualityGateResult,
           this.outputDir,
           coverage,
+          resolvedClusters,
         );
         console.log(`   JSON data: ${jsonPath}`);
       } catch (err) {

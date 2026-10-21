@@ -255,6 +255,18 @@ describe('json-exporter', () => {
       expect(written.failureClusters[0].aiSuggestion).toBe('Increase timeout');
     });
 
+    it('exports the tracking of each cluster and the clusters of the baseline run that went away', () => {
+      const clusterTest = createTestResult({ testId: 'fail-1', status: 'failed' });
+      const tracking = { status: 'regressed' as const, runs: 1, since: '2026-10-03T12:00:00.000Z', trend: [1, 0, 1] };
+      const clusters: FailureCluster[] = [{ id: 'cluster-1', errorType: 'TimeoutError', count: 1, tests: [clusterTest], tracking }];
+
+      exportJsonData([clusterTest], createTestHistory(), Date.now(), {}, undefined, clusters, undefined, undefined, undefined, undefined, undefined, [{ id: 'cluster-0', testIds: ['pass-1'] }]);
+
+      const written = JSON.parse(mockFs.writeFileSync.mock.calls[0][1] as string);
+      expect(written.failureClusters[0].tracking).toEqual(tracking);
+      expect(written.resolvedClusters).toEqual([{ id: 'cluster-0', testIds: ['pass-1'] }]);
+    });
+
     it('comparison data is included when present', () => {
       const comparison: RunComparison = {
         baselineRun: createRunSummary({ runId: 'baseline', passRate: 70 }),

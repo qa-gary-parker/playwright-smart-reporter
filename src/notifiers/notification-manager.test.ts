@@ -3,7 +3,7 @@ import { NotificationManager } from './notification-manager';
 import { SlackNotifier } from './slack-notifier';
 import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
-import type { TestResultData, NotificationConfig, QuarantineEvent, RunComparison, RunSummary, StabilityScore } from '../types';
+import type { TestResultData, NotificationConfig, QuarantineEvent, RunComparison, RunSummary, StabilityScore, ClusterTracking } from '../types';
 
 const NOW = 1_700_000_000_000;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -176,6 +176,25 @@ describe('NotificationManager', () => {
       await dropOrAll().notify([createTestResult({ stabilityScore: score('D') })], NOW);
 
       expect(urls()).toEqual(['https://hooks.slack.com/all']);
+    });
+  });
+
+  describe('newClusters', () => {
+    const inCluster = (title: string, status: ClusterTracking['status'], owners?: string[]) => failing({
+      testId: title, title, owners, failureCluster: { id: title, errorType: title, count: 1, tests: [], tracking: { status, runs: 1, since: '', trend: [1] } },
+    });
+
+    it('notifies only when a failed test is in a cluster that no run in history had, among the owned tests with owners', async () => {
+      const manager = new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/new' }, conditions: { newClusters: true }, template: '{{failedTests}}' },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks.slack.com/pay' }, conditions: { newClusters: true }, template: '{{failedTests}}', owners: ['@pay'] },
+      ]);
+
+      await manager.notify([inCluster('recurs', 'recurring'), inCluster('came back', 'regressed')], NOW);
+      await manager.notify([inCluster('recurs', 'recurring', ['@pay']), inCluster('first time', 'new', ['@search'])], NOW);
+      await manager.notify([failing({ title: 'not clustered' })], NOW);
+
+      expect(requests().map(r => [r.url, r.body.text])).toEqual([['https://hooks.slack.com/new', 'recurs, first time']]);
     });
   });
 

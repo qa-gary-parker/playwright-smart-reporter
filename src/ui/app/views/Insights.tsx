@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { Count, MiniBar, Sparkline, StatusGlyph } from '../../components';
-import { displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
+import { clusterLabel, displayStatus, formatDate, formatDuration, formatPassRate, isFailing, outcomeCounts, plural, suiteHealth, type ReportTest } from '../data';
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
@@ -48,6 +48,8 @@ export function Insights() {
   const notInBaseline = new Set(d.comparison?.changes.notInBaseline);
   const absent = failing.filter((t) => notInBaseline.has(t.testId)).length;
   const failedSub = [newFailures ? `${newFailures} new` : '', absent ? `${absent} not in baseline` : ''].filter(Boolean).join(', ') || 'none new';
+  // Each recovered test -> the baseline cluster it was in
+  const resolvedIn = new Map((d.resolvedClusters ?? []).flatMap((c) => c.testIds.map((id) => [id, c.id] as const)));
 
   return (
     <div class="page">
@@ -134,21 +136,35 @@ export function Insights() {
         <Panel title="Failure clusters" meta={d.clusters.length ? plural(d.clusters.length, 'cluster') : undefined}>
           {d.clusters.length ? (
             <ul class="lines">
-              {d.clusters.map((c) => (
-                <li class="lines__item">
-                  <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
-                    {c.errorType}
-                  </a>
-                  <span class="lines__value">
-                    <Count status="failed" value={c.testIds.length} label="" />
-                  </span>
-                </li>
-              ))}
+              {d.clusters.map((c) => {
+                const label = c.tracking && clusterLabel(c.tracking);
+                return (
+                  <li class="lines__item">
+                    <a class="lines__label mono" href={formatRoute({ view: 'queue', queue: 'failures', q: '', group: 'cluster' })}>
+                      {c.errorType}
+                    </a>
+                    {label && (
+                      <span class="signal" title={label.title}>
+                        {label.text}
+                      </span>
+                    )}
+                    {c.tracking && <Sparkline label={`Tests in this cluster per run: ${c.tracking.trend.join(', ')}`} values={c.tracking.trend} width={48} height={16} />}
+                    <span class="lines__value">
+                      <Count status="failed" value={c.testIds.length} label="" />
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p class="panel__empty">No failures to cluster.</p>
           )}
         </Panel>
+        {d.resolvedClusters && (
+          <Panel title="Resolved clusters" meta={d.resolvedClusters.length ? plural(d.resolvedClusters.length, 'cluster') : undefined}>
+            <TestLines tests={ids([...resolvedIn.keys()])} value={(t) => `cluster ${resolvedIn.get(t.testId)!.slice(0, 8)}`} />
+          </Panel>
+        )}
         {d.forecastSummary && (
           <Panel title="At risk" meta={`passing, trending unstable`}>
             <TestLines

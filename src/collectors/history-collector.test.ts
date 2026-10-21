@@ -280,6 +280,17 @@ describe('HistoryCollector', () => {
       expect('stepDurations' in collector.getHistory().tests['test-1'][0]).toBe(false);
     });
 
+    it('saves the cluster id of a failed test that is in a cluster', () => {
+      const collector = runIn(outputDir, {}, [
+        createTestResult({ testId: 'test-1', status: 'failed', failureCluster: { id: '0123456789abcdef', errorType: 'x', count: 1, tests: [] } }),
+        createTestResult({ testId: 'test-2', status: 'passed' }),
+      ]);
+
+      const tests = collector.getHistory().tests;
+      expect(tests['test-1'][0].clusterId).toBe('0123456789abcdef');
+      expect('clusterId' in tests['test-2'][0]).toBe(false);
+    });
+
     it('marks skipped tests in history', () => {
       const collector = new HistoryCollector({}, outputDir);
       collector.loadHistory();

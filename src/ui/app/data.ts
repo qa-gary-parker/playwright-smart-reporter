@@ -1,4 +1,5 @@
 import type { ReportData, ReportTest } from '../../report-data/schema';
+import type { ClusterTracking } from '../../types';
 import { isFailedTest } from '../../utils/flakiness';
 import { computeRunStats } from '../../utils/run-stats';
 import type { TestStatus } from '../components';
@@ -63,6 +64,12 @@ export function suiteHealth(s: { total: number; passRate: number | null; flaky: 
 
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+export function clusterLabel(t: ClusterTracking): { text: string; title?: string } {
+  if (t.status === 'new') return { text: 'New' };
+  if (t.status === 'regressed') return { text: 'Regressed' };
+  return { text: `Recurring, ${plural(t.runs, 'run')}`, title: `Since ${formatDate(t.since)}${t.sinceCommit ? ` at ${t.sinceCommit}` : ''}` };
 }
 
 // Quote separators and line breaks; prefix formula characters so spreadsheets show them as text.

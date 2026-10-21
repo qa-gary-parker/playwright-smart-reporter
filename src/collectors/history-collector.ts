@@ -139,6 +139,7 @@ export class HistoryCollector {
         skipped: isSkippedTest(result),
         retry: result.retry,
         ...this.stepDurationsEntry(result),
+        ...(result.failureCluster && { clusterId: result.failureCluster.id }),
       }])),
       ...(forecasts && { forecasts }),
     };

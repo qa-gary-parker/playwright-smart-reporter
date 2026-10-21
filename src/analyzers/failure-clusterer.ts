@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
-import type { TestResultData, FailureCluster } from '../types';
+import type { TestResultData, FailureCluster, ClusterTracking, ResolvedCluster, TestHistory } from '../types';
 import { parseError, type StackFrame } from '../utils/error-stack';
+import { isPassedTest } from '../utils/flakiness';
 import { stripAnsiCodes, truncate } from '../utils/sanitizers';
 
 export interface FailureFingerprint {
@@ -84,6 +85,77 @@ export function fingerprintFailure(test: Pick<TestResultData, 'error' | 'errorLo
 }
 
 /**
+ * Sets the tracking of each cluster from the cluster ids that history saved, and returns the clusters of the
+ * baseline run that went away this run (undefined without a baseline run).
+ */
+export function trackClusters(
+  clusters: FailureCluster[],
+  results: TestResultData[],
+  history: TestHistory,
+  current: { runId: string; timestamp: string; commit?: string },
+  baselineRunId?: string,
+): ResolvedCluster[] | undefined {
+  // An earlier attempt of this run is replaced by this one
+  const runs = (history.summaries ?? []).filter((s) => s.runId !== current.runId);
+  // runId -> cluster id -> tests that failed with it, and runId -> tests that passed
+  const failed = new Map<string, Map<string, string[]>>();
+  const passed = new Map<string, Set<string>>();
+  for (const [testId, entries] of Object.entries(history.tests)) {
+    for (const e of entries) {
+      if (!e.runId) continue;
+      if (e.clusterId) {
+        const byCluster = failed.get(e.runId) ?? new Map<string, string[]>();
+        byCluster.set(e.clusterId, [...(byCluster.get(e.clusterId) ?? []), testId]);
+        failed.set(e.runId, byCluster);
+      } else if (e.passed && !e.skipped) {
+        passed.set(e.runId, (passed.get(e.runId) ?? new Set()).add(testId));
+      }
+    }
+  }
+
+  for (const cluster of clusters) {
+    const testsIn = runs.map((r) => failed.get(r.runId)?.get(cluster.id) ?? []);
+    const tests = new Set([...cluster.tests.map((t) => t.testId), ...testsIn.flat()]);
+    let status: ClusterTracking['status'] = 'new';
+    let start = runs.length;
+    let wentAway = false;
+    // Newest run first. A run where none of its tests ran, or that saved no cluster ids, neither counts nor ends the streak.
+    for (let i = runs.length - 1; i >= 0; i--) {
+      if (testsIn[i].length > 0) {
+        if (wentAway) {
+          status = 'regressed';
+          break;
+        }
+        status = 'recurring';
+        start = i;
+      } else if ([...tests].some((t) => passed.get(runs[i].runId)?.has(t))) {
+        if (status === 'recurring') break;
+        wentAway = true;
+      }
+    }
+    const first = runs[start];
+    const sinceCommit = first ? first.ciInfo?.commit : current.commit;
+    cluster.tracking = {
+      status,
+      runs: testsIn.slice(start).filter((t) => t.length > 0).length + 1,
+      since: first ? first.timestamp : current.timestamp,
+      ...(sinceCommit && { sinceCommit }),
+      trend: [...testsIn.map((t) => t.length), cluster.count],
+    };
+  }
+
+  if (!baselineRunId) return undefined;
+  const now = new Set(clusters.map((c) => c.id));
+  const passedNow = new Set(results.filter(isPassedTest).map((r) => r.testId));
+  const resolved: ResolvedCluster[] = [];
+  for (const [id, testIds] of failed.get(baselineRunId) ?? []) {
+    const recovered = testIds.filter((t) => passedNow.has(t));
+    if (!now.has(id) && recovered.length > 0) resolved.push({ id, testIds: recovered });
+  }
+  return resolved;
+}
+
+/**
  * Clusters similar test failures together for better analysis and reporting
  */
 export class FailureClusterer {
@@ -142,6 +214,7 @@ export class FailureClusterer {
           count: cluster.count,
           tests: [], // Don't include full test array to avoid circular refs
           aiSuggestion: cluster.aiSuggestion,
+          tracking: cluster.tracking,
         };
       }
     }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { FailureClusterer, fingerprintFailure } from './failure-clusterer';
-import type { TestResultData, FailureCluster } from '../types';
+import { FailureClusterer, fingerprintFailure, trackClusters } from './failure-clusterer';
+import type { TestResultData, FailureCluster, RunSummary, TestHistory, TestHistoryEntry } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
   return {
@@ -359,6 +359,16 @@ describe('FailureClusterer', () => {
 
       expect(results[0].failureCluster?.aiSuggestion).toBe('Consider increasing timeout');
     });
+
+    it('copies the tracking of the cluster to its tests', () => {
+      const results = [createTestResult({ testId: 'test-1', status: 'failed', error: 'TimeoutError: Test' })];
+      const clusters = clusterer.clusterFailures(results);
+      clusters[0].tracking = { status: 'new', runs: 1, since: '2026-10-09T12:00:00.000Z', trend: [1] };
+
+      clusterer.assignClusters(results, clusters);
+
+      expect(results[0].failureCluster?.tracking).toEqual({ status: 'new', runs: 1, since: '2026-10-09T12:00:00.000Z', trend: [1] });
+    });
   });
 
   describe('getLargestClusters', () => {
@@ -482,5 +492,88 @@ describe('FailureClusterer', () => {
 
       expect(clusters).toEqual([]);
     });
+  });
+});
+
+describe('trackClusters', () => {
+  const at = (n: number) => `2026-10-0${n}T12:00:00.000Z`;
+  const summary = (n: number): RunSummary => ({
+    runId: `run-${n}`, timestamp: at(n), total: 1, passed: 0, failed: 0, skipped: 0, flaky: 0, slow: 0, duration: 1, passRate: null,
+    ciInfo: { provider: 'github', commit: `c${n}` },
+  });
+  const current = { runId: 'run-9', timestamp: at(9), commit: 'c9' };
+
+  // testId -> what it did in runs 1, 2, ...: failed with that cluster id, 'pass', 'skip', 'fail' (no cluster id saved), or null (not run)
+  function historyOf(tests: Record<string, Array<string | null>>): TestHistory {
+    const runCount = Math.max(...Object.values(tests).map((v) => v.length));
+    const entry = (n: number, v: string): TestHistoryEntry => ({
+      passed: v === 'pass',
+      skipped: v === 'skip',
+      duration: 1,
+      timestamp: at(n),
+      runId: `run-${n}`,
+      ...(!['pass', 'skip', 'fail'].includes(v) && { clusterId: v }),
+    });
+    return {
+      runs: [],
+      summaries: Array.from({ length: runCount }, (_, i) => summary(i + 1)),
+      tests: Object.fromEntries(Object.entries(tests).map(([id, vs]) => [id, vs.flatMap((v, i) => (v === null ? [] : [entry(i + 1, v)]))])),
+    };
+  }
+  const cluster = (id: string, ...testIds: string[]): FailureCluster => ({
+    id, errorType: id, count: testIds.length, tests: testIds.map((testId) => createTestResult({ testId, status: 'failed', outcome: 'unexpected' })),
+  });
+
+  it('labels a cluster seen in run 1, gone in run 2 and back in run 3 Regressed', () => {
+    const clusters = [cluster('A', 'a')];
+
+    trackClusters(clusters, clusters[0].tests, historyOf({ a: ['A', 'pass'] }), current);
+
+    expect(clusters[0].tracking).toEqual({ status: 'regressed', runs: 1, since: at(9), sinceCommit: 'c9', trend: [1, 0, 1] });
+  });
+
+  it('labels a cluster no run had New, and one in the runs before Recurring from the run after it last went away', () => {
+    const clusters = [cluster('A', 'a'), cluster('B', 'b')];
+
+    trackClusters(clusters, [], historyOf({ a: ['A', 'pass', 'A', 'A'], b: ['pass', 'pass', 'pass', 'pass'] }), current);
+
+    expect(clusters.map((c) => c.tracking)).toEqual([
+      { status: 'recurring', runs: 3, since: at(3), sinceCommit: 'c3', trend: [1, 0, 1, 1, 1] },
+      { status: 'new', runs: 1, since: at(9), sinceCommit: 'c9', trend: [0, 0, 0, 0, 1] },
+    ]);
+  });
+
+  it('counts a run as gone only when a test the cluster had passed and none failed with it', () => {
+    // Run 2: a did not run. Run 3: a skipped. Run 4: a failed with no cluster id saved (before 4.0.0, or clustering off).
+    // Run 5: b, which was in the cluster in run 1, passed while a still failed with it.
+    const clusters = [cluster('A', 'a')];
+
+    trackClusters(clusters, [], historyOf({ a: ['A', null, 'skip', 'fail', 'A'], b: ['A', null, null, null, 'pass'] }), current);
+
+    expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 3, since: at(1), sinceCommit: 'c1', trend: [2, 0, 0, 0, 1, 1] });
+  });
+
+  it('leaves out an earlier attempt of this run, which this run replaces', () => {
+    const clusters = [cluster('A', 'a')];
+
+    trackClusters(clusters, [], historyOf({ a: ['A', 'pass'] }), { runId: 'run-2', timestamp: at(2) });
+
+    expect(clusters[0].tracking).toEqual({ status: 'recurring', runs: 2, since: at(1), sinceCommit: 'c1', trend: [1, 1] });
+  });
+
+  it('returns the clusters of the baseline run that went away, with their tests that passed this run', () => {
+    const history = historyOf({ a: ['A', 'A'], b: [null, 'A'], c: [null, 'B'], d: [null, 'C'], e: [null, 'D'] });
+    const results = [
+      createTestResult({ testId: 'a', status: 'passed', outcome: 'expected' }),
+      createTestResult({ testId: 'b', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: 'c', status: 'failed', outcome: 'unexpected' }),
+      createTestResult({ testId: 'd', status: 'skipped', outcome: 'skipped' }),
+      createTestResult({ testId: 'e', status: 'failed', outcome: 'unexpected' }),
+    ];
+    // B still fails, C did not run, and D's test now fails with another cluster
+    const clusters = [cluster('B', 'c'), cluster('E', 'e')];
+
+    expect(trackClusters(clusters, results, history, current, 'run-2')).toEqual([{ id: 'A', testIds: ['a'] }]);
+    expect(trackClusters(clusters, results, history, current)).toBeUndefined();
   });
 });

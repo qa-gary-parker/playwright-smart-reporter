@@ -185,7 +185,7 @@ Insights is the landing view and holds the run metrics:
 - A stats row: failed (with the number of new failures and of failures that did not run in the baseline run; it opens Failures), pass rate, duration, tests, flaky, and suite health grade, with sparklines over recent runs.
 - An outcome bar: passed, failed, flaky, skipped.
 - The pass rate is the passed tests out of the tests that ran. Skipped tests are left out, so a run with no failures shows 100%. When every test was skipped, the pass rate is `n/a` (`null` in the JSON export and history) and there is no health grade. The report, history, JSON export, PDF, gates and notifications use this same pass rate.
-- Panels: AI summary, Quality gate, Failure clusters, At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
+- Panels: AI summary, Quality gate, Failure clusters (each with its New, Recurring or Regressed label and a trend), Resolved clusters (when there is a baseline run), At risk (flake forecast), Coverage (the five least covered files, when coverage was collected), Regressions, Slowest, Most flaky, Fixed, New tests, Quarantine, and Owners (when ownership is on).
 
 ### History
 
@@ -274,6 +274,28 @@ So two timeouts on different locators give two clusters, and one assertion that 
 The cluster label is the matcher or the masked first message line, then the locator and the location of the first test in the cluster. The location is Playwright's error location, else the line of the test file in the stack, else the test file. For example: `toBeVisible on getByRole('button', { name: 'Save' }) at pages/checkout.page.ts:42`.
 
 The cluster id is the first 16 hex characters of a SHA-256 of the fingerprint. The same failure gets the same id in every run and on every machine. Adding lines above a failure does not change its id.
+
+#### Clusters across runs
+
+History saves the cluster id of each failed test. The reporter compares each cluster with the runs in history:
+
+- **New:** no run in history has the cluster.
+- **Recurring, N runs:** the cluster failed in the runs before this one. N counts the runs since the cluster last went away, this run included. The label's tooltip gives the start of the first of those runs, and its commit when CI gives one.
+- **Regressed:** the cluster went away in an earlier run and came back in this run.
+
+A cluster went away in a run when one of its tests passed and no test failed with it. A run where none of its tests ran does not count. Runs saved before 4.0.0 have no cluster ids, so the first run after an upgrade labels every cluster New.
+
+Each cluster also has a trend: the number of its tests in each run in history, then this run. **Resolved clusters** lists the clusters of the baseline run that went away, with their tests that passed in this run. The JSON export has the same data in `failureClusters[].tracking` and `resolvedClusters`.
+
+To send a notification only when a run has a new cluster, add the `newClusters` condition:
+
+```ts
+notifications: [
+  { channel: 'slack', config: { webhookUrl: process.env.SLACK_WEBHOOK! }, conditions: { newClusters: true } },
+]
+```
+
+The live first-failure notification runs before clustering, so `newClusters` never sends it.
 
 ### Causal Failure Timeline
 
@@ -1200,7 +1222,7 @@ All `expect()` assertion steps (top-level and nested) are shown by default and a
 
 Each run saves two things beside `historyFile`:
 
-- **A run file** in `test-history.runs/`: the run's summary, the result of each test, and the forecast risks. The name is `<runId>.json`, or `<runId>.shard-<i>-of-<n>.json` for a shard. The reporter writes each run file once. A run with the same `runId` and shard replaces it, so a CI re-run replaces the earlier attempt.
+- **A run file** in `test-history.runs/`: the run's summary, the result of each test (with the cluster id of a failure), and the forecast risks. The name is `<runId>.json`, or `<runId>.shard-<i>-of-<n>.json` for a shard. The reporter writes each run file once. A run with the same `runId` and shard replaces it, so a CI re-run replaces the earlier attempt.
 - **The index**, `test-history.json`: the last `maxHistoryRuns` runs, rebuilt from the index and the run files. It is complete on its own. Caches, `merge-history` and the `digest` command need only this file.
 
 How the reporter uses them:

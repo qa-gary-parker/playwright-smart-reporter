@@ -22,6 +22,18 @@ if (screen === 'green') {
     }
   }
   data.clusters = [];
+} else {
+  // Cluster tracking as history gives it: the text cluster is new, the other failed in the last 4 runs,
+  // and a cluster of the baseline run went away.
+  const runs = data.trends;
+  for (const c of data.clusters) {
+    const n = c.testIds.length;
+    c.tracking = c === textCluster
+      ? { status: 'new', runs: 1, since: runs[runs.length - 1].timestamp, trend: runs.map((_, i) => (i === runs.length - 1 ? n : 0)) }
+      : { status: 'recurring', runs: 4, since: runs[runs.length - 4].timestamp, sinceCommit: 'a1b2c3d4', trend: runs.map((_, i) => (i < runs.length - 4 ? 0 : n - (runs.length - 1 - i))) };
+  }
+  const recovered = data.tests.filter((t) => t.status === 'passed' && t.outcome === 'expected').slice(0, 2);
+  data.resolvedClusters = [{ id: 'c0ffee0123456789', testIds: recovered.map((t) => t.testId) }];
 }
 
 // ?off=gallery,trends turns those features off, as the reporter options would.
