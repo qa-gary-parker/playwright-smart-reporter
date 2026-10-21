@@ -67,10 +67,11 @@ import { exportJunitXml } from './generators/junit-exporter';
 import { exportCtrfReport } from './generators/ctrf-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
+import { firstFailureMessage } from './notifiers/notification-manager';
 import { QualityGateEvaluator, formatGateReport } from './gates';
 import { QuarantineGenerator } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
-import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFlakyTest } from './utils';
+import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest } from './utils';
 import { buildRunSummary, computeRunStats } from './utils/run-stats';
 import { buildPlaywrightStyleAiPrompt } from './ai/prompt-builder';
 import { readTrace, type TraceContents } from './collectors/trace-reader';
@@ -524,23 +525,21 @@ class SmartReporter implements Reporter {
       outcome,
     });
 
-    // Live: send notification on first failure
-    if (
-      this.options.live?.notifyOnFirstFailure &&
-      !this.liveFirstFailureSent &&
-      (result.status === 'failed' || result.status === 'timedOut')
-    ) {
+    // Live: notify on the first test that fails for good. An attempt Playwright will retry may still pass,
+    // and a test.fail() test that failed is not a failure.
+    if (this.options.live?.notifyOnFirstFailure && !this.liveFirstFailureSent && !mayRetry && isFailedTest(testData)) {
       this.liveFirstFailureSent = true;
-      const msg = `First failure detected: "${test.title}" in ${file}`;
-      if (this.options.slackWebhook) {
-        this.slackNotifier.sendMessage(msg).catch(() => {});
-      }
-      if (this.options.teamsWebhook) {
-        this.teamsNotifier.sendMessage(msg).catch(() => {});
-      }
+      // As at the end of the run, notifications take precedence over the legacy webhooks
       if (this.notificationManager) {
-        const failureResult: TestResultData[] = [testData];
-        this.notificationManager.notify(failureResult, this.startTime).catch(() => {});
+        this.notificationManager.notifyFirstFailure(testData).catch(() => {});
+      } else {
+        const msg = firstFailureMessage(testData);
+        if (this.options.slackWebhook) {
+          this.slackNotifier.sendMessage(msg).catch(() => {});
+        }
+        if (this.options.teamsWebhook) {
+          this.teamsNotifier.sendMessage(msg).catch(() => {});
+        }
       }
     }
   }

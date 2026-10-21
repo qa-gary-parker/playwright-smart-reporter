@@ -66,11 +66,39 @@ function renderTemplate(template: string, ctx: NotificationContext, escape: (val
     .replace(/\{\{failedTests\}\}/g, () => escape(ctx.failedTests));
 }
 
+function ownedBy(config: NotificationConfig): ((test: TestResultData) => boolean) | undefined {
+  if (!config.owners?.length) return undefined;
+  const owners = new Set(config.owners.map(o => o.toLowerCase()));
+  return test => !!test.owners?.some(o => owners.has(o.toLowerCase()));
+}
+
+export function firstFailureMessage(test: Pick<TestResultData, 'title' | 'file'>): string {
+  return `First failure detected: "${test.title}" in ${test.file}`;
+}
+
 export class NotificationManager {
   private configs: NotificationConfig[];
 
   constructor(configs: NotificationConfig[]) {
     this.configs = configs;
+  }
+
+  /** Sends firstFailureMessage to the Slack and Teams channels that this failure routes to. */
+  async notifyFirstFailure(test: TestResultData): Promise<void> {
+    const message = firstFailureMessage(test);
+    for (const config of this.configs) {
+      if (config.channel !== 'slack' && config.channel !== 'teams') continue;
+      try {
+        const owned = ownedBy(config);
+        if (owned && !owned(test)) continue;
+        // Conditions see only this test, so minFailures above 1 and stabilityGradeDrop never pass
+        if (config.conditions && !evaluateConditions(config.conditions, buildContext([test], Date.now()), [test])) continue;
+        const notifier = config.channel === 'slack' ? new SlackNotifier(config.config.webhookUrl) : new TeamsNotifier(config.config.webhookUrl);
+        await notifier.sendMessage(message);
+      } catch (err) {
+        console.error(`Failed to send ${config.channel} notification: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   async notify(results: TestResultData[], startTime: number, comparison?: RunComparison): Promise<void> {
@@ -79,12 +107,12 @@ export class NotificationManager {
     for (const config of this.configs) {
       try {
         // Owner routing: scope counts, conditions and the failure list to tests these owners own
-        const owners = config.owners?.length ? new Set(config.owners.map(o => o.toLowerCase())) : undefined;
-        const scoped = owners ? results.filter(r => r.owners?.some(o => owners.has(o.toLowerCase()))) : results;
-        if (owners && !scoped.some(isFailedTest)) {
+        const owned = ownedBy(config);
+        const scoped = owned ? results.filter(owned) : results;
+        if (owned && !scoped.some(isFailedTest)) {
           continue;
         }
-        const ctx = owners ? buildContext(scoped, startTime) : runCtx;
+        const ctx = owned ? buildContext(scoped, startTime) : runCtx;
 
         // Evaluate conditions
         if (config.conditions && !evaluateConditions(config.conditions, ctx, scoped, comparison)) {
@@ -95,7 +123,7 @@ export class NotificationManager {
         const message = config.template
           ? renderTemplate(config.template, ctx)
           : `Test Run: ${ctx.passed}/${ctx.total} passed (${formatPassRate(ctx.passRate)}) — ${ctx.failed} failures` +
-            (owners ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
+            (owned ? ` owned by ${config.owners!.join(', ')}: ${ctx.failedTests}` : '');
 
         // Dispatch to channel
         switch (config.channel) {
