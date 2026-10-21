@@ -194,7 +194,7 @@ Insights is the landing view and holds the run metrics:
 
 - **Trends:** bar charts of pass rate, duration, flaky tests, and slow tests per recorded run, including the current run, which is highlighted. A line shows the three-run average, and a dot marks a run more than two standard deviations from the mean. With `enableHistoryDrilldown: true`, click a bar to open that run read only.
 - **Reliability:** a heatmap of test against run, coloured by outcome. It lists up to 100 tests that did not pass in at least one recorded run, most unstable first.
-- **Compare:** pass rate, duration, test count, and flaky count against the baseline run, then new failures, performance regressions, fixed tests, performance improvements, new tests, and tests not in the baseline run. The baseline is the previous run, or `baselineRunId`. Each test is compared with its result in that run only. A test that ran in an earlier run but not in the baseline run (for example after a `--grep` or `--shard` run) is listed as not in the baseline run, not as fixed, new, or a new failure.
+- **Compare:** pass rate, duration, test count, and flaky count against the baseline run, then new failures, performance regressions, fixed tests, performance improvements, new tests, and tests not in the baseline run. The baseline is the previous run, the latest run on a branch with [`baseline.branch`](#branch-aware-baselines), or `baselineRunId`. The tab names the baseline run's branch and commit when CI recorded them. Each test is compared with its result in that run only. A test that ran in an earlier run but not in the baseline run (for example after a `--grep` or `--shard` run) is listed as not in the baseline run, not as fixed, new, or a new failure.
 
 ![Reliability heatmap](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-history-reliability-dark.png)
 *History, Reliability tab*
@@ -908,6 +908,7 @@ reporter: [
     stabilityThreshold: 70,
     retryFailureThreshold: 3,
     baselineRunId: 'main-branch-baseline',
+    baseline: { branch: 'target', filterHistory: false }, // not set by default (see Branch-aware Baselines)
     thresholds: {
       flakinessStable: 0.1,
       flakinessUnstable: 0.3,
@@ -1290,11 +1291,48 @@ The reporter automatically detects GitHub Actions, GitLab CI, CircleCI, Jenkins,
 
 Each run summary in the history file (`ciInfo`) and the JSON export (`metadata.ci`) also records the full commit SHA, the repository URL, and, for a pull request, its number and target branch. On GitHub Actions, GitLab and Azure DevOps pull request runs, the commit is the head of the pull request, not the merge commit that CI makes for the run. The repository URL never includes credentials from the clone URL.
 
+### Branch-aware Baselines
+
+By default, a run is compared with the previous run in history. On a pull request, that can be the run of another pull request. To compare with the latest run on a branch instead:
+
+```typescript
+baseline: {
+  branch: 'target',     // the branch the pull request merges into, or a branch name such as 'main'
+  filterHistory: true,  // flakiness and performance use only that branch's runs too (default: false)
+},
+```
+
+- The branch of a run is the `ciInfo.branch` that history recorded for it. Runs without a branch, such as local runs and runs saved before 4.0.0, never match.
+- `'target'` takes the target branch from CI: GitHub Actions, GitLab, Jenkins, Azure DevOps and Buildkite. A run without a target branch, such as a push to `main`, is compared with the previous run, and the reporter prints a note.
+- `baselineRunId` takes precedence over `baseline.branch`.
+- When no run in history is on the branch, the run has no comparison.
+- The Compare tab, the job summary and the pull request comment name the branch and commit of the baseline run.
+
+History keeps the last `maxHistoryRuns` runs, so pull request runs can push the target branch's runs out. Restore the target branch's history in pull request builds, and save history only from branch builds. On GitHub Actions:
+
+```yaml
+- uses: actions/cache/restore@v4
+  with:
+    path: test-history.json
+    key: test-history-${{ github.base_ref || github.ref_name }}-${{ github.run_id }}
+    restore-keys: test-history-${{ github.base_ref || github.ref_name }}-
+
+- run: npx playwright test
+
+- uses: actions/cache/save@v4
+  if: always() && github.event_name != 'pull_request'
+  with:
+    path: test-history.json
+    key: test-history-${{ github.ref_name }}-${{ github.run_id }}
+```
+
+When pull request and branch runs share one history file, raise `maxHistoryRuns` instead.
+
 ### GitHub Pull Requests
 
 Show the run where reviewers already look:
 
-- **Job summary:** pass rate, quality gate result, failures (new failures first, and failures that did not run in the baseline run marked), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
+- **Job summary:** pass rate, the branch and commit of the baseline run, quality gate result, failures (new failures first, and failures that did not run in the baseline run marked), flaky tests, slowest tests and a link to the report. When tests failed and `report-url` is set, the link opens the report on Failures.
 - **Annotations:** an error on the line of each failing assertion, not on the test declaration.
 - **Pull request comment:** the same summary as one comment. Each run updates that comment, so re-runs do not add more comments.
 

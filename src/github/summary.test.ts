@@ -135,6 +135,16 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('names the branch and commit of the baseline run under the totals', () => {
+    const baselineRun = { ...run, ciInfo: { provider: 'github', branch: 'main', commit: 'abc12345' } };
+    const out = renderSummary({ ...data, comparison: { ...data.comparison!, baselineRun } }, { workspace: WORKSPACE });
+    expect(out).toContain(`| 50% | 3 | 2 | 1 | 1 | 1.4m |
+
+**Baseline run:** \`main\` @ \`abc12345\`
+
+**Quality gates: failed**`);
+  });
+
   it('shows the pass rate as n/a when every test was skipped', () => {
     const skipped = data.tests.filter((t) => t.status === 'skipped');
     const summary = { total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0, duration: 0, passRate: null };

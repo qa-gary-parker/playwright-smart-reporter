@@ -118,6 +118,7 @@ function Compare() {
   if (!c) return <p class="panel__empty">No baseline run to compare with yet.</p>;
   const delta = (a: number, b: number, unit = '') => `${a - b >= 0 ? '+' : ''}${Math.round((a - b) * 10) / 10}${unit}`;
   const [cur, base] = [c.currentRun, c.baselineRun];
+  const baseAt = [base.ciInfo?.branch, base.ciInfo?.commit].filter(Boolean).join(' @ ');
   return (
     <>
       <div class="stats">
@@ -142,7 +143,7 @@ function Compare() {
           <span class="stat__sub">{delta(cur.flaky, base.flaky)} vs baseline</span>
         </div>
       </div>
-      <p class="faint compare__base">Baseline: run of {formatDate(base.timestamp, true)}</p>
+      <p class="faint compare__base">Baseline: run of {formatDate(base.timestamp, true)}{baseAt && <> on <span class="mono">{baseAt}</span></>}</p>
       <div class="compare" role="tree" aria-label="Changes since the baseline run">
         {COMPARE_GROUPS.map(([key, label]) => {
           const tests = c.changes[key].map((id) => byId.get(id)).filter((t): t is ReportTest => !!t);

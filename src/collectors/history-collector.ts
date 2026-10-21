@@ -15,12 +15,14 @@ const LOCK_STALE_MS = 30_000;
  */
 export class HistoryCollector {
   private history: TestHistory = { runs: [], tests: {}, summaries: [] };
-  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf' | 'redact'>> &
-                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf' | 'redact'>;
+  private options: Required<Omit<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf' | 'redact' | 'baseline'>> &
+                   Pick<SmartReporterOptions, 'slackWebhook' | 'teamsWebhook' | 'baselineRunId' | 'networkLogFilter' | 'projectName' | 'thresholds' | 'maxEmbeddedSize' | 'runId' | 'exportJson' | 'exportPdf' | 'exportJunit' | 'exportPdfFull' | 'pdfFont' | 'theme' | 'notifications' | 'branding' | 'qualityGates' | 'quarantine' | 'live' | 'assetMode' | 'ai' | 'forecast' | 'ownership' | 'accessibility' | 'enableCausalTimeline' | 'exportFailures' | 'exportCtrf' | 'redact' | 'baseline'>;
   private outputDir: string;
   private currentRun!: RunMetadata;
   private startTime!: number;
   private legacyIds = new Map<string, string>();
+  private baselineBranch?: string;
+  private filterHistory: boolean;
 
   constructor(options: SmartReporterOptions, outputDir: string, private shard: { current: number; total: number } | null = null) {
     // Issue #21: Support {project} placeholder in historyFile path
@@ -88,6 +90,13 @@ export class HistoryCollector {
     };
     this.outputDir = outputDir;
     this.setRunStart(Date.now());
+
+    const branch = options.baseline?.branch;
+    this.baselineBranch = branch === 'target' ? detectCIInfo()?.targetBranch : branch;
+    if (branch === 'target' && !this.baselineBranch) {
+      console.log("Smart Reporter: baseline.branch is 'target', but this run has no target branch, so it is compared with the previous run.");
+    }
+    this.filterHistory = options.baseline?.filterHistory === true;
   }
 
   /**
@@ -265,6 +274,20 @@ export class HistoryCollector {
   }
 
   /**
+   * History for flakiness and performance: with baseline.filterHistory, only the runs on the baseline branch
+   */
+  getBaselineHistory(testId: string): TestHistoryEntry[] {
+    const entries = this.getTestHistory(testId);
+    if (!this.filterHistory || !this.baselineBranch) return entries;
+    const runIds = new Set(this.baselineBranchRuns().map(s => s.runId));
+    return entries.filter(e => e.runId !== undefined && runIds.has(e.runId));
+  }
+
+  private baselineBranchRuns(): RunSummary[] {
+    return (this.history.summaries ?? []).filter(s => s.ciInfo?.branch === this.baselineBranch);
+  }
+
+  /**
    * Get full history
    */
   getHistory(): TestHistory {
@@ -300,10 +323,9 @@ export class HistoryCollector {
       return this.history.summaries.find(s => s.runId === saved) ?? this.history.summaries.find(s => s.runId === wanted) ?? null;
     }
 
-    // Otherwise, use previous run
-    return this.history.summaries.length > 0
-      ? this.history.summaries[this.history.summaries.length - 1]
-      : null;
+    // Otherwise, the latest run on the baseline branch, or the previous run
+    const runs = this.baselineBranch ? this.baselineBranchRuns() : this.history.summaries;
+    return runs.length > 0 ? runs[runs.length - 1] : null;
   }
 }
 

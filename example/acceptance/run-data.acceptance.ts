@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { renderSummary } from '../../src/github/summary';
 import type { ReportData } from '../../src/report-data/schema';
 import type { TestHistory } from '../../src/types';
 
@@ -316,6 +317,35 @@ describe('baselineRunId', () => {
       const { comparison } = reportData(out);
       expect(comparison?.baselineRun.runId).toBe('run-base');
       expect(comparison?.changes.newFailures).toEqual([id('fails when asked')]);
+    }
+  }, TIMEOUT);
+});
+
+describe('baseline.branch', () => {
+  // A GitHub Actions run: a push to main, or a pull request from feature/cart into main
+  const github = (runNumber: string, pullRequest: boolean) => ({
+    GITHUB_ACTIONS: 'true', GITHUB_EVENT_PATH: '', GITHUB_RUN_ID: runNumber, GITHUB_SHA: `c0ffee${runNumber}`.padEnd(40, '0'),
+    GITHUB_REF: pullRequest ? 'refs/pull/7/merge' : 'refs/heads/main', GITHUB_REF_NAME: pullRequest ? '7/merge' : 'main',
+    GITHUB_HEAD_REF: pullRequest ? 'feature/cart' : '', GITHUB_BASE_REF: pullRequest ? 'main' : '',
+    GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'acme/shop',
+  });
+
+  it('compares a pull request run with the latest run on main, and with filterHistory scores flakiness on main runs only', () => {
+    const out = path.join(tmp, 'baseline-branch');
+    const args = ['--grep', 'fails when asked', '--retries=0'];
+    runSuite(out, { runId: 'main-1' }, args, github('1', false));
+    runSuite(out, { runId: 'pr-1' }, args, github('2', true));
+    runSuite(out, { runId: 'main-2' }, args, github('3', false));
+    runSuite(out, { runId: 'pr-2' }, args, github('4', true));
+
+    for (const branch of ['main', 'target']) {
+      runSuite(out, { runId: `now-${branch}`, exportJson: true, baseline: { branch, filterHistory: true } }, args, github('5', true));
+      const data = reportData(out);
+      expect(data.comparison?.baselineRun.runId).toBe('run-main-2');
+      // The 2 main runs in history, and this run
+      expect(data.tests[0].flakinessRuns).toBe(3);
+      const json = JSON.parse(fs.readFileSync(path.join(out, 'smart-report-data.json'), 'utf8'));
+      expect(renderSummary(json, { workspace: ROOT })).toContain('**Baseline run:** `main` @ `c0ffee30`');
     }
   }, TIMEOUT);
 });

@@ -105,6 +105,9 @@ export interface SmartReporterOptions {
 
   // NEW: Comparison
   baselineRunId?: string;          // Compare against specific run
+  // Issue #78: compare with the latest run on a branch. 'target' is the branch a pull request merges into.
+  // filterHistory: flakiness and performance use only that branch's runs too (default: false)
+  baseline?: { branch: string; filterHistory?: boolean };
 
   // CSP Compliance - Use system fonts and avoid base64 data URIs
   cspSafe?: boolean;               // Default: false (for backwards compatibility)

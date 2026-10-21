@@ -481,6 +481,22 @@ test('the Compare tab lists tests that did not run in the baseline run in their 
   await expect(tree.getByRole('treeitem', { level: 2 }).last()).toContainText('homepage loads and displays heading');
 });
 
+test('the Compare tab names the branch and commit of the baseline run', async ({ page }) => {
+  await page.addInitScript(() => {
+    let value: unknown;
+    Object.defineProperty(window, '__SMART_DATA__', {
+      configurable: true,
+      get: () => value,
+      set: (d: { comparison: { baselineRun: Record<string, unknown> } }) => {
+        d.comparison.baselineRun.ciInfo = { provider: 'github', branch: 'main', commit: 'abc12345' };
+        value = d;
+      },
+    });
+  });
+  await page.goto(url('mode=light', '#/history/compare'));
+  await expect(page.locator('.compare__base')).toHaveText('Baseline: run of 1 Sept, 10:34 on main @ abc12345');
+});
+
 test('the Failed card counts failures that did not run in the baseline run, as noNewFailures does', async ({ page }) => {
   await page.goto(url('screen=insights&mode=light'));
   // The fixture's not-in-baseline group holds one failing and one passing test.

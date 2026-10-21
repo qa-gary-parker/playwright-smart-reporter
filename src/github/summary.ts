@@ -48,6 +48,10 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
     [[formatPassRate(summary.passRate), String(summary.passed), String(summary.failed), String(summary.flaky), String(summary.skipped), formatDuration(summary.duration)]],
   ));
 
+  const base = data.comparison?.baselineRun.ciInfo;
+  const baseAt = [base?.branch, base?.commit].filter((s): s is string => !!s).map(code).join(' @ ');
+  if (baseAt) out.push('', `**Baseline run:** ${baseAt}`);
+
   const gates = data.qualityGates;
   if (gates) {
     const checked = gates.rules.filter((r) => !r.skipped);

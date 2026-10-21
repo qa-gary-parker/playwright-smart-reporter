@@ -525,8 +525,9 @@ class SmartReporter implements Reporter {
     }
 
     // Run all analyzers (flakiness, performance, retries, stability)
-    this.flakinessAnalyzer.analyze(testData, history);
-    this.performanceAnalyzer.analyze(testData, history);
+    const baselineHistory = this.historyCollector.getBaselineHistory(testId);
+    this.flakinessAnalyzer.analyze(testData, baselineHistory);
+    this.performanceAnalyzer.analyze(testData, baselineHistory);
     if (this.options.enableRetryAnalysis !== false) this.retryAnalyzer.analyze(testData, history);
     if (this.options.enableStabilityScore !== false) this.stabilityScorer.scoreTest(testData);
 

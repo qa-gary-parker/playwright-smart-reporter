@@ -681,5 +681,59 @@ describe('HistoryCollector', () => {
 
       expect(collector.getBaselineRun()).toBeNull();
     });
+
+    describe('baseline.branch', () => {
+      const runs = [['run-main-1', 'main'], ['run-pr-1', 'feature/cart'], ['run-main-2', 'main'], ['run-pr-2', 'feature/cart']];
+      const load = (options: SmartReporterOptions) => {
+        const collector = new HistoryCollector(options, outputDir);
+        collector.loadHistory();
+        return collector;
+      };
+      // A GitHub Actions run, a pull request into main when targetBranch is set
+      const github = (targetBranch: string) => {
+        vi.stubEnv('GITHUB_ACTIONS', 'true');
+        vi.stubEnv('GITHUB_EVENT_PATH', '');
+        vi.stubEnv('GITHUB_BASE_REF', targetBranch);
+      };
+
+      beforeEach(() => saveHistory({
+        runs: [],
+        summaries: runs.map(([runId, branch], i) => ({ ...summary(runId, `2024-01-0${i + 1}T10:00:00Z`), ciInfo: { provider: 'github', branch } })),
+        tests: {
+          'test-1': [
+            ...runs.map(([runId], i) => ({ passed: true, duration: 1000, timestamp: `2024-01-0${i + 1}T10:00:00Z`, runId })),
+            { passed: false, duration: 1000, timestamp: '2024-01-05T10:00:00Z' },
+          ],
+        },
+      }));
+
+      afterEach(() => vi.unstubAllEnvs());
+
+      it('returns the latest run on the named branch', () => {
+        expect(load({ baseline: { branch: 'main' } }).getBaselineRun()?.runId).toBe('run-main-2');
+      });
+
+      it("returns the latest run on the pull request's target branch for 'target'", () => {
+        github('main');
+        expect(load({ baseline: { branch: 'target' } }).getBaselineRun()?.runId).toBe('run-main-2');
+      });
+
+      it("returns the previous run, and says so, for 'target' on a run with no target branch", () => {
+        github('');
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        expect(load({ baseline: { branch: 'target' } }).getBaselineRun()?.runId).toBe('run-pr-2');
+        expect(log.mock.calls).toEqual([["Smart Reporter: baseline.branch is 'target', but this run has no target branch, so it is compared with the previous run."]]);
+      });
+
+      it('returns null when no run in history is on the branch', () => {
+        expect(load({ baseline: { branch: 'release' } }).getBaselineRun()).toBeNull();
+      });
+
+      it('with filterHistory, gives flakiness and performance only the entries of runs on the branch', () => {
+        const runIds = (options: SmartReporterOptions) => load(options).getBaselineHistory('test-1').map((e) => e.runId);
+        expect(runIds({ baseline: { branch: 'main', filterHistory: true } })).toEqual(['run-main-1', 'run-main-2']);
+        expect(runIds({ baseline: { branch: 'main' } })).toEqual(['run-main-1', 'run-pr-1', 'run-main-2', 'run-pr-2', undefined]);
+      });
+    });
   });
 });
