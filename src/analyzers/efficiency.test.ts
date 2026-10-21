@@ -109,4 +109,10 @@ describe('summarizeEfficiency', () => {
       longTail: [],
     });
   });
+
+  it('handles more attempts than a function call takes arguments', () => {
+    const many = Array.from({ length: 200_000 }, (_, i) => test(`t${i}`, [0, 1000 + i, 1]));
+    const big = summarizeEfficiency({ ...input, results: many });
+    expect([big.setupGap, big.workers?.span]).toEqual([1000, 200_000]);
+  });
 });
