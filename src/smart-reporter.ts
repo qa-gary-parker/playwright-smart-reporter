@@ -26,6 +26,7 @@ import type {
   QualityGateResult,
   QuarantineFile,
   HistoryRunFile,
+  QuarantineEvent,
 } from './types';
 
 // ============================================================================
@@ -70,7 +71,7 @@ import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { firstFailureMessage } from './notifiers/notification-manager';
 import { QualityGateEvaluator, formatGateReport } from './gates';
-import { QuarantineGenerator } from './quarantine';
+import { QuarantineGenerator, quarantineEvents, isExpired, describeQuarantineEntry } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest } from './utils';
 import { buildRunSummary, computeRunStats } from './utils/run-stats';
@@ -763,10 +764,13 @@ class SmartReporter implements Reporter {
     // Quarantine - evaluate BEFORE HTML generation so badges/cards embed in report
     let quarantineResult: QuarantineFile | null = null;
     let quarantinedTestIds: Set<string> | undefined;
+    let quarantineChanges: QuarantineEvent[] = [];
     if (this.options.quarantine?.enabled) {
       try {
         const generator = new QuarantineGenerator(this.options.quarantine);
-        quarantineResult = generator.generate(this.results, exportDir);
+        const previous = generator.read(exportDir);
+        quarantineResult = generator.generate(this.results, exportDir, previous);
+        quarantineChanges = quarantineEvents(previous, quarantineResult, Date.now());
         if (quarantineResult) {
           quarantinedTestIds = new Set(quarantineResult.entries.map(e => e.testId));
         }
@@ -943,6 +947,7 @@ class SmartReporter implements Reporter {
     // Advanced notification manager takes precedence
     if (this.notificationManager) {
       await this.notificationManager.notify(this.results, this.startTime, comparison);
+      await this.notificationManager.notifyQuarantine(quarantineChanges);
     } else {
       // Legacy webhook notification path
       if (failed > 0) {
@@ -966,6 +971,9 @@ class SmartReporter implements Reporter {
     if (quarantineResult) {
       const qPath = new QuarantineGenerator(this.options.quarantine!).getOutputPath(exportDir);
       console.log(`   Quarantine: ${quarantineResult.entries.length} test(s) quarantined -> ${qPath}`);
+      for (const e of quarantineResult.entries.filter(e => isExpired(e, Date.now()))) {
+        console.log(`   Quarantine expired ${e.expiresAt}: ${describeQuarantineEntry(e)}`);
+      }
     } else if (this.options.quarantine?.enabled) {
       console.log('   Quarantine: no tests exceed flakiness threshold');
     }

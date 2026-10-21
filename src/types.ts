@@ -47,6 +47,8 @@ export interface NotificationConfig {
   // Phase 9: Ownership and routing
   // Fire only for failures owned by one of these owners (CODEOWNERS handles or git author emails)
   owners?: string[];
+  // Slack and Teams only: also send quarantine changes, scoped by owners
+  quarantineEvents?: boolean;
 }
 
 // ============================================================================
@@ -605,15 +607,28 @@ export interface QuarantineConfig {
   threshold?: number;
   maxQuarantined?: number;
   outputFile?: string;
+  manualFile?: string;        // Default: .smart-quarantine.manual.json, resolved like outputFile
+  expiresAfterDays?: number;  // Sets expiresAt this many days after quarantinedAt, unless the manual file gives one
 }
 
 export interface QuarantineEntry {
   testId: string;
   title: string;
   file: string;
-  flakinessScore: number;
+  flakinessScore?: number;  // Missing for a manual or annotation entry of a test without a score
   runs?: number;            // Runs behind flakinessScore; missing in files written before 4.0.0
-  quarantinedAt: string;
+  quarantinedAt: string;    // When the test entered quarantine; kept while it stays
+  // The fields below are missing in files written before 4.0.0
+  source?: 'auto' | 'manual' | 'annotation';
+  owners?: string[];
+  ticket?: string;
+  reason?: string;
+  expiresAt?: string;
+}
+
+export interface QuarantineEvent {
+  kind: 'quarantined' | 'expired' | 'released';
+  entry: QuarantineEntry;
 }
 
 export interface QuarantineFile {

@@ -744,12 +744,58 @@ reporter: [
       enabled: true,
       outputFile: '.smart-quarantine.json',
       threshold: 0.3,  // flakiness score 0-1
+      manualFile: '.smart-quarantine.manual.json', // default
+      expiresAfterDays: 30, // optional; no expiry when not set
     },
   }],
 ]
 ```
 
-A test is quarantined when its `flakinessStatus` is `flaky` and its `flakinessScore` is at least `threshold` (see [Flakiness Detection](#flakiness-detection)). A test that fails every run, or that was broken and then fixed, is not quarantined. Each entry records `runs`, the number of runs behind its score.
+A test is quarantined when its `flakinessStatus` is `flaky` and its `flakinessScore` is at least `threshold` (see [Flakiness Detection](#flakiness-detection)). A test that fails every run, or that was broken and then fixed, is not quarantined. Each entry records `runs`, the number of runs behind its score. `maxQuarantined` limits only these entries.
+
+You can also quarantine a test yourself:
+- Tag it `@quarantine(<ticket>)`, for example `test('pays by card', { tag: '@quarantine(PAY-14)' }, ...)`. The annotation `{ type: 'quarantine', description: '<ticket>' }` does the same.
+- Add it to the manual file. Each entry needs `testId` (as in the quarantine file) and `title`. `file`, `owners`, `ticket`, `reason`, `expiresAt` and `quarantinedAt` are optional.
+
+```json
+{
+  "entries": [
+    {
+      "testId": "checkout.spec.ts::pays by card",
+      "title": "pays by card",
+      "ticket": "https://jira.example.com/browse/PAY-12",
+      "reason": "Card sandbox times out",
+      "owners": ["@acme/payments"],
+      "expiresAt": "2026-11-30T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+`manualFile` is resolved like `outputFile`, relative to the report folder.
+
+Each entry in the quarantine file has:
+- `source`: `auto` (flakiness), `annotation` or `manual`. A manual entry replaces an annotation, and an annotation replaces an `auto` entry.
+- `quarantinedAt`: when the test entered quarantine. It does not change while the test stays quarantined.
+- `owners`: from [ownership](#ownership-and-routing), or from the manual file.
+- `ticket` and `reason`: from the tag, the annotation or the manual file.
+- `expiresAt`: from the manual file, else `expiresAfterDays` after `quarantinedAt`.
+
+A test that does not run keeps its entry, because a quarantined test is often left out of the run. A test that runs and no longer qualifies leaves the file. A manual entry stays until you remove it from the manual file. When no test qualifies, the reporter writes the file with no entries.
+
+After each run, the console lists every entry past its `expiresAt`:
+
+```
+   Quarantine expired 2026-11-30T00:00:00.000Z: "pays by card" in checkout.spec.ts, https://jira.example.com/browse/PAY-12, @acme/payments
+```
+
+To send quarantine changes to Slack or Teams, add `quarantineEvents: true` to a notification. A notification with `owners` lists only the tests those owners own. `conditions` and `template` do not apply. One message per run lists each test that entered quarantine, expired since the last run, or left quarantine:
+
+```
+Quarantine changes:
+quarantined: "pays by card" in checkout.spec.ts, PAY-12, @acme/payments
+released: "logs in" in login.spec.ts
+```
 
 Quarantined tests appear in the Quarantined queue and in the Quarantine panel in Insights.
 
@@ -874,7 +920,7 @@ reporter: [
     // Notifications
     slackWebhook: process.env.SLACK_WEBHOOK_URL,
     teamsWebhook: process.env.TEAMS_WEBHOOK_URL,
-    notifications: [],          // [{ channel, config, conditions?, template?, owners? }]
+    notifications: [],          // [{ channel, config, conditions?, template?, owners?, quarantineEvents? }]
 
     // Feature flags (all default to true unless noted)
     enableRetryAnalysis: true,
@@ -941,7 +987,7 @@ reporter: [
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
     qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage }
-    quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50 }
+    quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
     live: {},                   // { enabled, outputFile: '.smart-live-results.jsonl', dashboard, notifyOnFirstFailure }
 

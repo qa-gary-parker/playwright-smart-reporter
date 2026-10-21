@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { QuarantineGenerator } from './quarantine-generator';
+import { QuarantineGenerator, quarantineEvents } from './quarantine-generator';
 import { getQuarantinedPattern } from './quarantine-helper';
 import { FlakinessAnalyzer } from '../analyzers/flakiness-analyzer';
-import type { TestResultData, QuarantineConfig, QuarantineFile } from '../types';
+import type { TestResultData, QuarantineConfig, QuarantineFile, QuarantineEntry } from '../types';
 
 vi.mock('fs');
 
@@ -343,6 +343,164 @@ describe('QuarantineGenerator', () => {
 
       expect(result).toBe(path.resolve('/output', 'custom.json'));
     });
+  });
+
+  describe('lifecycle', () => {
+    const DAY1 = '2026-10-01T00:00:00.000Z';
+    const DAY2 = '2026-10-02T00:00:00.000Z';
+    const DAY3 = '2026-10-03T00:00:00.000Z';
+    const at = (iso: string) => vi.setSystemTime(new Date(iso));
+    const flaky = (testId: string, flakinessScore: number, overrides: Partial<TestResultData> = {}) => createTestResult({ testId, title: testId, flakinessScore, ...overrides });
+    const stable = (testId: string, overrides: Partial<TestResultData> = {}) => createTestResult({ testId, title: testId, flakinessScore: 0.05, flakinessStatus: 'stable', ...overrides });
+
+    // An in-memory /output folder; files are given relative to it
+    function disk(files: Record<string, unknown> = {}) {
+      const contents = new Map(Object.entries(files).map(([p, v]) => [path.resolve('/output', p), JSON.stringify(v)]));
+      mockFs.existsSync.mockImplementation(p => contents.has(String(p)));
+      mockFs.readFileSync.mockImplementation(((p: fs.PathOrFileDescriptor) => contents.get(String(p))) as typeof fs.readFileSync);
+      mockFs.writeFileSync.mockImplementation(((p: fs.PathOrFileDescriptor, data: string) => { contents.set(String(p), data); }) as typeof fs.writeFileSync);
+      return { read: (p = '.smart-quarantine.json'): QuarantineFile => JSON.parse(contents.get(path.resolve('/output', p))!) };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('keeps quarantinedAt across runs, keeps the entry of a test that did not run, and drops a test that ran and no longer qualifies', () => {
+      const files = disk();
+      const generator = new QuarantineGenerator({ enabled: true });
+      at(DAY1);
+      generator.generate([flaky('still-flaky', 0.5), flaky('fixed', 0.6), flaky('skipped', 0.7), flaky('absent', 0.9)], '/output');
+      at(DAY2);
+      generator.generate([flaky('still-flaky', 0.4), stable('fixed'), flaky('skipped', 0.8, { outcome: 'skipped' })], '/output');
+
+      const file = files.read();
+      expect(file.generatedAt).toBe(DAY2);
+      expect(file.entries.map(e => [e.testId, e.flakinessScore, e.quarantinedAt, e.source])).toEqual([
+        ['absent', 0.9, DAY1, 'auto'],
+        ['skipped', 0.7, DAY1, 'auto'],
+        ['still-flaky', 0.4, DAY1, 'auto'],
+      ]);
+    });
+
+    it('clears the file when nothing qualifies any more', () => {
+      const files = disk({ '.smart-quarantine.json': { generatedAt: DAY1, threshold: 0.3, entries: [{ testId: 'fixed', title: 'fixed', file: 'a.spec.ts', flakinessScore: 0.5, quarantinedAt: DAY1 }] } });
+
+      const result = new QuarantineGenerator({ enabled: true }).generate([stable('fixed')], '/output');
+
+      expect(result).toBeNull();
+      expect(files.read().entries).toEqual([]);
+    });
+
+    it('adds the manual file entries with their metadata, outside maxQuarantined, and takes title and file from the run', () => {
+      disk({
+        '.smart-quarantine.manual.json': {
+          entries: [
+            { testId: 'checkout.spec.ts::pays by card', title: 'pays by card', file: 'checkout.spec.ts', owners: ['@acme/payments'], ticket: 'https://jira.example.com/browse/PAY-12', reason: 'Card sandbox times out', expiresAt: '2026-11-30T00:00:00.000Z' },
+            { testId: 'login.spec.ts::logs in', title: 'old title', ticket: 'PAY-13' },
+          ],
+        },
+      });
+      at(DAY1);
+
+      const result = new QuarantineGenerator({ enabled: true, maxQuarantined: 1 }).generate([
+        flaky('auto-low', 0.4),
+        flaky('auto-high', 0.5, { owners: ['@acme/web'] }),
+        stable('login.spec.ts::logs in', { title: 'logs in', file: 'login.spec.ts', flakinessRuns: 8, owners: ['@acme/auth'] }),
+      ], '/output');
+
+      expect(result!.entries).toEqual([
+        { testId: 'auto-high', title: 'auto-high', file: 'tests/example.spec.ts', flakinessScore: 0.5, runs: 10, quarantinedAt: DAY1, source: 'auto', owners: ['@acme/web'] },
+        { testId: 'checkout.spec.ts::pays by card', title: 'pays by card', file: 'checkout.spec.ts', quarantinedAt: DAY1, source: 'manual', owners: ['@acme/payments'], ticket: 'https://jira.example.com/browse/PAY-12', reason: 'Card sandbox times out', expiresAt: '2026-11-30T00:00:00.000Z' },
+        { testId: 'login.spec.ts::logs in', title: 'logs in', file: 'login.spec.ts', flakinessScore: 0.05, runs: 8, quarantinedAt: DAY1, source: 'manual', owners: ['@acme/auth'], ticket: 'PAY-13' },
+      ]);
+    });
+
+    it('rejects a manual entry without a testId or a title', () => {
+      disk({ '.smart-quarantine.manual.json': { entries: [{ testId: 'a', title: 'a' }, { testId: 'b' }] } });
+
+      expect(() => new QuarantineGenerator({ enabled: true }).generate([], '/output'))
+        .toThrow(`${path.resolve('/output', '.smart-quarantine.manual.json')}: entries[1] needs a testId and a title`);
+    });
+
+    it('quarantines a test tagged @quarantine(ticket) or annotated quarantine, keeps it while it does not run, and releases it when it runs unmarked', () => {
+      const files = disk();
+      const generator = new QuarantineGenerator({ enabled: true });
+      at(DAY1);
+      generator.generate([
+        stable('tagged', { tags: ['@smoke', '@quarantine(https://jira.example.com/browse/PAY-14)'], owners: ['@acme/payments'] }),
+        stable('annotated', { annotations: [{ type: 'quarantine', description: 'PAY-15' }] }),
+        stable('plain'),
+      ], '/output');
+      at(DAY2);
+      generator.generate([stable('plain')], '/output');
+
+      expect(files.read().entries.map(e => [e.testId, e.source, e.ticket, e.owners, e.quarantinedAt])).toEqual([
+        ['tagged', 'annotation', 'https://jira.example.com/browse/PAY-14', ['@acme/payments'], DAY1],
+        ['annotated', 'annotation', 'PAY-15', undefined, DAY1],
+      ]);
+
+      at(DAY3);
+      generator.generate([stable('tagged', { tags: ['@smoke'] })], '/output');
+
+      expect(files.read().entries.map(e => e.testId)).toEqual(['annotated']);
+    });
+
+    it('sets expiresAt expiresAfterDays after quarantinedAt and keeps an expiresAt the manual file gives', () => {
+      const files = disk({ 'config/quarantine.json': { entries: [{ testId: 'given', title: 'given', expiresAt: '2026-10-05T00:00:00.000Z' }, { testId: 'not-given', title: 'not-given' }] } });
+      const generator = new QuarantineGenerator({ enabled: true, manualFile: 'config/quarantine.json', expiresAfterDays: 14 });
+      at(DAY1);
+      generator.generate([flaky('auto', 0.5)], '/output');
+      at(DAY2);
+      generator.generate([flaky('auto', 0.5)], '/output');
+
+      expect(files.read().entries.map(e => [e.testId, e.quarantinedAt, e.expiresAt])).toEqual([
+        ['auto', DAY1, '2026-10-15T00:00:00.000Z'],
+        ['given', DAY1, '2026-10-05T00:00:00.000Z'],
+        ['not-given', DAY1, '2026-10-15T00:00:00.000Z'],
+      ]);
+    });
+  });
+});
+
+describe('quarantineEvents', () => {
+  const entry = (testId: string, expiresAt?: string): QuarantineEntry => ({ testId, title: testId, file: 'a.spec.ts', flakinessScore: 0.5, quarantinedAt: '2026-09-01T00:00:00.000Z', expiresAt });
+  const file = (generatedAt: string, entries: QuarantineEntry[]): QuarantineFile => ({ generatedAt, threshold: 0.3, entries });
+
+  it('reports tests that entered quarantine, expired since the last run, or left it', () => {
+    const previous = file('2026-10-01T00:00:00.000Z', [
+      entry('stays'),
+      entry('leaves'),
+      entry('expired-before', '2026-09-30T00:00:00.000Z'),
+      entry('expires-now', '2026-10-01T12:00:00.000Z'),
+    ]);
+    const next = file('2026-10-02T00:00:00.000Z', [
+      entry('stays'),
+      entry('expired-before', '2026-09-30T00:00:00.000Z'),
+      entry('expires-now', '2026-10-01T12:00:00.000Z'),
+      entry('enters'),
+      entry('enters-expired', '2026-09-01T00:00:00.000Z'),
+    ]);
+
+    expect(quarantineEvents(previous, next, Date.parse('2026-10-02T00:00:00.000Z')).map(e => [e.kind, e.entry.testId])).toEqual([
+      ['quarantined', 'enters'],
+      ['quarantined', 'enters-expired'],
+      ['expired', 'expires-now'],
+      ['expired', 'enters-expired'],
+      ['released', 'leaves'],
+    ]);
+  });
+
+  it('releases every entry when the file is cleared, and reports nothing without a previous file', () => {
+    expect(quarantineEvents(file('2026-10-01T00:00:00.000Z', [entry('a'), entry('b')]), null, 0).map(e => [e.kind, e.entry.testId])).toEqual([
+      ['released', 'a'],
+      ['released', 'b'],
+    ]);
+    expect(quarantineEvents(undefined, null, 0)).toEqual([]);
   });
 });
 

@@ -3,7 +3,7 @@ import { NotificationManager } from './notification-manager';
 import { SlackNotifier } from './slack-notifier';
 import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
-import type { TestResultData, NotificationConfig, RunComparison, RunSummary, StabilityScore } from '../types';
+import type { TestResultData, NotificationConfig, QuarantineEvent, RunComparison, RunSummary, StabilityScore } from '../types';
 
 const NOW = 1_700_000_000_000;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -491,6 +491,33 @@ describe('NotificationManager', () => {
       const sent = await sentBySlack([{ channel: 'slack', config: { webhookUrl: 'https://hooks/all' }, template: '{{failedTests}}' }]);
 
       expect(sent).toEqual([['https://hooks/all', 'checkout fails, search fails, unowned fails']]);
+    });
+  });
+
+  describe('quarantine events', () => {
+    const at = '2026-10-01T00:00:00.000Z';
+    const events: QuarantineEvent[] = [
+      { kind: 'quarantined', entry: { testId: 'a', title: 'pays by card', file: 'checkout.spec.ts', quarantinedAt: at, owners: ['@org/payments'], ticket: 'PAY-12' } },
+      { kind: 'expired', entry: { testId: 'b', title: 'searches', file: 'search.spec.ts', quarantinedAt: at, expiresAt: '2026-10-15T00:00:00.000Z', owners: ['@org/search'] } },
+      { kind: 'released', entry: { testId: 'c', title: 'logs in', file: 'login.spec.ts', quarantinedAt: at } },
+    ];
+
+    it('sends the events each opted-in Slack or Teams channel owns, in one message', async () => {
+      await new NotificationManager([
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/payments' }, owners: ['@Org/Payments'], quarantineEvents: true },
+        { channel: 'teams', config: { webhookUrl: 'https://hooks/all' }, quarantineEvents: true },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/not-opted-in' } },
+        { channel: 'slack', config: { webhookUrl: 'https://hooks/nobody' }, owners: ['@org/nobody'], quarantineEvents: true },
+        { channel: 'webhook', config: { url: 'https://hooks/webhook' }, quarantineEvents: true },
+      ]).notifyQuarantine(events);
+
+      expect(requests().map(r => [r.url, r.body.text])).toEqual([
+        ['https://hooks/payments', 'Quarantine changes:\nquarantined: "pays by card" in checkout.spec.ts, PAY-12, @org/payments'],
+        ['https://hooks/all', 'Quarantine changes:\n' +
+          'quarantined: "pays by card" in checkout.spec.ts, PAY-12, @org/payments\n' +
+          'expired 2026-10-15T00:00:00.000Z: "searches" in search.spec.ts, @org/search\n' +
+          'released: "logs in" in login.spec.ts'],
+      ]);
     });
   });
 

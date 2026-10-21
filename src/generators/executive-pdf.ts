@@ -1010,7 +1010,7 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
       doc.restore();
     }
 
-    const scorePct = Math.round(e.flakinessScore * 100);
+    const scorePct = Math.round((e.flakinessScore ?? 0) * 100);
 
     doc.save();
     doc.font(FONT_REGULAR).fontSize(7).fillColor(scheme.bodyText);
@@ -1030,7 +1030,7 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
       doc.restore();
     }
     doc.font(FONT_BOLD).fontSize(7).fillColor(scorePct >= 80 ? scheme.accentRedDark : scheme.accentAmber);
-    doc.text(`${scorePct}%`, barX + barW + 6, y + 5, { width: 30 });
+    doc.text(e.flakinessScore === undefined ? 'n/a' : `${scorePct}%`, barX + barW + 6, y + 5, { width: 30 });
 
     doc.restore();
     y += rowH;

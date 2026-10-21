@@ -608,4 +608,13 @@ describe('executive-pdf', () => {
       FOOTER,
     ]);
   });
+
+  it('draws n/a for a quarantined test without a flakiness score', () => {
+    const quarantineEntries: QuarantineEntry[] = [
+      { testId: 'q1', title: 'Card sandbox', file: 'tests/pay.spec.ts', quarantinedAt: '2026-10-01T00:00:00Z', source: 'manual' },
+    ];
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ quarantineEntries }), tmpDir));
+
+    expectDrawn(lines, ['Card sandbox', 'tests/pay.spec.ts', 'n/a', FOOTER]);
+  });
 });

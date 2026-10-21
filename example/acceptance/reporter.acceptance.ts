@@ -98,6 +98,41 @@ describe('quarantine', () => {
 
     expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string }) => e.testId)).toEqual(['suite.fixtures.ts::passes on retry']);
   });
+
+  it('keeps quarantinedAt across runs and the entry of a test left out of the run, adds manual entries, and reports expired ones', () => {
+    const out = path.join(tmp, 'quarantine-lifecycle');
+    const outputFile = path.join(out, 'quarantine.json');
+    const manualFile = path.join(out, 'quarantine.manual.json');
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(manualFile, JSON.stringify({
+      entries: [{ testId: 'suite.fixtures.ts::fails', title: 'fails', file: 'suite.fixtures.ts', ticket: 'PAY-12', expiresAt: '2026-01-01T00:00:00.000Z' }],
+    }));
+    const options = { quarantine: { enabled: true, threshold: 0.01, outputFile, manualFile } };
+    const entries = () => JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries
+      .map((e: { testId: string; source: string; quarantinedAt: string }) => [e.testId, e.source, e.quarantinedAt]);
+
+    runSuite(out, options, ['--grep', 'passes on retry']);
+    runSuite(out, options, ['--grep', 'passes on retry']);
+    const second = entries();
+    runSuite(out, options, ['--grep', 'passes on retry']);
+    const third = entries();
+    const run = runSuite(out, options, ['--grep', 'passes$']);
+
+    expect({ third, fourth: entries() }).toEqual({ third: second, fourth: second });
+    expect(second.map(([id, source]: string[]) => [id, source])).toEqual([['suite.fixtures.ts::passes on retry', 'auto'], ['suite.fixtures.ts::fails', 'manual']]);
+    expect(run.output).toContain('Quarantine expired 2026-01-01T00:00:00.000Z: "fails" in suite.fixtures.ts, PAY-12');
+  });
+
+  it('quarantines a test tagged @quarantine(ticket) or annotated quarantine', () => {
+    const out = path.join(tmp, 'quarantine-annotation');
+    const outputFile = path.join(out, 'quarantine.json');
+    runSuite(out, { quarantine: { enabled: true, outputFile } }, [], 'test', { ACCEPTANCE_MATCH: 'quarantine.fixtures.ts' });
+
+    expect(JSON.parse(fs.readFileSync(outputFile, 'utf8')).entries.map((e: { testId: string; source: string; ticket: string }) => [e.testId, e.source, e.ticket])).toEqual([
+      ['quarantine.fixtures.ts::pays by card', 'annotation', 'https://jira.example.com/browse/PAY-14'],
+      ['quarantine.fixtures.ts::refunds', 'annotation', 'PAY-15'],
+    ]);
+  });
 });
 
 describe('network log options', () => {

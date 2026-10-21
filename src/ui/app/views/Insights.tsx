@@ -204,7 +204,7 @@ export function Insights() {
                     <StatusGlyph status="quarantined" />
                     <span class="lines__label">{e.title}</span>
                     <span class="lines__value mono">
-                      {Math.round(e.flakinessScore * 100)}%{e.runs !== undefined && ` of ${plural(e.runs, 'run')}`}
+                      {e.flakinessScore === undefined ? e.source : `${Math.round(e.flakinessScore * 100)}%${e.runs !== undefined ? ` of ${plural(e.runs, 'run')}` : ''}`}
                     </span>
                   </li>
                 ))}

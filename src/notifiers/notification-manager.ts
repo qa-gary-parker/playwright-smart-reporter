@@ -1,4 +1,5 @@
-import type { TestResultData, NotificationConfig, NotificationCondition, RunComparison } from '../types';
+import type { TestResultData, NotificationConfig, NotificationCondition, QuarantineEvent, RunComparison } from '../types';
+import { describeQuarantineEntry } from '../quarantine/quarantine-generator';
 import { SlackNotifier } from './slack-notifier';
 import { TeamsNotifier } from './teams-notifier';
 import { PagerDutyNotifier } from './pagerduty-notifier';
@@ -66,7 +67,7 @@ function renderTemplate(template: string, ctx: NotificationContext, escape: (val
     .replace(/\{\{failedTests\}\}/g, () => escape(ctx.failedTests));
 }
 
-function ownedBy(config: NotificationConfig): ((test: TestResultData) => boolean) | undefined {
+function ownedBy(config: NotificationConfig): ((test: { owners?: string[] }) => boolean) | undefined {
   if (!config.owners?.length) return undefined;
   const owners = new Set(config.owners.map(o => o.toLowerCase()));
   return test => !!test.owners?.some(o => owners.has(o.toLowerCase()));
@@ -74,6 +75,11 @@ function ownedBy(config: NotificationConfig): ((test: TestResultData) => boolean
 
 export function firstFailureMessage(test: Pick<TestResultData, 'title' | 'file'>): string {
   return `First failure detected: "${test.title}" in ${test.file}`;
+}
+
+function quarantineMessage(events: QuarantineEvent[]): string {
+  const lines = events.map(({ kind, entry }) => `${kind === 'expired' ? `expired ${entry.expiresAt}` : kind}: ${describeQuarantineEntry(entry)}`);
+  return ['Quarantine changes:', ...lines].join('\n');
 }
 
 export class NotificationManager {
@@ -95,6 +101,22 @@ export class NotificationManager {
         if (config.conditions && !evaluateConditions(config.conditions, buildContext([test], Date.now()), [test])) continue;
         const notifier = config.channel === 'slack' ? new SlackNotifier(config.config.webhookUrl) : new TeamsNotifier(config.config.webhookUrl);
         await notifier.sendMessage(message);
+      } catch (err) {
+        console.error(`Failed to send ${config.channel} notification: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  /** Sends quarantine changes to the Slack and Teams channels with quarantineEvents on, scoped by owners. */
+  async notifyQuarantine(events: QuarantineEvent[]): Promise<void> {
+    for (const config of this.configs) {
+      if (!config.quarantineEvents || (config.channel !== 'slack' && config.channel !== 'teams')) continue;
+      try {
+        const owned = ownedBy(config);
+        const scoped = owned ? events.filter(e => owned(e.entry)) : events;
+        if (scoped.length === 0) continue;
+        const notifier = config.channel === 'slack' ? new SlackNotifier(config.config.webhookUrl) : new TeamsNotifier(config.config.webhookUrl);
+        await notifier.sendMessage(quarantineMessage(scoped));
       } catch (err) {
         console.error(`Failed to send ${config.channel} notification: ${err instanceof Error ? err.message : String(err)}`);
       }
