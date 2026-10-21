@@ -272,7 +272,7 @@ describe('pass rate', () => {
 
     expect(playwright(out)).toEqual({ total: 1, passed: 0, failed: 0, skipped: 1, flaky: 0 });
     expect(passRates(out)).toEqual([null, null, null]);
-    expect(reportData(out).gates?.rules).toEqual([{ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true }]);
+    expect(reportData(out).gates?.rules).toEqual([{ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true, skipReason: 'no test ran' }]);
     expect(run.output).toContain('○ Min pass rate        (skipped — no test ran)');
     expect(run.status).toBe(0);
   }, TIMEOUT);

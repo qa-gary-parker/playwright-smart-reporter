@@ -12,16 +12,25 @@ export const ruleLabels: Record<string, string> = {
   minCoverage: 'Min line coverage',
 };
 
+/** The rule's id, or its label with its scope, so two rules of the same kind can be told apart. */
+export function ruleLabel(rule: QualityGateRuleResult): string {
+  return rule.id ?? `${ruleLabels[rule.rule] || rule.rule}${rule.scope ? ` (${rule.scope})` : ''}`;
+}
+
+/** Breached, but a warn rule, so the gate still passes. */
+export function isWarning(rule: QualityGateRuleResult): boolean {
+  return !rule.passed && !rule.skipped && rule.severity === 'warn';
+}
+
 function formatRuleLine(rule: QualityGateRuleResult): string {
-  const label = ruleLabels[rule.rule] || rule.rule;
+  const label = ruleLabel(rule);
 
   if (rule.skipped) {
-    const reason = rule.rule.startsWith('maxA11y') ? 'no accessibility scans' : rule.rule === 'minPassRate' || rule.rule === 'maxFlakyRate' ? 'no test ran' : 'no comparison data';
-    return `  \u25CB ${padRight(label, 20)} (skipped \u2014 ${reason})`;
+    return `  \u25CB ${padRight(label, 20)} (skipped \u2014 ${rule.skipReason ?? 'no data'})`;
   }
 
-  const icon = rule.passed ? '\u2713' : '\u2717';
-  return `  ${icon} ${padRight(label, 20)} ${rule.actual} ${rule.threshold}`;
+  const icon = rule.passed ? '\u2713' : isWarning(rule) ? '!' : '\u2717';
+  return `  ${icon} ${padRight(label, 20)} ${rule.actual} ${rule.threshold}${isWarning(rule) ? ' (warning)' : ''}`;
 }
 
 function padRight(str: string, width: number): string {
@@ -43,13 +52,14 @@ export function formatGateReport(result: QualityGateResult): string {
   lines.push(`  ${separator}`);
 
   const nonSkipped = result.rules.filter(r => !r.skipped);
-  const failed = nonSkipped.filter(r => !r.passed);
-  const status = result.passed ? 'PASSED' : 'FAILED';
+  const warnings = nonSkipped.filter(isWarning).length;
+  const failed = nonSkipped.filter(r => !r.passed).length - warnings;
+  const warningText = `${warnings} warning${warnings === 1 ? '' : 's'}`;
 
   if (result.passed) {
-    lines.push(`  Result: ${status} (${nonSkipped.length} of ${nonSkipped.length} rules passed)`);
+    lines.push(`  Result: PASSED${warnings ? ` with ${warningText}` : ''} (${nonSkipped.length - warnings} of ${nonSkipped.length} rules passed)`);
   } else {
-    lines.push(`  Result: ${status} (${failed.length} of ${nonSkipped.length} rules breached)`);
+    lines.push(`  Result: FAILED (${failed} of ${nonSkipped.length} rules breached${warnings ? `, ${warningText}` : ''})`);
   }
 
   lines.push('');

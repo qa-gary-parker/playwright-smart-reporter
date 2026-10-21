@@ -511,6 +511,16 @@ test('the Compare tab names the branch and commit of the baseline run', async ({
   await expect(page.locator('.compare__base')).toHaveText('Baseline: run of 1 Sept, 10:34 on main @ abc12345');
 });
 
+test('the Quality gate panel names a rule by its id or scope, and marks a breached warn rule as a warning', async ({ page }) => {
+  await page.goto(url('screen=insights&mode=light&gates=scoped'));
+  const panel = page.locator('.panel').filter({ has: page.getByRole('heading', { name: 'Quality gate' }) });
+  await expect(panel.locator('.lines__item')).toHaveText([
+    /^critical paths\s*90% \/ ≥ 100%$/,
+    /^Max flaky rate \(project chromium\) \(warning\)\s*50% \/ ≤ 2%$/,
+  ]);
+  await expect(panel.getByRole('img')).toHaveAccessibleName('failed');
+});
+
 test('the Failed card counts failures that did not run in the baseline run, as noNewFailures does', async ({ page }) => {
   await page.goto(url('screen=insights&mode=light'));
   // The fixture's not-in-baseline group holds one failing and one passing test.

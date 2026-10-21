@@ -566,6 +566,23 @@ describe('executive-pdf', () => {
     ]);
   });
 
+  it('names a rule by its id or scope, and marks a breached warn rule as a warning', () => {
+    const qualityGateResult: QualityGateResult = {
+      passed: true,
+      rules: [
+        { rule: 'minPassRate', passed: true, actual: '100%', threshold: '100%', scope: 'tag @critical' },
+        { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '2%', id: 'chromium flaky', severity: 'warn' },
+      ],
+    };
+    const lines = pdfLines(generateExecutivePdf(createBasicData({ qualityGateResult }), tmpDir));
+
+    expectDrawn(lines, [
+      'Minimum Pass Rate (tag @critical)', '100%', '100%', expect.stringMatching(/ Passed$/),
+      'chromium flaky', '50%', '2%', '! Warning',
+      expect.stringMatching(/ All gates passed$/),
+    ]);
+  });
+
   it('marks a passing quality gate and a skipped rule', () => {
     const qualityGateResult: QualityGateResult = {
       passed: true,

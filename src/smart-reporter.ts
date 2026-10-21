@@ -73,7 +73,7 @@ import { exportCtrfReport } from './generators/ctrf-exporter';
 import { exportPdfReport } from './generators/pdf-exporter';
 import { SlackNotifier, TeamsNotifier, NotificationManager } from './notifiers';
 import { firstFailureMessage } from './notifiers/notification-manager';
-import { QualityGateEvaluator, formatGateReport } from './gates';
+import { QualityGateEvaluator, formatGateReport, validateQualityGates } from './gates';
 import { QuarantineGenerator, quarantineEvents, isExpired, describeQuarantineEntry } from './quarantine';
 import { generateExecutivePdf, type PdfThemeName } from './generators/executive-pdf';
 import { formatDuration, stripAnsiCodes, sanitizeFilename, detectCIInfo, isFailedTest, isFlakyTest } from './utils';
@@ -144,6 +144,8 @@ class SmartReporter implements Reporter {
   private attemptTraces = new Map<string, Map<number, AttemptEvidence | null>>();
 
   constructor(options: SmartReporterOptions = {}) {
+    // Before any test runs: evaluation errors after the run only log a warning, so they would pass the gate.
+    if (options.qualityGates) validateQualityGates(options.qualityGates);
     this.options = options;
     if (options.redact) this.redact = createRedactor(process.env, options.redact === true ? [] : options.redact.patterns).string;
 

@@ -42,6 +42,14 @@ beforeAll(() => {
   exportJsonData(results, { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'scanned');
   const unscanned = results.map(({ a11y: _a11y, ...r }) => r);
   exportJsonData(unscanned, { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'unscanned');
+  const test = (testId: string, file: string, outcome: 'expected' | 'unexpected' | 'flaky', more: Partial<TestResultData>): TestResultData => ({
+    testId, title: testId, file, status: outcome === 'unexpected' ? 'failed' : 'passed', outcome, duration: 1, retry: outcome === 'flaky' ? 1 : 0, steps: [], history: [], ...more,
+  });
+  exportJsonData([
+    test('pay', 'checkout/pay.spec.ts', 'unexpected', { tags: ['@critical'], project: 'chromium', owners: ['@shop'] }),
+    test('home', 'home.spec.ts', 'flaky', { project: 'firefox' }),
+    test('about', 'about.spec.ts', 'expected', { project: 'firefox' }),
+  ], { runs: [], tests: {}, summaries: [] }, Date.now(), {}, undefined, undefined, dir, 'scoped');
 });
 
 afterAll(() => {
@@ -119,6 +127,45 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
   });
 });
 
+describe('playwright-smart-reporter gate (src/bin/cli.ts) scoped rules', () => {
+  function runCli(args: string[]) {
+    const res = spawnSync(process.execPath, [bundle('cli'), ...args], { cwd: dir, encoding: 'utf-8' });
+    return { status: res.status, stdout: res.stdout, stderr: res.stderr.trim() };
+  }
+
+  it('scopes rules by the tags, project, owners and file in the JSON export, and a warn rule does not fail the gate', () => {
+    const config = writeJson('scoped-gates.json', { rules: [
+      { id: 'critical', scope: { tag: '@critical' }, maxFailures: 0 },
+      { scope: { project: 'firefox' }, maxFlakyRate: 0, severity: 'warn' },
+      { scope: { owner: '@shop', file: 'checkout/**' }, minPassRate: 100 },
+    ] });
+    const { status, stdout } = runCli(['gate', '--config', config, '--data', 'scoped-data.json']);
+    expect(status).toBe(1);
+    expect(stdout.split('\n').slice(3, 7)).toEqual([
+      '  ✗ critical             1 ≤ 0',
+      '  ! Max flaky rate (project firefox) 50% ≤ 0% (warning)',
+      '  ✗ Min pass rate (file checkout/**, owner @shop) 0% ≥ 100%',
+      '  ─────────────────────────────────────────────',
+    ]);
+    expect(stdout).toContain('Result: FAILED (2 of 3 rules breached, 1 warning)');
+  });
+
+  it('exits 0 when only a warn rule is breached', () => {
+    const config = writeJson('warn-gates.json', { rules: [{ scope: { project: 'firefox' }, maxFlakyRate: 0, severity: 'warn' }] });
+    const { status, stdout } = runCli(['gate', '--config', config, '--data', 'scoped-data.json']);
+    expect(status).toBe(0);
+    expect(stdout).toContain('Result: PASSED with 1 warning (0 of 1 rules passed)');
+  });
+
+  it('exits 1 on an unknown key in a rule, in both CLIs', () => {
+    const config = writeJson('bogus-gates.json', { rules: [{ bogus: 1 }] });
+    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage.';
+    expect(runCli(['gate', '--config', config, '--data', 'scoped-data.json'])).toMatchObject({ status: 1, stderr: message });
+    const res = spawnSync(process.execPath, [bundle('gate'), '--input', 'scoped-data.json', '--config', config], { cwd: dir, encoding: 'utf-8' });
+    expect([res.status, res.stderr.trim()]).toEqual([1, message]);
+  });
+});
+
 describe('gate CLI (src/bin/gate.ts) flags', () => {
   function runGate(args: string[]) {
     const res = spawnSync(process.execPath, [bundle('gate'), ...args], { cwd: dir, encoding: 'utf-8' });
@@ -141,6 +188,12 @@ describe('gate CLI (src/bin/gate.ts) flags', () => {
     expect(status).toBe(0);
     expect(stdout).toContain('○ Min pass rate        (skipped — no test ran)');
     expect(stdout).toContain('○ Max flaky rate       (skipped — no test ran)');
+  });
+
+  it('says why --min-stability-grade is skipped when no test has a grade', () => {
+    const { status, stdout } = runGate(['--input', 'scoped-data.json', '--min-stability-grade', 'B']);
+    expect(status).toBe(0);
+    expect(stdout).toContain('○ Min stability grade  (skipped — no stability grades)');
   });
 
   it('rejects a flag with a missing or invalid value with a message instead of a crash or a silent pass', () => {

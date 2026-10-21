@@ -1,5 +1,5 @@
 import type { JsonExportData } from '../generators/json-exporter';
-import { ruleLabels } from '../gates/quality-gate-reporter';
+import { isWarning, ruleLabel } from '../gates/quality-gate-reporter';
 import { formatDuration } from '../utils/formatters';
 import { formatPassRate } from '../utils/run-stats';
 import { failureLocation, isFailure, testLabel } from './annotations';
@@ -55,15 +55,17 @@ export function renderSummary(data: JsonExportData, opts: SummaryOptions): strin
   const gates = data.qualityGates;
   if (gates) {
     const checked = gates.rules.filter((r) => !r.skipped);
-    const breached = checked.filter((r) => !r.passed);
+    const warnings = checked.filter(isWarning).length;
+    const breached = checked.filter((r) => !r.passed).length - warnings;
+    const warningText = `${warnings} warning${warnings === 1 ? '' : 's'}`;
     out.push('', gates.passed
-      ? `**Quality gates: passed** (${checked.length} of ${checked.length} rules passed)`
-      : `**Quality gates: failed** (${breached.length} of ${checked.length} rules breached)`);
+      ? `**Quality gates: passed${warnings ? ` with ${warningText}` : ''}** (${checked.length - warnings} of ${checked.length} rules passed)`
+      : `**Quality gates: failed** (${breached} of ${checked.length} rules breached${warnings ? `, ${warningText}` : ''})`);
     out.push('', ...table(['Rule', 'Actual', 'Threshold', 'Result'], gates.rules.map((r) => [
-      ruleLabels[r.rule] ?? r.rule,
+      ruleLabel(r),
       r.actual,
       r.threshold,
-      r.skipped ? 'Skipped' : r.passed ? 'Passed' : 'Failed',
+      r.skipped ? 'Skipped' : r.passed ? 'Passed' : isWarning(r) ? 'Warning' : 'Failed',
     ])));
   }
 

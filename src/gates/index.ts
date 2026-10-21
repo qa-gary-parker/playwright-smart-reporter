@@ -1,2 +1,2 @@
-export { QualityGateEvaluator } from './quality-gate-evaluator';
+export { QualityGateEvaluator, validateQualityGates } from './quality-gate-evaluator';
 export { formatGateReport } from './quality-gate-reporter';

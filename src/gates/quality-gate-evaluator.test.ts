@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { QualityGateEvaluator } from './quality-gate-evaluator';
+import { QualityGateEvaluator, validateQualityGates } from './quality-gate-evaluator';
 import type {
   TestResultData,
   QualityGateConfig,
@@ -244,7 +244,7 @@ describe('QualityGateEvaluator', () => {
     it('skips the rule when no test ran, instead of reporting 0% as a pass', () => {
       const result = evaluator.evaluate({ minPassRate: 90 }, []);
       const rule = result.rules.find(r => r.rule === 'minPassRate');
-      expect(rule).toEqual({ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true });
+      expect(rule).toEqual({ rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true, skipReason: 'no test ran' });
     });
   });
 
@@ -290,7 +290,7 @@ describe('QualityGateEvaluator', () => {
 
     it('skips the rule when no test ran, like minPassRate', () => {
       const result = evaluator.evaluate({ maxFlakyRate: 5 }, []);
-      expect(result.rules).toEqual([{ rule: 'maxFlakyRate', passed: true, actual: 'N/A', threshold: '≤ 5%', skipped: true }]);
+      expect(result.rules).toEqual([{ rule: 'maxFlakyRate', passed: true, actual: 'N/A', threshold: '≤ 5%', skipped: true, skipReason: 'no test ran' }]);
     });
 
     it('leaves skipped tests out: 1 flaky and 1 passed among 8 skipped is 50%', () => {
@@ -307,7 +307,7 @@ describe('QualityGateEvaluator', () => {
     it('skips the rule when every test was skipped', () => {
       const results = Array.from({ length: 3 }, (_, i) => createTestResult({ testId: `s${i}`, status: 'skipped', outcome: 'skipped' }));
       expect(evaluator.evaluate({ maxFlakyRate: 5 }, results).rules).toEqual([
-        { rule: 'maxFlakyRate', passed: true, actual: 'N/A', threshold: '≤ 5%', skipped: true },
+        { rule: 'maxFlakyRate', passed: true, actual: 'N/A', threshold: '≤ 5%', skipped: true, skipReason: 'no test ran' },
       ]);
     });
   });
@@ -379,16 +379,15 @@ describe('QualityGateEvaluator', () => {
       expect(rule?.actual).toBe('F');
     });
 
-    it('skips when no tests have stability grades', () => {
+    it('skips when no tests have stability grades, and says so instead of "no comparison data"', () => {
       const results = [
         createTestResult(),
         createTestResult({ testId: 'test-2' }),
       ];
       const result = evaluator.evaluate({ minStabilityGrade: 'B' }, results);
-      const rule = result.rules.find(r => r.rule === 'minStabilityGrade');
-      expect(rule?.skipped).toBe(true);
-      expect(rule?.passed).toBe(true);
-      expect(rule?.actual).toBe('N/A');
+      expect(result.rules).toEqual([
+        { rule: 'minStabilityGrade', passed: true, actual: 'N/A', threshold: '≥ B', skipped: true, skipReason: 'no stability grades' },
+      ]);
     });
 
     it('ignores tests without stability scores in average calculation', () => {
@@ -473,10 +472,9 @@ describe('QualityGateEvaluator', () => {
         { noNewFailures: true },
         [createTestResult()],
       );
-      const rule = result.rules.find(r => r.rule === 'noNewFailures');
-      expect(rule?.skipped).toBe(true);
-      expect(rule?.passed).toBe(true);
-      expect(rule?.actual).toBe('N/A');
+      expect(result.rules).toEqual([
+        { rule: 'noNewFailures', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no comparison data' },
+      ]);
     });
 
     it('is not evaluated when noNewFailures is false', () => {
@@ -706,7 +704,7 @@ describe('QualityGateEvaluator', () => {
     it('skips minPassRate when every test was skipped, instead of passing it', () => {
       const results = Array.from({ length: 3 }, () => createTestResult({ status: 'skipped', outcome: 'skipped' }));
       expect(rule({ minPassRate: 90 }, results)).toEqual({
-        rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true,
+        rule: 'minPassRate', passed: true, actual: 'N/A', threshold: '≥ 90%', skipped: true, skipReason: 'no test ran',
       });
     });
 
@@ -784,11 +782,126 @@ describe('QualityGateEvaluator', () => {
         [createTestResult(), createTestResult({ testId: 'test-2' })],
       );
       expect(result.passed).toBe(true);
-      expect(result.rules.map(r => [r.rule, r.passed, r.actual, r.skipped])).toEqual([
-        ['maxA11yViolations', true, 'N/A', true],
-        ['maxA11yCritical', true, 'N/A', true],
-        ['maxA11ySerious', true, 'N/A', true],
+      expect(result.rules.map(r => [r.rule, r.passed, r.actual, r.skipped, r.skipReason])).toEqual([
+        ['maxA11yViolations', true, 'N/A', true, 'no accessibility scans'],
+        ['maxA11yCritical', true, 'N/A', true, 'no accessibility scans'],
+        ['maxA11ySerious', true, 'N/A', true, 'no accessibility scans'],
       ]);
+    });
+  });
+
+  // #70: scoped rules and warn severity
+  describe('rules', () => {
+    const failed = { status: 'failed', outcome: 'unexpected' } as const;
+
+    it('fails a minPassRate of 100 scoped to @critical when one critical test fails among many passes', () => {
+      const results = [
+        ...Array.from({ length: 50 }, (_, i) => createTestResult({ testId: `p${i}`, outcome: 'expected' })),
+        ...Array.from({ length: 9 }, (_, i) => createTestResult({ testId: `c${i}`, tags: ['@smoke', '@critical'], outcome: 'expected' })),
+        createTestResult({ testId: 'c-failed', tags: ['@critical'], ...failed }),
+      ];
+      const result = evaluator.evaluate({ minPassRate: 95, rules: [{ id: 'critical paths', scope: { tag: '@critical' }, minPassRate: 100 }] }, results);
+      expect(result).toEqual({
+        passed: false,
+        rules: [
+          { rule: 'minPassRate', passed: true, actual: '98.3%', threshold: '≥ 95%' },
+          { rule: 'minPassRate', passed: false, actual: '90%', threshold: '≥ 100%', id: 'critical paths', scope: 'tag @critical' },
+        ],
+      });
+    });
+
+    it('reports a breached warn rule without failing the gate', () => {
+      const results = [
+        createTestResult({ testId: 'a', project: 'chromium', outcome: 'flaky' }),
+        createTestResult({ testId: 'b', project: 'chromium', outcome: 'expected' }),
+        createTestResult({ testId: 'c', project: 'firefox', outcome: 'flaky' }),
+      ];
+      const result = evaluator.evaluate({ rules: [
+        { scope: { project: 'chromium' }, maxFlakyRate: 2, severity: 'warn' },
+        { maxFailures: 0, severity: 'fail' },
+      ] }, results);
+      expect(result).toEqual({
+        passed: true,
+        rules: [
+          { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '≤ 2%', scope: 'project chromium', severity: 'warn' },
+          { rule: 'maxFailures', passed: true, actual: '0', threshold: '≤ 0' },
+        ],
+      });
+    });
+
+    it('scopes by file pattern and owner, needs every scope key to match and any value of a key', () => {
+      const results = [
+        createTestResult({ testId: 'pay', file: 'checkout/pay.spec.ts', owners: ['@shop'], ...failed }),
+        createTestResult({ testId: 'cart', file: 'checkout/cart.spec.ts', owners: ['@web'], ...failed }),
+        createTestResult({ testId: 'login', file: 'auth/login.spec.ts', owners: ['@shop'], ...failed }),
+        createTestResult({ testId: 'home', file: 'home.spec.ts', ...failed }),
+      ];
+      const result = evaluator.evaluate({ rules: [
+        { scope: { file: 'checkout/**' }, maxFailures: 0 },
+        { scope: { file: 'checkout/', owner: '@shop' }, maxFailures: 0 },
+        { scope: { owner: ['@web', '@shop'] }, maxFailures: 0 },
+        { scope: { file: ['*.spec.ts'] }, maxFailures: 0 },
+      ] }, results);
+      expect(result.rules.map(r => [r.scope, r.actual])).toEqual([
+        ['file checkout/**', '2'],
+        ['file checkout/, owner @shop', '1'],
+        ['owner @web or @shop', '3'],
+        ['file *.spec.ts', '4'],
+      ]);
+    });
+
+    it('skips a rule whose scope matches no test, so a misspelt tag does not pass it silently', () => {
+      const result = evaluator.evaluate(
+        { rules: [{ scope: { tag: '@critcal' }, maxFailures: 0 }] },
+        [createTestResult({ tags: ['@critical'], ...failed })],
+      );
+      expect(result).toEqual({
+        passed: true,
+        rules: [{ rule: 'maxFailures', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no test in scope', scope: 'tag @critcal' }],
+      });
+    });
+
+    it('counts only the new failures in scope for a scoped noNewFailures', () => {
+      const critical = createTestResult({ testId: 'a', tags: ['@critical'], ...failed });
+      const other = createTestResult({ testId: 'b', ...failed });
+      const comparison = createComparison({ changes: { ...createComparison().changes, newFailures: [critical, other] } });
+      const result = evaluator.evaluate({ rules: [{ scope: { tag: '@critical' }, noNewFailures: true }] }, [critical, other], comparison);
+      expect(result.rules).toEqual([{ rule: 'noNewFailures', passed: false, actual: '1', threshold: '≤ 0', scope: 'tag @critical' }]);
+    });
+  });
+
+  describe('validateQualityGates', () => {
+    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage';
+
+    it.each<[string, unknown, string]>([
+      ['an unknown key in a rule', { rules: [{ bogus: 1 }] }, `unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, ${RULES}.`],
+      ['an unknown rule', { minPassrate: 95 }, `unknown quality gate rule "minPassrate". Known rules: ${RULES}.`],
+      ['an unknown scope key', { rules: [{ scope: { tags: ['@a'] }, maxFailures: 0 }] }, 'unknown key "tags" in quality gate rules[0].scope. Known keys: tag, project, file, owner.'],
+      ['two rules in one entry', { rules: [{ maxFailures: 0, minPassRate: 90 }] }, 'quality gate rules[0] must name exactly one rule (found maxFailures, minPassRate).'],
+      ['an entry with no rule', { rules: [{ severity: 'warn' }] }, 'quality gate rules[0] must name exactly one rule (found none).'],
+      ['an unknown severity', { rules: [{ maxFailures: 0, severity: 'error' }] }, 'quality gate rules[0].severity must be "fail" or "warn" (got "error").'],
+      ['a repeated id', { rules: [{ id: 'x', maxFailures: 0 }, { id: 'x', minPassRate: 90 }] }, 'quality gate rules[1].id "x" is already used by another rule.'],
+      ['a scoped minCoverage', { rules: [{ scope: { tag: '@a' }, minCoverage: 80 }] }, 'quality gate rules[0]: minCoverage cannot be scoped, because coverage is measured for the whole run.'],
+      ['a scope value that is not text', { rules: [{ scope: { tag: 1 }, maxFailures: 0 }] }, 'quality gate rules[0].scope.tag must be a string or an array of strings.'],
+      ['rules that are not a list', { rules: { maxFailures: 0 } }, 'quality gate "rules" must be an array.'],
+    ])('rejects %s', (_, config, message) => {
+      expect(() => validateQualityGates(config as QualityGateConfig)).toThrow(new Error(message));
+    });
+
+    it('accepts a flat rule next to an entry that uses every key, and evaluates both', () => {
+      const config: QualityGateConfig = {
+        maxFailures: 0,
+        rules: [{ id: 'critical', scope: { tag: ['@critical'], project: 'chromium', file: 'checkout/**', owner: '@shop' }, severity: 'warn', minPassRate: 100 }],
+      };
+      validateQualityGates(config);
+      const results = [createTestResult({ tags: ['@critical'], project: 'chromium', file: 'checkout/pay.spec.ts', owners: ['@shop'], status: 'failed', outcome: 'unexpected' })];
+      expect(evaluator.evaluate(config, results)).toEqual({
+        passed: false,
+        rules: [
+          { rule: 'maxFailures', passed: false, actual: '1', threshold: '≤ 0' },
+          { rule: 'minPassRate', passed: false, actual: '0%', threshold: '≥ 100%', id: 'critical', scope: 'tag @critical, project chromium, file checkout/**, owner @shop', severity: 'warn' },
+        ],
+      });
     });
   });
 });

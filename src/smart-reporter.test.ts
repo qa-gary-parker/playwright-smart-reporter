@@ -2,8 +2,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { mergeHistories } from './smart-reporter';
-import type { HistoryRunFile, RunSummary, TestHistory, TestHistoryEntry } from './types';
+import SmartReporter, { mergeHistories } from './smart-reporter';
+import type { HistoryRunFile, QualityGateConfig, RunSummary, TestHistory, TestHistoryEntry } from './types';
+
+describe('SmartReporter options', () => {
+  it('throws at creation on an unknown quality gate key, so a typo cannot pass the gate', () => {
+    const qualityGates = { rules: [{ bogus: 1 }] } as unknown as QualityGateConfig;
+    expect(() => new SmartReporter({ qualityGates })).toThrow(new Error(
+      'unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage.',
+    ));
+  });
+});
 
 describe('mergeHistories', () => {
   let dir: string;

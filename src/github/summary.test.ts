@@ -88,6 +88,28 @@ describe('renderSummary', () => {
 `);
   });
 
+  it('names a rule by its id or scope, and shows a breached warn rule as a warning, not a failure', () => {
+    const qualityGates = {
+      passed: true,
+      rules: [
+        { rule: 'minPassRate', passed: true, actual: '100%', threshold: '≥ 100%', id: 'critical paths' },
+        { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '≤ 2%', scope: 'project chromium', severity: 'warn' as const },
+        { rule: 'maxFailures', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no test in scope', scope: 'tag @x' },
+      ],
+    };
+    const lines = renderSummary({ ...data, qualityGates }, { workspace: WORKSPACE }).split('\n');
+    const at = lines.findIndex((l) => l.startsWith('**Quality gates'));
+    expect(lines.slice(at, at + 7)).toEqual([
+      '**Quality gates: passed with 1 warning** (1 of 2 rules passed)',
+      '',
+      '| Rule | Actual | Threshold | Result |',
+      '|---|---|---|---|',
+      '| critical paths | 100% | ≥ 100% | Passed |',
+      '| Max flaky rate (project chromium) | 50% | ≤ 2% | Warning |',
+      '| Max failures (tag @x) | N/A | ≤ 0 | Skipped |',
+    ]);
+  });
+
   it('renders a passing run without gate, failure or flaky sections or a link', () => {
     const passing: JsonExportData = {
       metadata: { generatedAt: '2026-10-08T10:00:00.000Z', reporterVersion: '3.0.0' },

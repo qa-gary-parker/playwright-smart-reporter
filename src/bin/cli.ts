@@ -2,7 +2,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { QualityGateConfig } from '../types';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -31,8 +30,6 @@ function parseFlag(flag: string): string | undefined {
 function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
-
-const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
 
 async function runGate(): Promise<void> {
   if (hasFlag('--help')) {
@@ -72,7 +69,7 @@ Options:
     return;
   }
 
-  const { QualityGateEvaluator, formatGateReport } = await import('../gates');
+  const { QualityGateEvaluator, formatGateReport, validateQualityGates } = await import('../gates');
 
   const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   const data = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
@@ -82,36 +79,16 @@ Options:
     process.exitCode = 1;
     return;
   }
-  const unknown = Object.keys(config ?? {}).find((key) => !(GATE_RULES as readonly string[]).includes(key));
-  if (unknown) {
-    console.error(`Error: unknown quality gate rule "${unknown}". Known rules: ${GATE_RULES.join(', ')}.`);
+  try {
+    validateQualityGates(config);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
     process.exitCode = 1;
     return;
   }
 
-  // Reconstruct minimal TestResultData from JSON export
-  const results = (data.tests || []).map((t: any) => ({
-    testId: t.testId,
-    title: t.title,
-    file: t.file,
-    status: t.status,
-    duration: t.duration,
-    outcome: t.outcome,
-    flakinessScore: t.flakinessScore,
-    stabilityScore: t.stabilityScore ? {
-      overall: t.stabilityScore.overall,
-      grade: t.stabilityScore.grade,
-      flakiness: 0,
-      performance: 0,
-      reliability: 0,
-      needsAttention: false,
-    } : undefined,
-    error: t.error,
-    retry: t.retry,
-    steps: [],
-    history: [],
-    a11y: t.a11y,
-  }));
+  const { toTestResultData } = await import('../generators/json-exporter');
+  const results = data.tests.map(toTestResultData);
 
   const evaluator = new QualityGateEvaluator();
   const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary);

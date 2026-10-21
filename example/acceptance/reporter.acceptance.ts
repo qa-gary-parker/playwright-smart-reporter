@@ -87,6 +87,33 @@ describe('history', () => {
   });
 });
 
+describe('quality gate rules', () => {
+  it('stops the run before any test when a rule has an unknown key', () => {
+    const out = path.join(tmp, 'gate-unknown-key');
+    const run = runSuite(out, { qualityGates: { rules: [{ bogus: 1 }] } }, ['--grep', 'passes$']);
+
+    expect(run.status).toBe(1);
+    expect(run.output).toContain('unknown key "bogus" in quality gate rules[0].');
+    expect(fs.existsSync(path.join(out, 'pw.json'))).toBe(false);
+  });
+
+  it('scopes a rule to a tag, and passes the run when only a warn rule is breached', () => {
+    const out = path.join(tmp, 'gate-scoped');
+    const qualityGates = { rules: [{ scope: { tag: '@smoke' }, maxFlakyRate: 0 }, { maxFlakyRate: 0, severity: 'warn' }] };
+    const run = runSuite(out, { qualityGates }, ['--grep', 'passes on retry|@smoke']);
+
+    expect(run.status).toBe(0);
+    expect(run.output).toContain('Result: PASSED with 1 warning (1 of 2 rules passed)');
+    expect(reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).gates).toEqual({
+      passed: true,
+      rules: [
+        { rule: 'maxFlakyRate', passed: true, actual: '0%', threshold: '≤ 0%', scope: 'tag @smoke' },
+        { rule: 'maxFlakyRate', passed: false, actual: '33.4%', threshold: '≤ 0%', severity: 'warn' },
+      ],
+    });
+  });
+});
+
 describe('quarantine', () => {
   it('writes the quarantine file into a folder that does not exist yet', () => {
     const out = path.join(tmp, 'quarantine');

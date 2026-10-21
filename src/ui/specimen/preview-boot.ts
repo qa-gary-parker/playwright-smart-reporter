@@ -46,6 +46,17 @@ if (params.get('base')) data.meta.outputBasename = params.get('base')!;
 // ?ai=off: AI was switched off by enableAIRecommendations: false.
 if (params.get('ai') === 'off') data.ai = { ...data.ai, analysisOff: true, summaryOff: true };
 
+// ?gates=scoped: a named rule that failed and a scoped warn rule that was breached.
+if (params.get('gates') === 'scoped') {
+  data.gates = {
+    passed: false,
+    rules: [
+      { rule: 'minPassRate', passed: false, actual: '90%', threshold: '≥ 100%', id: 'critical paths', scope: 'tag @critical' },
+      { rule: 'maxFlakyRate', passed: false, actual: '50%', threshold: '≤ 2%', scope: 'project chromium', severity: 'warn' },
+    ],
+  };
+}
+
 // ?scale=N clones the fixture up to N tests to exercise virtualization.
 const scale = Number(params.get('scale') ?? 0);
 if (scale > data.tests.length) {

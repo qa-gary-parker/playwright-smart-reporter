@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import { isFailedTest } from '../utils/flakiness';
 import { computeRunStats, formatPassRate, runStabilityGrade } from '../utils/run-stats';
+import { isWarning } from '../gates/quality-gate-reporter';
 
 export type { PdfFontConfig };
 
@@ -732,13 +733,14 @@ function drawQualityGates(doc: PDFKit.PDFDocument, result: QualityGateResult, st
       doc.restore();
     }
 
-    const statusColor = rule.skipped ? scheme.lightText : rule.passed ? scheme.accentGreenDark : scheme.accentRedDark;
-    const statusText = rule.skipped ? 'Skipped' : rule.passed ? 'Passed' : 'Failed';
-    const statusIcon = rule.skipped ? '-' : rule.passed ? '\u2713' : '\u2717';
+    const warning = isWarning(rule);
+    const statusColor = rule.skipped ? scheme.lightText : rule.passed ? scheme.accentGreenDark : warning ? scheme.accentAmber : scheme.accentRedDark;
+    const statusText = rule.skipped ? 'Skipped' : rule.passed ? 'Passed' : warning ? 'Warning' : 'Failed';
+    const statusIcon = rule.skipped ? '-' : rule.passed ? '\u2713' : warning ? '!' : '\u2717';
 
     doc.save();
     doc.font(FONT_REGULAR).fontSize(8).fillColor(scheme.bodyText);
-    doc.text(formatRuleName(rule.rule), MARGIN + 8, y + 6, { width: colWidths[0] });
+    doc.text(rule.id ?? `${formatRuleName(rule.rule)}${rule.scope ? ` (${rule.scope})` : ''}`, MARGIN + 8, y + 6, { width: colWidths[0] });
     doc.text(rule.actual, MARGIN + colWidths[0] + 4, y + 6, { width: colWidths[1] });
     doc.text(rule.threshold, MARGIN + colWidths[0] + colWidths[1] + 4, y + 6, { width: colWidths[2] });
 

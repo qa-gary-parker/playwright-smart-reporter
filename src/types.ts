@@ -601,6 +601,23 @@ export interface QualityGateConfig {
   maxA11ySerious?: number;
   // Phase 6: Code coverage (minimum line coverage percentage)
   minCoverage?: number;
+
+  // #70: rules with a scope or a severity, evaluated after the rules above
+  rules?: QualityGateRule[];
+}
+
+/** One rule key per entry. A test is in scope when it matches every scope key, and any value of a key. */
+export type QualityGateRule = Omit<QualityGateConfig, 'rules'> & {
+  id?: string;                  // Names the rule in the output; unique
+  scope?: QualityGateScope;
+  severity?: 'fail' | 'warn';   // Default: 'fail'. A breached 'warn' rule is reported but passes the gate.
+};
+
+export interface QualityGateScope {
+  tag?: string | string[];
+  project?: string | string[];
+  file?: string | string[];     // CODEOWNERS-style pattern on the test file path, e.g. 'checkout/**'
+  owner?: string | string[];
 }
 
 export interface QualityGateRuleResult {
@@ -609,6 +626,11 @@ export interface QualityGateRuleResult {
   actual: string;
   threshold: string;
   skipped?: boolean;
+  skipReason?: string;
+  // Set from a `rules` entry
+  id?: string;
+  scope?: string;
+  severity?: 'warn';
 }
 
 export interface QualityGateResult {

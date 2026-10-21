@@ -29,7 +29,7 @@ function escapeRegex(ch: string): string {
 
 // gitignore-style pattern -> regex, following GitHub's CODEOWNERS semantics
 // (same rules as github.com/hmarr/codeowners): no negation, no [] classes.
-function compilePattern(pattern: string): RegExp {
+export function compilePattern(pattern: string): RegExp {
   if (pattern === '/') return /^(?!)/;
   let segs = pattern.split('/');
   if (segs[0] === '') {

@@ -2,9 +2,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TestResultData, QualityGateConfig, StabilityScore, RunComparison, A11yResult } from '../types';
-import { QualityGateEvaluator } from '../gates/quality-gate-evaluator';
+import type { QualityGateConfig, RunComparison } from '../types';
+import { GATE_RULES, QualityGateEvaluator, validateQualityGates } from '../gates/quality-gate-evaluator';
 import { formatGateReport } from '../gates/quality-gate-reporter';
+import { toTestResultData, type JsonTestEntry } from '../generators/json-exporter';
 import type { CoverageSummary } from '../report-data/schema';
 
 interface GateOptions {
@@ -143,66 +144,18 @@ function buildConfig(options: GateOptions): QualityGateConfig {
   return config;
 }
 
-interface JsonTestEntry {
-  testId: string;
-  title: string;
-  file: string;
-  status: string;
-  duration: number;
-  error?: string;
-  retry: number;
-  outcome?: string;
-  flakinessScore?: number;
-  stabilityScore?: {
-    overall: number;
-    grade: string;
-  };
-  a11y?: A11yResult;
-}
-
-function toTestResultData(entry: JsonTestEntry): TestResultData {
-  const stabilityScore: StabilityScore | undefined = entry.stabilityScore
-    ? {
-        overall: entry.stabilityScore.overall,
-        flakiness: 0,
-        performance: 0,
-        reliability: 0,
-        grade: entry.stabilityScore.grade as StabilityScore['grade'],
-        needsAttention: false,
-      }
-    : undefined;
-
-  return {
-    testId: entry.testId,
-    title: entry.title,
-    file: entry.file,
-    status: entry.status as TestResultData['status'],
-    duration: entry.duration,
-    error: entry.error,
-    retry: entry.retry,
-    outcome: entry.outcome as TestResultData['outcome'],
-    flakinessScore: entry.flakinessScore,
-    stabilityScore,
-    steps: [],
-    history: [],
-    a11y: entry.a11y,
-  };
-}
-
 function main(): void {
   const options = parseArgs(process.argv);
   const config = buildConfig(options);
 
-  // Check if any rules are configured
-  const hasRules = config.maxFailures !== undefined
-    || config.minPassRate !== undefined
-    || config.maxFlakyRate !== undefined
-    || config.minStabilityGrade !== undefined
-    || config.noNewFailures !== undefined
-    || config.maxA11yViolations !== undefined
-    || config.maxA11yCritical !== undefined
-    || config.maxA11ySerious !== undefined
-    || config.minCoverage !== undefined;
+  try {
+    validateQualityGates(config);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
+
+  const hasRules = GATE_RULES.some((rule) => config[rule] !== undefined) || (config.rules?.length ?? 0) > 0;
 
   if (!hasRules) {
     console.error('Error: No quality gate rules configured. Use --config or inline flags.');

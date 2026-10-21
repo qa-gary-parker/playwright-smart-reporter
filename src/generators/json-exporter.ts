@@ -12,6 +12,7 @@ import type {
   CausalTimeline,
   QualityGateResult,
   CIInfo,
+  StabilityScore,
 } from '../types';
 import type { CoverageSummary, ReportCoverage } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade } from '../utils/run-stats';
@@ -98,6 +99,35 @@ export interface JsonTestEntry {
   line?: number;
   column?: number;
   errorLocation?: TestResultData['errorLocation'];
+}
+
+/** A test read back from the JSON export, with the fields the quality gates use. */
+export function toTestResultData(entry: JsonTestEntry): TestResultData {
+  return {
+    testId: entry.testId,
+    title: entry.title,
+    file: entry.file,
+    status: entry.status as TestResultData['status'],
+    duration: entry.duration,
+    error: entry.error,
+    retry: entry.retry,
+    outcome: entry.outcome as TestResultData['outcome'],
+    flakinessScore: entry.flakinessScore,
+    stabilityScore: entry.stabilityScore && {
+      overall: entry.stabilityScore.overall,
+      flakiness: 0,
+      performance: 0,
+      reliability: 0,
+      grade: entry.stabilityScore.grade as StabilityScore['grade'],
+      needsAttention: false,
+    },
+    steps: [],
+    history: [],
+    a11y: entry.a11y,
+    tags: entry.tags,
+    project: entry.project,
+    owners: entry.owners,
+  };
 }
 
 interface JsonClusterEntry {

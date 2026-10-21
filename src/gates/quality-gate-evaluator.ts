@@ -3,14 +3,79 @@ import type {
   QualityGateConfig,
   QualityGateResult,
   QualityGateRuleResult,
+  QualityGateScope,
   RunComparison,
+  ComparisonChanges,
   A11yImpact,
 } from '../types';
 import type { CoverageSummary } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade, type RunStats } from '../utils/run-stats';
 import { isFailedTest } from '../utils/flakiness';
+import { compilePattern } from '../analyzers/ownership';
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
+
+export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
+const SCOPE_KEYS = ['tag', 'project', 'file', 'owner'] as const satisfies ReadonlyArray<keyof QualityGateScope>;
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Throws on a config the evaluator would misread, so a typo cannot pass the gate. */
+export function validateQualityGates(config: QualityGateConfig): void {
+  if (!isObject(config)) throw new Error('quality gate config must be an object.');
+  const isRule = (key: string) => (GATE_RULES as readonly string[]).includes(key);
+  const unknown = Object.keys(config).find((key) => key !== 'rules' && !isRule(key));
+  if (unknown) throw new Error(`unknown quality gate rule "${unknown}". Known rules: ${GATE_RULES.join(', ')}.`);
+  if (config.rules === undefined) return;
+  if (!Array.isArray(config.rules)) throw new Error('quality gate "rules" must be an array.');
+
+  const ids = new Set<string>();
+  config.rules.forEach((entry: unknown, i) => {
+    const at = `quality gate rules[${i}]`;
+    if (!isObject(entry)) throw new Error(`${at} must be an object.`);
+    const { id, scope, severity, ...rule } = entry;
+    const names = Object.keys(rule);
+    const unknownKey = names.find((key) => !isRule(key));
+    if (unknownKey) throw new Error(`unknown key "${unknownKey}" in ${at}. Known keys: id, scope, severity, ${GATE_RULES.join(', ')}.`);
+    if (names.length !== 1) throw new Error(`${at} must name exactly one rule (found ${names.join(', ') || 'none'}).`);
+    if (severity !== undefined && severity !== 'fail' && severity !== 'warn') throw new Error(`${at}.severity must be "fail" or "warn" (got ${JSON.stringify(severity)}).`);
+    if (id !== undefined) {
+      if (typeof id !== 'string') throw new Error(`${at}.id must be a string.`);
+      if (ids.has(id)) throw new Error(`${at}.id "${id}" is already used by another rule.`);
+      ids.add(id);
+    }
+    if (scope === undefined) return;
+    if (!isObject(scope)) throw new Error(`${at}.scope must be an object.`);
+    if (names[0] === 'minCoverage') throw new Error(`${at}: minCoverage cannot be scoped, because coverage is measured for the whole run.`);
+    for (const [key, value] of Object.entries(scope)) {
+      if (!(SCOPE_KEYS as readonly string[]).includes(key)) throw new Error(`unknown key "${key}" in ${at}.scope. Known keys: ${SCOPE_KEYS.join(', ')}.`);
+      if (![value].flat().every((v) => typeof v === 'string')) throw new Error(`${at}.scope.${key} must be a string or an array of strings.`);
+    }
+  });
+}
+
+const valuesOf = (value: string | string[] | undefined) => (value === undefined ? undefined : [value].flat());
+
+function inScope(scope: QualityGateScope): (test: TestResultData) => boolean {
+  const [tags, projects, owners] = [valuesOf(scope.tag), valuesOf(scope.project), valuesOf(scope.owner)];
+  const files = valuesOf(scope.file)?.map(compilePattern);
+  return (t) =>
+    (!tags || tags.some((tag) => t.tags?.includes(tag)))
+    && (!projects || projects.includes(t.project ?? ''))
+    && (!files || files.some((re) => re.test(t.file.replace(/\\/g, '/'))))
+    && (!owners || owners.some((owner) => t.owners?.includes(owner)));
+}
+
+function describeScope(scope: QualityGateScope): string {
+  return SCOPE_KEYS.flatMap((key) => (scope[key] === undefined ? [] : [`${key} ${valuesOf(scope[key])!.join(' or ')}`])).join(', ');
+}
+
+function scopeComparison(comparison: RunComparison | undefined, tests: TestResultData[]): RunComparison | undefined {
+  if (!comparison) return undefined;
+  const ids = new Set(tests.map((t) => t.testId));
+  const changes = Object.fromEntries(Object.entries(comparison.changes).map(([key, list]: [string, TestResultData[]]) => [key, list.filter((t) => ids.has(t.testId))]));
+  return { ...comparison, changes: changes as unknown as ComparisonChanges };
+}
 
 // Sign of (count/total*100 - threshold), in integers so boundaries are exact.
 // The threshold is scaled by its own decimal places, so 99.4 compares as 994/10.
@@ -32,6 +97,32 @@ export class QualityGateEvaluator {
     comparison?: RunComparison,
     coverage?: CoverageSummary,
   ): QualityGateResult {
+    const { rules: entries = [], ...flat } = config;
+    const rules = this.evaluateRules(flat, results, comparison, coverage);
+
+    for (const { id, scope, severity, ...rule } of entries) {
+      const tests = scope ? results.filter(inScope(scope)) : results;
+      const [result] = this.evaluateRules(rule, tests, scope ? scopeComparison(comparison, tests) : comparison, coverage);
+      if (!result) continue;
+      const scopeText = scope && describeScope(scope);
+      rules.push({
+        ...(scope && tests.length === 0 ? { ...result, passed: true, actual: 'N/A', skipped: true, skipReason: 'no test in scope' } : result),
+        ...(id !== undefined && { id }),
+        ...(scopeText && { scope: scopeText }),
+        ...(severity === 'warn' && { severity }),
+      });
+    }
+
+    const passed = rules.every(r => r.passed || r.severity === 'warn');
+    return { passed, rules };
+  }
+
+  private evaluateRules(
+    config: Omit<QualityGateConfig, 'rules'>,
+    results: TestResultData[],
+    comparison?: RunComparison,
+    coverage?: CoverageSummary,
+  ): QualityGateRuleResult[] {
     const rules: QualityGateRuleResult[] = [];
     const stats = computeRunStats(results);
 
@@ -69,8 +160,7 @@ export class QualityGateEvaluator {
       rules.push(this.evaluateMinCoverage(config.minCoverage, coverage));
     }
 
-    const passed = rules.every(r => r.passed);
-    return { passed, rules };
+    return rules;
   }
 
   private evaluateMaxFailures(threshold: number, { failed }: RunStats): QualityGateRuleResult {
@@ -90,6 +180,7 @@ export class QualityGateEvaluator {
         actual: 'N/A',
         threshold: `≥ ${threshold}%`,
         skipped: true,
+        skipReason: 'no test ran',
       };
     }
 
@@ -110,6 +201,7 @@ export class QualityGateEvaluator {
         actual: 'N/A',
         threshold: `≤ ${threshold}%`,
         skipped: true,
+        skipReason: 'no test ran',
       };
     }
 
@@ -134,6 +226,7 @@ export class QualityGateEvaluator {
         actual: 'N/A',
         threshold: `≥ ${threshold}`,
         skipped: true,
+        skipReason: 'no stability grades',
       };
     }
 
@@ -148,7 +241,7 @@ export class QualityGateEvaluator {
   private evaluateMaxA11y(rule: string, threshold: number, results: TestResultData[], impact?: A11yImpact): QualityGateRuleResult {
     const scanned = results.filter(r => r.a11y);
     if (scanned.length === 0) {
-      return { rule, passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true };
+      return { rule, passed: true, actual: 'N/A', threshold: `≤ ${threshold}`, skipped: true, skipReason: 'no accessibility scans' };
     }
     const count = scanned.reduce(
       (sum, r) => sum + r.a11y!.violations.filter(v => !impact || v.impact === impact).length, 0,
@@ -164,6 +257,7 @@ export class QualityGateEvaluator {
         actual: 'N/A',
         threshold: '≤ 0',
         skipped: true,
+        skipReason: 'no comparison data',
       };
     }
 

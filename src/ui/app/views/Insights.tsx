@@ -4,6 +4,7 @@ import { clusterLabel, displayStatus, formatDate, formatDuration, formatPassRate
 import { formatRoute } from '../router';
 import { data, runTests, testsById } from '../store';
 import { Markdown } from './Markdown';
+import { isWarning, ruleLabel } from '../../../gates/quality-gate-reporter';
 
 function Panel({ title, meta, children }: { title: string; meta?: string; children: ComponentChildren }) {
   return (
@@ -121,8 +122,8 @@ export function Insights() {
             <ul class="lines">
               {d.gates.rules.map((rule) => (
                 <li class="lines__item">
-                  <StatusGlyph status={rule.skipped ? 'skipped' : rule.passed ? 'passed' : 'failed'} />
-                  <span class="lines__label">{rule.rule}</span>
+                  <StatusGlyph status={rule.skipped ? 'skipped' : rule.passed ? 'passed' : isWarning(rule) ? 'flaky' : 'failed'} decorative={isWarning(rule)} />
+                  <span class="lines__label">{ruleLabel(rule)}{isWarning(rule) && ' (warning)'}</span>
                   <span class="lines__value mono">
                     {rule.actual} / {rule.threshold}
                   </span>

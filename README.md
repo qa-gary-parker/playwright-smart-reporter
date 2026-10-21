@@ -743,7 +743,30 @@ The result shows in the top bar and in the Quality gate panel in Insights, and i
 
 `minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
 
-The CLI gate checks a finished run again, for example in a later CI step. It reads the JSON export (`exportJson: true`) and a JSON file with the same rules:
+#### Scoped rules and warnings
+
+`rules` holds rules that apply to part of the run, or that warn instead of failing. They are checked after the rules above:
+
+```typescript
+qualityGates: {
+  minPassRate: 95,
+  rules: [
+    { id: 'critical paths', scope: { tag: '@critical' }, minPassRate: 100 },
+    { scope: { project: 'chromium' }, maxFlakyRate: 2, severity: 'warn' },
+    { scope: { file: 'checkout/**', owner: '@shop-team' }, maxFailures: 0 },
+  ],
+}
+```
+
+- Each entry has exactly one rule, with the same name and value as above.
+- `scope` keys: `tag`, `project`, `file` and `owner`. Each takes one value or a list. A test is in scope when it matches every key, and any value of a key. `file` is a CODEOWNERS-style pattern on the test file path shown in the report, such as `checkout/**` or `*.critical.spec.ts`. `owner` matches the owners from [Ownership](#ownership-and-routing).
+- When no test matches the scope, the rule is skipped (`no test in scope`), so a misspelt tag shows up instead of passing. `minCoverage` cannot be scoped.
+- `severity: 'warn'` shows a breach as a warning in the terminal, the report, the PDF and the GitHub summary, and does not fail the run. The default is `'fail'`.
+- `id` names the rule in the output instead of the rule name and scope. Each `id` must be unique.
+
+An unknown key, a second rule in one entry or an unknown `severity` stops the run with an error before any test runs, so a typo cannot pass the gate. This also applies to the rules above.
+
+The CLI gate checks a finished run again, for example in a later CI step. It reads the JSON export (`exportJson: true`) and a JSON file with the same rules, including `rules`:
 
 ```bash
 echo '{ "minPassRate": 95, "maxFlakyRate": 5 }' > gates.json
@@ -1008,7 +1031,7 @@ reporter: [
     exportCtrf: false,          // <name>-ctrf.json
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
-    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage }
+    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, rules }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
     live: {},                   // { enabled, outputFile: '.smart-live-results.jsonl', dashboard, notifyOnFirstFailure }
