@@ -646,4 +646,12 @@ describe('executive-pdf', () => {
 
     expectDrawn(lines, ['Card sandbox', 'tests/pay.spec.ts', 'n/a', FOOTER]);
   });
+
+  it('names flakiness in the quarantine banner only when every entry was quarantined for flakiness', () => {
+    const entry = (testId: string, source?: QuarantineEntry['source']): QuarantineEntry => ({ testId, title: testId, file: 'a.spec.ts', flakinessScore: 0.5, quarantinedAt: '2026-10-01T00:00:00Z', source });
+    const banner = (quarantineEntries: QuarantineEntry[]) => pdfLines(generateExecutivePdf(createBasicData({ quarantineEntries }), tmpDir)).find(l => l.includes('quarantined'));
+
+    expect(banner([entry('a', 'auto'), entry('b')])).toBe('2 tests quarantined due to high flakiness');
+    expect(banner([entry('a', 'auto'), entry('b', 'annotation')])).toBe('2 tests quarantined');
+  });
 });

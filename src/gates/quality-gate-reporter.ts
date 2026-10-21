@@ -13,6 +13,7 @@ export const ruleLabels: Record<string, string> = {
   maxDurationRegression: 'Max duration regression',
   noNewFlaky: 'No new flaky tests',
   noNewClusters: 'No new clusters',
+  noExpiredQuarantine: 'No expired quarantine',
 };
 
 /** The rule's id, or its label with its scope, so two rules of the same kind can be told apart. */

@@ -7,18 +7,20 @@ import type {
   RunComparison,
   ComparisonChanges,
   A11yImpact,
+  QuarantineFile,
 } from '../types';
 import type { CoverageSummary, ReportCluster } from '../report-data/schema';
 import { computeRunStats, runStabilityGrade, type RunStats } from '../utils/run-stats';
 import { isFailedTest } from '../utils/flakiness';
 import { compilePattern } from '../analyzers/ownership';
+import { isExpired } from '../quarantine/quarantine-generator';
 
 // The run's failure clusters. The evaluator gets none when clustering is off.
 type GateClusters = Array<Pick<ReportCluster, 'testIds' | 'tracking'>>;
 
 const gradeMap: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
 
-export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky', 'noNewClusters'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
+export const GATE_RULES = ['maxFailures', 'minPassRate', 'maxFlakyRate', 'minStabilityGrade', 'noNewFailures', 'maxA11yViolations', 'maxA11yCritical', 'maxA11ySerious', 'minCoverage', 'maxDurationRegression', 'noNewFlaky', 'noNewClusters', 'noExpiredQuarantine'] as const satisfies ReadonlyArray<keyof QualityGateConfig>;
 const SCOPE_KEYS = ['tag', 'project', 'file', 'owner'] as const satisfies ReadonlyArray<keyof QualityGateScope>;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -50,6 +52,7 @@ export function validateQualityGates(config: QualityGateConfig): void {
     if (scope === undefined) return;
     if (!isObject(scope)) throw new Error(`${at}.scope must be an object.`);
     if (names[0] === 'minCoverage') throw new Error(`${at}: minCoverage cannot be scoped, because coverage is measured for the whole run.`);
+    if (names[0] === 'noExpiredQuarantine') throw new Error(`${at}: noExpiredQuarantine cannot be scoped, because a quarantined test often does not run.`);
     for (const [key, value] of Object.entries(scope)) {
       if (!(SCOPE_KEYS as readonly string[]).includes(key)) throw new Error(`unknown key "${key}" in ${at}.scope. Known keys: ${SCOPE_KEYS.join(', ')}.`);
       if (![value].flat().every((v) => typeof v === 'string')) throw new Error(`${at}.scope.${key} must be a string or an array of strings.`);
@@ -100,13 +103,14 @@ export class QualityGateEvaluator {
     comparison?: RunComparison,
     coverage?: CoverageSummary,
     clusters?: GateClusters,
+    quarantine?: QuarantineFile,
   ): QualityGateResult {
     const { rules: entries = [], ...flat } = config;
-    const rules = this.evaluateRules(flat, results, comparison, coverage, clusters);
+    const rules = this.evaluateRules(flat, results, comparison, coverage, clusters, quarantine);
 
     for (const { id, scope, severity, ...rule } of entries) {
       const tests = scope ? results.filter(inScope(scope)) : results;
-      const [result] = this.evaluateRules(rule, tests, scope ? scopeComparison(comparison, tests) : comparison, coverage, clusters);
+      const [result] = this.evaluateRules(rule, tests, scope ? scopeComparison(comparison, tests) : comparison, coverage, clusters, quarantine);
       if (!result) continue;
       const scopeText = scope && describeScope(scope);
       rules.push({
@@ -127,6 +131,7 @@ export class QualityGateEvaluator {
     comparison?: RunComparison,
     coverage?: CoverageSummary,
     clusters?: GateClusters,
+    quarantine?: QuarantineFile,
   ): QualityGateRuleResult[] {
     const rules: QualityGateRuleResult[] = [];
     const stats = computeRunStats(results);
@@ -173,6 +178,9 @@ export class QualityGateEvaluator {
     if (config.noNewClusters === true) {
       rules.push(this.evaluateNoNewClusters(results, clusters));
     }
+    if (config.noExpiredQuarantine === true) {
+      rules.push(this.evaluateNoExpiredQuarantine(quarantine));
+    }
 
     return rules;
   }
@@ -187,6 +195,15 @@ export class QualityGateEvaluator {
     if (inScope.some(c => !c.tracking)) return skipped('no cluster history');
     const count = inScope.filter(c => c.tracking!.status === 'new').length;
     return { rule: 'noNewClusters', passed: count === 0, actual: String(count), threshold: '≤ 0' };
+  }
+
+  // As of the run that wrote the quarantine file, so a gate run later gives the same result.
+  private evaluateNoExpiredQuarantine(quarantine?: QuarantineFile): QualityGateRuleResult {
+    if (!quarantine) {
+      return { rule: 'noExpiredQuarantine', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no quarantine data' };
+    }
+    const expired = quarantine.entries.filter(e => isExpired(e, Date.parse(quarantine.generatedAt))).length;
+    return { rule: 'noExpiredQuarantine', passed: expired === 0, actual: String(expired), threshold: '≤ 0' };
   }
 
   // The tests the performance analyzer compared: passed now, with enough passing runs for a median.

@@ -779,20 +779,8 @@ class SmartReporter implements Reporter {
       console.warn('⚠️  Coverage merge failed:', err);
     }
 
-    // Quality gates - evaluate BEFORE HTML generation so results embed in report
-    let qualityGateResult: QualityGateResult | undefined;
-    if (this.options.qualityGates) {
-      try {
-        const evaluator = new QualityGateEvaluator();
-        const clusters = clustering ? failureClusters.map((c) => ({ testIds: c.tests.map((t) => t.testId), tracking: c.tracking })) : undefined;
-        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary, clusters);
-      } catch (err) {
-        console.warn('⚠️  Quality gate evaluation failed:', err);
-      }
-    }
-
-    // Quarantine - evaluate BEFORE HTML generation so badges/cards embed in report
-    let quarantineResult: QuarantineFile | null = null;
+    // Quarantine - before the gates, which read expiry, and before HTML generation so badges/cards embed in report
+    let quarantineResult: QuarantineFile | undefined;
     let quarantinedTestIds: Set<string> | undefined;
     let quarantineChanges: QuarantineEvent[] = [];
     if (this.options.quarantine?.enabled) {
@@ -800,12 +788,22 @@ class SmartReporter implements Reporter {
         const generator = new QuarantineGenerator(this.options.quarantine);
         const previous = generator.read(exportDir);
         quarantineResult = generator.generate(this.results, exportDir, previous);
-        quarantineChanges = quarantineEvents(previous, quarantineResult, Date.now());
-        if (quarantineResult) {
-          quarantinedTestIds = new Set(quarantineResult.entries.map(e => e.testId));
-        }
+        quarantineChanges = quarantineEvents(previous, quarantineResult, Date.parse(quarantineResult.generatedAt));
+        quarantinedTestIds = new Set(quarantineResult.entries.map(e => e.testId));
       } catch (err) {
         console.warn('⚠️  Quarantine generation failed:', err);
+      }
+    }
+
+    // Quality gates - evaluate BEFORE HTML generation so results embed in report
+    let qualityGateResult: QualityGateResult | undefined;
+    if (this.options.qualityGates) {
+      try {
+        const evaluator = new QualityGateEvaluator();
+        const clusters = clustering ? failureClusters.map((c) => ({ testIds: c.tests.map((t) => t.testId), tracking: c.tracking })) : undefined;
+        qualityGateResult = evaluator.evaluate(this.options.qualityGates, this.results, comparison, coverage?.summary, clusters, quarantineResult);
+      } catch (err) {
+        console.warn('⚠️  Quality gate evaluation failed:', err);
       }
     }
 
@@ -1017,10 +1015,11 @@ class SmartReporter implements Reporter {
     }
 
     // Quarantine - log results (file already written above)
-    if (quarantineResult) {
+    if (quarantineResult?.entries.length) {
       const qPath = new QuarantineGenerator(this.options.quarantine!).getOutputPath(exportDir);
       console.log(`   Quarantine: ${quarantineResult.entries.length} test(s) quarantined -> ${qPath}`);
-      for (const e of quarantineResult.entries.filter(e => isExpired(e, Date.now()))) {
+      const writtenAt = Date.parse(quarantineResult.generatedAt);
+      for (const e of quarantineResult.entries.filter(e => isExpired(e, writtenAt))) {
         console.log(`   Quarantine expired ${e.expiresAt}: ${describeQuarantineEntry(e)}`);
       }
     } else if (this.options.quarantine?.enabled) {

@@ -9,7 +9,7 @@ describe('SmartReporter options', () => {
   it('throws at creation on an unknown quality gate key, so a typo cannot pass the gate', () => {
     const qualityGates = { rules: [{ bogus: 1 }] } as unknown as QualityGateConfig;
     expect(() => new SmartReporter({ qualityGates })).toThrow(new Error(
-      'unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters.',
+      'unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine.',
     ));
   });
 });

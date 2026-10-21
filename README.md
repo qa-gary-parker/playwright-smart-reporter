@@ -774,6 +774,8 @@ The result shows in the top bar and in the Quality gate panel in Insights, and i
 
 `maxDurationRegression: 20` fails the gate when the tests run more than 20% longer than the median of their passing runs. It adds up the tests that passed and have 5 passing runs, this run included (the tests that get a duration trend), so one test's jitter does not decide the gate. It is skipped when no test has that history.
 
+`noExpiredQuarantine: true` fails the gate when a [quarantine](#flaky-test-quarantine) entry was past its `expiresAt` when the run wrote the quarantine file. It is skipped when there is no quarantine data: quarantine is off, or the CLI finds no quarantine file.
+
 `minPassRate` uses the pass rate described under [Insights](#insights), and `maxFlakyRate` counts flaky tests out of the same tests that ran. When every test was skipped, both rules are skipped, not passed. A notification `maxPassRate` condition does not fire for such a run, and `{{passRate}}` in a notification `template` renders as `n/a`, so a template written as `{{passRate}}%` shows `n/a%`.
 
 #### Scoped rules and warnings
@@ -793,7 +795,7 @@ qualityGates: {
 
 - Each entry has exactly one rule, with the same name and value as above.
 - `scope` keys: `tag`, `project`, `file` and `owner`. Each takes one value or a list. A test is in scope when it matches every key, and any value of a key. `file` is a CODEOWNERS-style pattern on the test file path shown in the report, such as `checkout/**` or `*.critical.spec.ts`. `owner` matches the owners from [Ownership](#ownership-and-routing).
-- When no test matches the scope, the rule is skipped (`no test in scope`), so a misspelt tag shows up instead of passing. `minCoverage` cannot be scoped.
+- When no test matches the scope, the rule is skipped (`no test in scope`), so a misspelt tag shows up instead of passing. `minCoverage` and `noExpiredQuarantine` cannot be scoped.
 - `severity: 'warn'` shows a breach as a warning in the terminal, the report, the PDF and the GitHub summary, and does not fail the run. The default is `'fail'`.
 - `id` names the rule in the output instead of the rule name and scope. Each `id` must be unique.
 
@@ -806,9 +808,9 @@ echo '{ "minPassRate": 95, "maxFlakyRate": 5 }' > gates.json
 npx playwright-smart-reporter gate --config gates.json --data smart-report-data.json
 ```
 
-`--data` defaults to `smart-report-data.json`. Exit codes: `0` = all gates passed, `1` = a gate failed or the input is missing.
+`--data` defaults to `smart-report-data.json`. `noExpiredQuarantine` reads `.smart-quarantine.json` in the folder of the data file; `--quarantine-file <path>` names another file. Exit codes: `0` = all gates passed, `1` = a gate failed or the input is missing.
 
-To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, `--min-coverage`, `--max-duration-regression`, `--no-new-flaky` and `--no-new-clusters`.
+To pass the rules as flags instead of a file, call the standalone script: `node node_modules/playwright-smart-reporter/dist/bin/gate.js --min-pass-rate 95 --max-flaky-rate 5`. It takes `--input <path>` for the JSON export, and `--max-failures`, `--min-stability-grade`, `--no-new-failures`, `--max-a11y-violations`, `--min-coverage`, `--max-duration-regression`, `--no-new-flaky`, `--no-new-clusters` and `--no-expired-quarantine`, with `--quarantine-file <path>` as above.
 
 ### Flaky Test Quarantine
 
@@ -850,7 +852,7 @@ You can also quarantine a test yourself:
 }
 ```
 
-`manualFile` is resolved like `outputFile`, relative to the report folder.
+`manualFile` is resolved like `outputFile`, relative to the report folder. A manual file that is not valid JSON stops quarantine for the run with an error that names the file. A `quarantinedAt` or `expiresAt` that is not a date is ignored, with a warning that names the entry and the value.
 
 Each entry in the quarantine file has:
 - `source`: `auto` (flakiness), `annotation` or `manual`. A manual entry replaces an annotation, and an annotation replaces an `auto` entry.
@@ -861,7 +863,7 @@ Each entry in the quarantine file has:
 
 A test that does not run keeps its entry, because a quarantined test is often left out of the run. A test that runs and no longer qualifies leaves the file. A manual entry stays until you remove it from the manual file. When no test qualifies, the reporter writes the file with no entries.
 
-After each run, the console lists every entry past its `expiresAt`:
+After each run, the console lists every entry past its `expiresAt`. The `noExpiredQuarantine` [quality gate](#quality-gates) fails the run on such an entry:
 
 ```
    Quarantine expired 2026-11-30T00:00:00.000Z: "pays by card" in checkout.spec.ts, https://jira.example.com/browse/PAY-12, @acme/payments
@@ -1107,7 +1109,7 @@ reporter: [
     exportFailures: false,      // <name>-failures.json, redacted, for coding agents
     exportMetrics: false,       // true or { push: { url, format, headers } }: <name>-metrics.prom and .otlp.json (see Metrics Export)
     redact: false,              // true or { patterns }: mask secrets in every report file (see Redacting Report Files)
-    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, rules }
+    qualityGates: {},           // { maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine, rules }
     quarantine: {},             // { enabled, outputFile: '.smart-quarantine.json', threshold: 0.3, maxQuarantined: 50, manualFile: '.smart-quarantine.manual.json', expiresAfterDays }
     branding: {},               // { logo, title, footer, hidePoweredBy }
     live: {},                   // { enabled, outputFile: '.smart-live-results.jsonl', dashboard, notifyOnFirstFailure }

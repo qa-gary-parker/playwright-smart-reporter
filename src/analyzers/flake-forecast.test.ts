@@ -160,7 +160,7 @@ describe('forecastRun', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'forecast-quarantine-'));
     try {
       expect(drifting.flakinessScore).toBe(0);
-      expect(new QuarantineGenerator({ enabled: true }).generate([drifting], dir)).toBe(null);
+      expect(new QuarantineGenerator({ enabled: true }).generate([drifting], dir).entries).toEqual([]);
       expect(fs.readdirSync(dir)).toEqual([]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

@@ -41,6 +41,7 @@ Evaluate quality gates against a JSON export file.
 Options:
   --config <path>    Path to gates config JSON file (required)
   --data <path>      Path to smart-report-data.json (default: smart-report-data.json)
+  --quarantine-file <path>  Quarantine file for noExpiredQuarantine (default: .smart-quarantine.json in the folder of --data)
   --help             Show this help
 `);
     return;
@@ -90,8 +91,18 @@ Options:
   const { toTestResultData } = await import('../generators/json-exporter');
   const results = data.tests.map(toTestResultData);
 
+  const { readQuarantineFile } = await import('../quarantine/quarantine-generator');
+  let quarantine;
+  try {
+    quarantine = readQuarantineFile(parseFlag('--quarantine-file') ?? path.join(path.dirname(dataPath), '.smart-quarantine.json'));
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const evaluator = new QualityGateEvaluator();
-  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary, data.failureClusters);
+  const result = evaluator.evaluate(config, results, data.comparison, data.coverage?.summary, data.failureClusters, quarantine);
 
   console.log(formatGateReport(result));
 

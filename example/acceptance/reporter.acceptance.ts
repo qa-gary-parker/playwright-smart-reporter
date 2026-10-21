@@ -185,6 +185,24 @@ describe('quarantine', () => {
     expect(run.output).toContain('Quarantine expired 2026-01-01T00:00:00.000Z: "fails" in suite.fixtures.ts, PAY-12');
   });
 
+  it('fails the run on an expired quarantine entry with the noExpiredQuarantine gate', () => {
+    const out = path.join(tmp, 'quarantine-gate');
+    const manualFile = path.join(out, 'quarantine.manual.json');
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(manualFile, JSON.stringify({ entries: [{ testId: 'suite.fixtures.ts::fails', title: 'fails', file: 'suite.fixtures.ts', expiresAt: '2026-01-01T00:00:00.000Z' }] }));
+    const run = runSuite(out, { quarantine: { enabled: true, manualFile }, qualityGates: { noExpiredQuarantine: true } }, ['--grep', 'passes$']);
+
+    expect(run.status).toBe(1);
+    expect(run.output).toContain('  ✗ No expired quarantine 1 ≤ 0\n');
+  });
+
+  it('gives the report an empty quarantine, not none, when quarantine is on and no test qualifies', () => {
+    const out = path.join(tmp, 'quarantine-empty');
+    runSuite(out, { quarantine: { enabled: true, threshold: 0.3 } }, ['--grep', 'passes$']);
+
+    expect(reportData(fs.readFileSync(path.join(out, 'smart-report.html'), 'utf8')).quarantine).toEqual({ threshold: 0.3, entries: [] });
+  });
+
   it('quarantines a test tagged @quarantine(ticket) or annotated quarantine', () => {
     const out = path.join(tmp, 'quarantine-annotation');
     const outputFile = path.join(out, 'quarantine.json');

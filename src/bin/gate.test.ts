@@ -32,6 +32,15 @@ function writeJson(name: string, value: unknown): string {
   return file;
 }
 
+// The quarantine file the reporter writes next to the JSON export, with one entry past its expiresAt
+function writeExpiredQuarantine(): void {
+  writeJson('.smart-quarantine.json', {
+    generatedAt: '2026-10-21T00:00:00.000Z',
+    threshold: 0.3,
+    entries: [{ testId: 'a', title: 'a', file: 'a.spec.ts', quarantinedAt: '2026-10-01T00:00:00.000Z', expiresAt: '2026-10-20T00:00:00.000Z' }],
+  });
+}
+
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-gate-'));
   for (const name of ['gate', 'cli', 'view-trace']) {
@@ -130,7 +139,7 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) input checks', () => {
     const res = runCli(['gate', '--config', config, '--data', 'scanned-data.json']);
     expect(res.status).toBe(1);
     expect(res.stderr).toBe(
-      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters.',
+      'Error: unknown quality gate rule "minPassrate". Known rules: maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine.',
     );
   });
 });
@@ -165,9 +174,17 @@ describe('playwright-smart-reporter gate (src/bin/cli.ts) scoped rules', () => {
     expect(stdout).toContain('Result: PASSED with 1 warning (0 of 1 rules passed)');
   });
 
+  it('evaluates noExpiredQuarantine from the quarantine file next to --data, or the one --quarantine-file names', () => {
+    writeExpiredQuarantine();
+    const config = writeJson('quarantine-gates.json', { noExpiredQuarantine: true });
+    expect(runCli(['gate', '--config', config, '--data', 'scanned-data.json'])).toMatchObject({ status: 1, stdout: expect.stringContaining('  ✗ No expired quarantine 1 ≤ 0\n') });
+    expect(runCli(['gate', '--config', config, '--data', 'scanned-data.json', '--quarantine-file', 'missing.json']))
+      .toMatchObject({ status: 0, stdout: expect.stringContaining('  ○ No expired quarantine (skipped — no quarantine data)\n') });
+  });
+
   it('exits 1 on an unknown key in a rule, in both CLIs', () => {
     const config = writeJson('bogus-gates.json', { rules: [{ bogus: 1 }] });
-    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters.';
+    const message = 'Error: unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine.';
     expect(runCli(['gate', '--config', config, '--data', 'scoped-data.json'])).toMatchObject({ status: 1, stderr: message });
     const res = spawnSync(process.execPath, [bundle('gate'), '--input', 'scoped-data.json', '--config', config], { cwd: dir, encoding: 'utf-8' });
     expect([res.status, res.stderr.trim()]).toEqual([1, message]);
@@ -212,6 +229,21 @@ describe('gate CLI (src/bin/gate.ts) flags', () => {
     const res = spawnSync(process.execPath, [bundle('cli'), 'gate', '--config', config, '--data', 'clustered-data.json'], { cwd: dir, encoding: 'utf-8' });
     expect([res.status, res.stdout.includes(failed)]).toEqual([1, true]);
     expect(runGate(['--input', 'scanned-data.json', '--no-new-clusters'])).toMatchObject({ status: 0, stdout: expect.stringContaining('○ No new clusters      (skipped — clustering off)') });
+  });
+
+  it('evaluates --no-expired-quarantine from the quarantine file next to --input, or the one --quarantine-file names', () => {
+    writeExpiredQuarantine();
+    const none = writeJson('no-expired-quarantine.json', { generatedAt: '2026-10-21T00:00:00.000Z', threshold: 0.3, entries: [] });
+    const truncated = path.join(dir, 'truncated-quarantine.json');
+    fs.writeFileSync(truncated, '{"entries": [');
+
+    expect(runGate(['--input', 'scanned-data.json', '--no-expired-quarantine'])).toMatchObject({ status: 1, stdout: expect.stringContaining('  ✗ No expired quarantine 1 ≤ 0\n') });
+    expect(runGate(['--input', 'scanned-data.json', '--no-expired-quarantine', '--quarantine-file', none]))
+      .toMatchObject({ status: 0, stdout: expect.stringContaining('  ✓ No expired quarantine 0 ≤ 0\n') });
+    expect(runGate(['--input', 'scanned-data.json', '--no-expired-quarantine', '--quarantine-file', 'missing.json']))
+      .toMatchObject({ status: 0, stdout: expect.stringContaining('  ○ No expired quarantine (skipped — no quarantine data)\n') });
+    expect(runGate(['--input', 'scanned-data.json', '--no-expired-quarantine', '--quarantine-file', truncated]))
+      .toMatchObject({ status: 1, stderr: `Error: ${truncated} is not valid JSON: Unexpected end of JSON input` });
   });
 
   it('says why --min-stability-grade is skipped when no test has a grade', () => {

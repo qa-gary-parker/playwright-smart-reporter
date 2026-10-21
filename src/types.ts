@@ -651,6 +651,8 @@ export interface QualityGateConfig {
   noNewFlaky?: boolean;
   // #74: fail on a failure cluster that no run in history had
   noNewClusters?: boolean;
+  // #77: fail on a quarantine entry past its expiresAt when the quarantine file was written
+  noExpiredQuarantine?: boolean;
 
   // #70: rules with a scope or a severity, evaluated after the rules above
   rules?: QualityGateRule[];

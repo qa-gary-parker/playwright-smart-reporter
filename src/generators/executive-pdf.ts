@@ -974,7 +974,8 @@ function drawQuarantineSection(doc: PDFKit.PDFDocument, entries: QuarantineEntry
   doc.roundedRect(MARGIN, y, CONTENT_W, 24, 4).fill(scheme.accentAmberBg);
   doc.rect(MARGIN, y, 3, 24).fill(scheme.accentAmber);
   doc.font(FONT_BOLD).fontSize(8).fillColor(scheme.accentAmber);
-  doc.text(`${entries.length} test${entries.length === 1 ? '' : 's'} quarantined due to high flakiness`, MARGIN + 12, y + 6, { width: CONTENT_W - 24 });
+  const reason = entries.every(e => (e.source ?? 'auto') === 'auto') ? ' due to high flakiness' : '';
+  doc.text(`${entries.length} test${entries.length === 1 ? '' : 's'} quarantined${reason}`, MARGIN + 12, y + 6, { width: CONTENT_W - 24 });
   doc.restore();
   y += 32;
 

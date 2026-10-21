@@ -9,6 +9,8 @@ import type {
   StabilityScore,
   A11yImpact,
   ClusterTracking,
+  QuarantineEntry,
+  QuarantineFile,
 } from '../types';
 
 function createTestResult(overrides: Partial<TestResultData> = {}): TestResultData {
@@ -915,6 +917,38 @@ describe('QualityGateEvaluator', () => {
     });
   });
 
+  // #77: quarantine expiry
+  describe('noExpiredQuarantine', () => {
+    const entry = (testId: string, expiresAt?: string): QuarantineEntry => ({ testId, title: testId, file: 'a.spec.ts', quarantinedAt: '2026-10-01T00:00:00.000Z', expiresAt });
+    const quarantine = (...entries: QuarantineEntry[]): QuarantineFile => ({ generatedAt: '2026-10-21T00:00:00.000Z', threshold: 0.3, entries });
+
+    it('fails for each entry past its expiresAt when the quarantine file was written, and passes when none is', () => {
+      const expired = quarantine(entry('before', '2026-10-20T00:00:00.000Z'), entry('at', '2026-10-21T00:00:00.000Z'), entry('after', '2026-10-21T00:00:00.001Z'), entry('no-expiry'));
+      expect(evaluator.evaluate({ noExpiredQuarantine: true }, [], undefined, undefined, undefined, expired)).toEqual({
+        passed: false,
+        rules: [{ rule: 'noExpiredQuarantine', passed: false, actual: '2', threshold: '≤ 0' }],
+      });
+      expect(evaluator.evaluate({ noExpiredQuarantine: true }, [], undefined, undefined, undefined, quarantine(entry('after', '2026-10-22T00:00:00.000Z'))).rules).toEqual([
+        { rule: 'noExpiredQuarantine', passed: true, actual: '0', threshold: '≤ 0' },
+      ]);
+    });
+
+    it('is skipped without quarantine data', () => {
+      expect(evaluator.evaluate({ noExpiredQuarantine: true }, [createTestResult()]).rules).toEqual([
+        { rule: 'noExpiredQuarantine', passed: true, actual: 'N/A', threshold: '≤ 0', skipped: true, skipReason: 'no quarantine data' },
+      ]);
+    });
+
+    it('works as a rules entry with an id and warn severity', () => {
+      const config: QualityGateConfig = { rules: [{ id: 'quarantine expiry', noExpiredQuarantine: true, severity: 'warn' }] };
+      validateQualityGates(config);
+      expect(evaluator.evaluate(config, [], undefined, undefined, undefined, quarantine(entry('before', '2026-10-20T00:00:00.000Z')))).toEqual({
+        passed: true,
+        rules: [{ rule: 'noExpiredQuarantine', passed: false, actual: '1', threshold: '≤ 0', id: 'quarantine expiry', severity: 'warn' }],
+      });
+    });
+  });
+
   // #70: scoped rules and warn severity
   describe('rules', () => {
     const failed = { status: 'failed', outcome: 'unexpected' } as const;
@@ -996,7 +1030,7 @@ describe('QualityGateEvaluator', () => {
   });
 
   describe('validateQualityGates', () => {
-    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters';
+    const RULES = 'maxFailures, minPassRate, maxFlakyRate, minStabilityGrade, noNewFailures, maxA11yViolations, maxA11yCritical, maxA11ySerious, minCoverage, maxDurationRegression, noNewFlaky, noNewClusters, noExpiredQuarantine';
 
     it.each<[string, unknown, string]>([
       ['an unknown key in a rule', { rules: [{ bogus: 1 }] }, `unknown key "bogus" in quality gate rules[0]. Known keys: id, scope, severity, ${RULES}.`],
@@ -1007,6 +1041,7 @@ describe('QualityGateEvaluator', () => {
       ['an unknown severity', { rules: [{ maxFailures: 0, severity: 'error' }] }, 'quality gate rules[0].severity must be "fail" or "warn" (got "error").'],
       ['a repeated id', { rules: [{ id: 'x', maxFailures: 0 }, { id: 'x', minPassRate: 90 }] }, 'quality gate rules[1].id "x" is already used by another rule.'],
       ['a scoped minCoverage', { rules: [{ scope: { tag: '@a' }, minCoverage: 80 }] }, 'quality gate rules[0]: minCoverage cannot be scoped, because coverage is measured for the whole run.'],
+      ['a scoped noExpiredQuarantine', { rules: [{ scope: { owner: '@shop' }, noExpiredQuarantine: true }] }, 'quality gate rules[0]: noExpiredQuarantine cannot be scoped, because a quarantined test often does not run.'],
       ['a scope value that is not text', { rules: [{ scope: { tag: 1 }, maxFailures: 0 }] }, 'quality gate rules[0].scope.tag must be a string or an array of strings.'],
       ['rules that are not a list', { rules: { maxFailures: 0 } }, 'quality gate "rules" must be an array.'],
     ])('rejects %s', (_, config, message) => {

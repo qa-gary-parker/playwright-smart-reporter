@@ -20,7 +20,7 @@ export class QuarantineGenerator {
     };
   }
 
-  generate(results: TestResultData[], outputDir: string, previous = this.read(outputDir)): QuarantineFile | null {
+  generate(results: TestResultData[], outputDir: string, previous = this.read(outputDir)): QuarantineFile {
     const now = new Date().toISOString();
     const byId = new Map(results.map(r => [r.testId, r]));
     const before = new Map((previous?.entries ?? []).map(e => [e.testId, e]));
@@ -82,27 +82,24 @@ export class QuarantineGenerator {
     for (const e of [...auto, ...annotated, ...manual]) byTest.set(e.testId, e);
     const entries = [...byTest.values()].map(e => ({ ...e, expiresAt: this.expiresAt(e) }));
 
-    // Without a previous file there is nothing to clear
-    if (entries.length === 0 && !previous) {
-      return null;
-    }
-
     const quarantineFile: QuarantineFile = {
       generatedAt: now,
       threshold: this.config.threshold,
       entries,
     };
 
-    const filePath = this.getOutputPath(outputDir);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(quarantineFile, null, 2));
+    // Without a previous file there is nothing to clear
+    if (entries.length > 0 || previous) {
+      const filePath = this.getOutputPath(outputDir);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(quarantineFile, null, 2));
+    }
 
-    return entries.length > 0 ? quarantineFile : null;
+    return quarantineFile;
   }
 
   read(outputDir: string): QuarantineFile | undefined {
-    const filePath = this.getOutputPath(outputDir);
-    return fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, 'utf-8')) : undefined;
+    return readQuarantineFile(this.getOutputPath(outputDir));
   }
 
   getOutputPath(outputDir: string): string {
@@ -111,11 +108,19 @@ export class QuarantineGenerator {
 
   private readManual(outputDir: string): ManualEntry[] {
     const filePath = path.resolve(outputDir, this.config.manualFile);
-    if (!fs.existsSync(filePath)) return [];
-    const { entries = [] } = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as { entries?: Partial<QuarantineEntry>[] };
+    const entries = readJsonFile<{ entries?: Partial<QuarantineEntry>[] }>(filePath)?.entries ?? [];
     const bad = entries.findIndex(e => typeof e?.testId !== 'string' || typeof e.title !== 'string');
     if (bad !== -1) throw new Error(`${filePath}: entries[${bad}] needs a testId and a title`);
-    return entries as ManualEntry[];
+    return entries.map((e, i) => {
+      const entry = { ...e } as ManualEntry;
+      for (const field of ['quarantinedAt', 'expiresAt'] as const) {
+        if (entry[field] !== undefined && Number.isNaN(Date.parse(String(entry[field])))) {
+          console.warn(`⚠️  Quarantine: ${filePath} entries[${i}] ("${entry.testId}") has an invalid ${field} "${entry[field]}"; it is ignored.`);
+          delete entry[field];
+        }
+      }
+      return entry;
+    });
   }
 
   private expiresAt(e: QuarantineEntry): string | undefined {
@@ -123,6 +128,21 @@ export class QuarantineGenerator {
     const days = this.config.expiresAfterDays;
     return days === undefined ? undefined : new Date(Date.parse(e.quarantinedAt) + days * DAY_MS).toISOString();
   }
+}
+
+// undefined when the file does not exist. The error names the file, which JSON.parse does not.
+function readJsonFile<T>(filePath: string): T | undefined {
+  if (!fs.existsSync(filePath)) return undefined;
+  const text = fs.readFileSync(filePath, 'utf-8');
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    throw new Error(`${filePath} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+export function readQuarantineFile(filePath: string): QuarantineFile | undefined {
+  return readJsonFile<QuarantineFile>(filePath);
 }
 
 // @quarantine(<ticket>) as a tag, or a { type: 'quarantine', description: '<ticket>' } annotation

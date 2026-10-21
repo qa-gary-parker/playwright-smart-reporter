@@ -86,7 +86,7 @@ describe('QuarantineGenerator', () => {
 
       const result = generator.generate(results, '/output');
 
-      expect(result).toBeNull();
+      expect(result.entries).toEqual([]);
     });
 
     it('applies default threshold of 0.3 when not specified', () => {
@@ -148,15 +148,15 @@ describe('QuarantineGenerator', () => {
       expect(result!.entries.map(e => e.flakinessScore)).toEqual([0.9, 0.6, 0.4]);
     });
 
-    it('returns null for empty results array', () => {
+    it('returns no entries for an empty results array', () => {
       const generator = new QuarantineGenerator({ enabled: true });
 
       const result = generator.generate([], '/output');
 
-      expect(result).toBeNull();
+      expect(result.entries).toEqual([]);
     });
 
-    it('returns null when all tests are below threshold', () => {
+    it('returns no entries when all tests are below threshold', () => {
       const generator = new QuarantineGenerator({ enabled: true, threshold: 0.5 });
       const results = [
         createTestResult({ flakinessScore: 0.1 }),
@@ -165,7 +165,7 @@ describe('QuarantineGenerator', () => {
 
       const result = generator.generate(results, '/output');
 
-      expect(result).toBeNull();
+      expect(result.entries).toEqual([]);
     });
 
     it('excludes skipped tests', () => {
@@ -190,7 +190,7 @@ describe('QuarantineGenerator', () => {
 
       const result = generator.generate(results, '/output');
 
-      expect(result).toBeNull();
+      expect(result.entries).toEqual([]);
     });
 
     it('writes file to outputDir with default filename', () => {
@@ -355,7 +355,7 @@ describe('QuarantineGenerator', () => {
 
     // An in-memory /output folder; files are given relative to it
     function disk(files: Record<string, unknown> = {}) {
-      const contents = new Map(Object.entries(files).map(([p, v]) => [path.resolve('/output', p), JSON.stringify(v)]));
+      const contents = new Map(Object.entries(files).map(([p, v]) => [path.resolve('/output', p), typeof v === 'string' ? v : JSON.stringify(v)]));
       mockFs.existsSync.mockImplementation(p => contents.has(String(p)));
       mockFs.readFileSync.mockImplementation(((p: fs.PathOrFileDescriptor) => contents.get(String(p))) as typeof fs.readFileSync);
       mockFs.writeFileSync.mockImplementation(((p: fs.PathOrFileDescriptor, data: string) => { contents.set(String(p), data); }) as typeof fs.writeFileSync);
@@ -392,7 +392,7 @@ describe('QuarantineGenerator', () => {
 
       const result = new QuarantineGenerator({ enabled: true }).generate([stable('fixed')], '/output');
 
-      expect(result).toBeNull();
+      expect(result.entries).toEqual([]);
       expect(files.read().entries).toEqual([]);
     });
 
@@ -425,6 +425,31 @@ describe('QuarantineGenerator', () => {
 
       expect(() => new QuarantineGenerator({ enabled: true }).generate([], '/output'))
         .toThrow(`${path.resolve('/output', '.smart-quarantine.manual.json')}: entries[1] needs a testId and a title`);
+    });
+
+    it('names the manual file when it is not valid JSON', () => {
+      disk({ '.smart-quarantine.manual.json': '{"entries": [' });
+
+      expect(() => new QuarantineGenerator({ enabled: true }).generate([], '/output'))
+        .toThrow(`${path.resolve('/output', '.smart-quarantine.manual.json')} is not valid JSON: Unexpected end of JSON input`);
+    });
+
+    it('warns about a manual date it cannot read, naming the entry and the value, and ignores it', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const files = disk({ '.smart-quarantine.manual.json': { entries: [{ testId: 'a', title: 'a', expiresAt: 'next week' }, { testId: 'b', title: 'b', quarantinedAt: 'last month' }] } });
+      at(DAY1);
+
+      new QuarantineGenerator({ enabled: true, expiresAfterDays: 14 }).generate([], '/output');
+
+      const manualFile = path.resolve('/output', '.smart-quarantine.manual.json');
+      expect(warn.mock.calls).toEqual([
+        [`⚠️  Quarantine: ${manualFile} entries[0] ("a") has an invalid expiresAt "next week"; it is ignored.`],
+        [`⚠️  Quarantine: ${manualFile} entries[1] ("b") has an invalid quarantinedAt "last month"; it is ignored.`],
+      ]);
+      expect(files.read().entries.map(e => [e.testId, e.quarantinedAt, e.expiresAt])).toEqual([
+        ['a', DAY1, '2026-10-15T00:00:00.000Z'],
+        ['b', DAY1, '2026-10-15T00:00:00.000Z'],
+      ]);
     });
 
     it('quarantines a test tagged @quarantine(ticket) or annotated quarantine, keeps it while it does not run, and releases it when it runs unmarked', () => {
