@@ -72,7 +72,7 @@ All notable changes to this project will be documented in this file.
 - The Live view gets each result line once and whole: after partial writes, split characters, a late viewer, or macOS event bursts (#62).
 - A skipped `minStabilityGrade` says "no stability grades" (was "no comparison data").
 - Quarantine (#77): Insights no longer says "Not enabled" when quarantine is on and empty. The PDF says "due to high flakiness" only for automatic entries. A JSON error in the manual file names the file. An invalid `expiresAt` or `quarantinedAt` prints a warning and is ignored; an invalid `quarantinedAt` crashed the run with `expiresAfterDays`.
-- **Python package:** `playwright-smart-reporter-python` writes a report again. Its bridge loaded a file that 3.0.0 removed. It now builds the same single-page report as the Node reporter, and the wheel ships the UI files. The footer shows the real version (was 0.0.0), and the empty Live view is gone. `python/README.md` lists what the Python path does not do.
+- **Python package 1.1.0:** `playwright-smart-reporter-python` writes a report again. Its bridge loaded a file that 3.0.0 removed. It now builds the same single-page report as the Node reporter, and the wheel ships the UI files. The footer shows the real version (was 0.0.0), and the empty Live view is gone. `python/README.md` lists what the Python path does not do.
 
 ### Upgrading from 3.x
 - To keep AI analysis, set `enableAIRecommendations: true`.
