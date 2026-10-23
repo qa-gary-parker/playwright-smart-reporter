@@ -53,6 +53,7 @@ describe('HistoryCollector', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(fs.writeFileSync).mockReset();
     fs.rmSync(outputDir, { recursive: true, force: true });
   });
 

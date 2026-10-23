@@ -23,33 +23,33 @@ import type { TestResultData, NotificationConfig } from '../types';
 // ---------------------------------------------------------------------------
 
 vi.mock('./slack-notifier', () => ({
-  SlackNotifier: vi.fn().mockImplementation(() => ({
+  SlackNotifier: vi.fn().mockImplementation(function () { return {
     sendMessage: vi.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 vi.mock('./teams-notifier', () => ({
-  TeamsNotifier: vi.fn().mockImplementation(() => ({
+  TeamsNotifier: vi.fn().mockImplementation(function () { return {
     sendMessage: vi.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 vi.mock('./pagerduty-notifier', () => ({
-  PagerDutyNotifier: vi.fn().mockImplementation(() => ({
+  PagerDutyNotifier: vi.fn().mockImplementation(function () { return {
     trigger: vi.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 vi.mock('./email-notifier', () => ({
-  EmailNotifier: vi.fn().mockImplementation(() => ({
+  EmailNotifier: vi.fn().mockImplementation(function () { return {
     send: vi.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 vi.mock('./custom-webhook-notifier', () => ({
-  CustomWebhookNotifier: vi.fn().mockImplementation(() => ({
+  CustomWebhookNotifier: vi.fn().mockImplementation(function () { return {
     send: vi.fn().mockResolvedValue(undefined),
-  })),
+  }; }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -111,9 +111,9 @@ describe('Notification boundary conditions', () => {
     it('notifies when failures equal minFailures threshold (exactly 3)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ minFailures: 3 })]);
 
       const results = [makeFailure(), makeFailure(), makeFailure()];
@@ -137,9 +137,9 @@ describe('Notification boundary conditions', () => {
     it('notifies when failures exceed minFailures threshold (4 > 3)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ minFailures: 3 })]);
 
       const results = [makeFailure(), makeFailure(), makeFailure(), makeFailure()];
@@ -152,9 +152,9 @@ describe('Notification boundary conditions', () => {
     it('minFailures: 1 — notifies on a single failure', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ minFailures: 1 })]);
 
       await manager.notify([makeFailure()], Date.now());
@@ -175,9 +175,9 @@ describe('Notification boundary conditions', () => {
     it('minFailures: 0 — notifies even with zero failures (>= 0 is always true)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ minFailures: 0 })]);
 
       // No failures at all — but 0 >= 0 so condition passes
@@ -196,9 +196,9 @@ describe('Notification boundary conditions', () => {
     it('notifies when pass rate equals maxPassRate threshold (exactly 80%)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ maxPassRate: 80 })]);
 
       // 8 passed, 2 failed → passRate = round(8/10*100) = 80
@@ -230,9 +230,9 @@ describe('Notification boundary conditions', () => {
     it('notifies when pass rate is below maxPassRate threshold (79% < 80%)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ maxPassRate: 80 })]);
 
       // 79 passed, 21 failed → passRate = round(79/100*100) = 79
@@ -249,9 +249,9 @@ describe('Notification boundary conditions', () => {
     it('maxPassRate: 100 — notifies when all tests pass (100% is not above 100%)', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ maxPassRate: 100 })]);
 
       const results = Array(5).fill(null).map(() => makePass());
@@ -263,9 +263,9 @@ describe('Notification boundary conditions', () => {
     it('maxPassRate: 100 — still notifies when pass rate is 99%', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ maxPassRate: 100 })]);
 
       const results = [
@@ -281,9 +281,9 @@ describe('Notification boundary conditions', () => {
     it('maxPassRate: 0 — only notifies at exactly 0% pass rate', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ maxPassRate: 0 })]);
 
       // All failures → 0% pass rate → 0 is NOT > 0, condition passes
@@ -315,9 +315,9 @@ describe('Notification boundary conditions', () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const { TeamsNotifier } = await import('./teams-notifier');
       const mockTeamsSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(TeamsNotifier).mockImplementationOnce(() => ({
+      vi.mocked(TeamsNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockTeamsSendMessage,
-      } as any));
+      } as any; });
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const manager = new NotificationManager([
         slackConfig({ minFailures: 1 }),
@@ -353,9 +353,9 @@ describe('Notification boundary conditions', () => {
     it('notifies on empty results when no conditions are set', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig()]);
 
       await manager.notify([], Date.now());
@@ -443,9 +443,9 @@ describe('Notification boundary conditions', () => {
     it('notifies when both minFailures and maxPassRate conditions are satisfied', async () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const mockSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(SlackNotifier).mockImplementationOnce(() => ({
+      vi.mocked(SlackNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockSendMessage,
-      } as any));
+      } as any; });
       const manager = new NotificationManager([slackConfig({ minFailures: 3, maxPassRate: 50 })]);
 
       // 5 failures, 3 passes → passRate = round(3/8*100) = 38% ≤ 50%, 5 failures ≥ 3
@@ -469,9 +469,9 @@ describe('Notification boundary conditions', () => {
       const { SlackNotifier } = await import('./slack-notifier');
       const { TeamsNotifier } = await import('./teams-notifier');
       const mockTeamsSendMessage = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(TeamsNotifier).mockImplementationOnce(() => ({
+      vi.mocked(TeamsNotifier).mockImplementationOnce(function () { return {
         sendMessage: mockTeamsSendMessage,
-      } as any));
+      } as any; });
 
       const configs: NotificationConfig[] = [
         { channel: 'slack', config: { webhookUrl: 'https://slack' }, conditions: { minFailures: 10 } },

@@ -86,7 +86,7 @@ function makeError(overrides: Partial<TestError> = {}): TestError {
 
 describe('buildPlaywrightStyleAiPrompt', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockFs.existsSync.mockReturnValue(false);
   });
 
