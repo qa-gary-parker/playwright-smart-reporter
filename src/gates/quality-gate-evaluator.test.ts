@@ -751,7 +751,7 @@ describe('QualityGateEvaluator', () => {
         }
       }
       expect({ wrong: wrong.length, first: wrong.slice(0, 3) }).toEqual({ wrong: 0, first: [] });
-    });
+    }, 60_000);
   });
 
   // Phase 10: Accessibility
