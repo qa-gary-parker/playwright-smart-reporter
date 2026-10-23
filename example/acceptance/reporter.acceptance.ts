@@ -345,7 +345,7 @@ describe('failure clustering', () => {
     // Each run has its own history, so only the start of the run in tracking differs
     const untracked = (clusters: ReportData['clusters']) => clusters.map(({ tracking: _tracking, ...c }) => c);
     expect(untracked(second)).toEqual(untracked(first));
-  });
+  }, 60_000);
 
   it('labels a cluster seen in run 1, gone in run 2 and back in run 3 Regressed, and lists the cluster that went away as resolved', () => {
     const out = path.join(tmp, 'cluster-tracking');

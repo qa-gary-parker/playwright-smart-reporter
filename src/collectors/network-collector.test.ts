@@ -6,9 +6,9 @@ vi.mock('fs');
 
 const { mockGetEntry, MockAdmZip } = vi.hoisted(() => {
   const mockGetEntry = vi.fn();
-  const MockAdmZip = vi.fn().mockImplementation(() => ({
+  const MockAdmZip = vi.fn().mockImplementation(function () { return {
     getEntry: mockGetEntry,
-  }));
+  }; });
   return { mockGetEntry, MockAdmZip };
 });
 
@@ -68,9 +68,9 @@ describe('NetworkCollector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    MockAdmZip.mockImplementation(() => ({
+    MockAdmZip.mockImplementation(function () { return {
       getEntry: mockGetEntry,
-    }));
+    }; });
   });
 
   afterEach(() => {
