@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    testTimeout: process.env.ACCEPTANCE_E2E || process.env.TIMELINE_E2E ? 60_000 : 5_000,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts', ...(process.env.TIMELINE_E2E ? ['example/timeline/*.acceptance.ts'] : []), ...(process.env.ACCEPTANCE_E2E ? ['example/acceptance/*.acceptance.ts'] : [])],
     exclude: [
       ...configDefaults.exclude,
