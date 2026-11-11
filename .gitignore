@@ -35,6 +35,7 @@ example/timeline/out/
 example/acceptance/out/
 example/coverage/app/dist/
 example/coverage/coverage-report/
+demo/out/
 
 # Pack archives
 *.tgz
