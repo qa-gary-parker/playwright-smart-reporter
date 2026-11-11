@@ -3,12 +3,22 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const report = path.resolve(__dirname, '../example/smart-report.html');
+const reportData = path.resolve(__dirname, '../example/smart-report-data.json');
 const outDir = path.resolve(__dirname, 'out');
 const NARROW = '(max-width: 899px)';
 
 async function caption(page: Page, text: string, holdMs: number) {
   await page.evaluate(t => { document.getElementById('demo-caption')!.textContent = t; }, text);
   await page.waitForTimeout(holdMs);
+}
+
+function runCounts() {
+  const data = JSON.parse(fs.readFileSync(reportData, 'utf8'));
+  const failed: number = data.summary.failed;
+  const clusters: { count: number }[] = data.failureClusters;
+  // A failure outside every cluster is a cause of its own
+  const causes = clusters.length + failed - clusters.reduce((n, c) => n + c.count, 0);
+  return { failed, causes };
 }
 
 async function show(page: Page, hash: string, heading: string) {
@@ -37,6 +47,13 @@ test('record the report tour', async ({ browser }, testInfo) => {
     recordVideo: { dir: testInfo.outputDir, size: viewport },
   });
   const page = await context.newPage();
+  const start = Date.now();
+  const cues: string[] = [];
+  const say = async (text: string, holdMs: number, spoken = text) => {
+    cues.push(`${((Date.now() - start) / 1000).toFixed(2)}\t${spoken}`);
+    await caption(page, text, holdMs);
+  };
+  const { failed, causes } = runCounts();
   if (portrait) {
     // CSS zoom does not change what media queries see, so force the report's narrow layout
     await page.addInitScript(q => {
@@ -62,42 +79,50 @@ test('record the report tour', async ({ browser }, testInfo) => {
     document.body.appendChild(el);
   }, [zoom, captionPx, viewport.height, portrait ? NARROW : '', lines] as const);
 
+  // Hook with the run's own numbers, then the problem, then the tool; the Short skips the long tour and the install line
   await expect(page.locator('main').getByRole('heading', { name: 'Insights' })).toBeVisible();
-  await caption(page, 'playwright-smart-reporter', 3000);
-  await caption(page, 'One HTML report per Playwright run', 4000);
-  await caption(page, 'Pass rate, duration and flakiness vs the last 10 runs', 5000);
+  await say(`${failed} tests failed. ${causes} causes.`, 4000, `${failed} tests failed in this run, from ${causes} causes.`);
+  await say(`The default report lists all ${failed}, one by one`, 4500, `Playwright's default report lists all ${failed}, one by one.`);
 
   await show(page, '#/q/failures', 'Failures');
-  await caption(page, 'Failures grouped by the error they share', 5000);
+  await say('Smart Reporter groups them by the error they share', 5000, 'Playwright Smart Reporter groups them by the error they share.');
   if (portrait) await page.locator('.pane__scroll .vlist__item').nth(1).click();
   await expect(page.locator('article.detail')).toBeVisible();
-  await caption(page, 'Error, call log and the failing source line', 5000);
+  await say('Error, call log and the failing line', 5000, 'Each failure shows the error, the call log and the failing line.');
   await scrollTo(page, 'Timeline', zoom);
-  await caption(page, 'Timeline of every retry attempt', 4500);
-  await scrollTo(page, 'Steps', zoom);
-  await caption(page, 'Steps, network requests and attachments', 4500);
-  await scrollTo(page, 'History', zoom);
-  await caption(page, 'The last 10 results for this test', 4000);
+  await say('Every retry attempt on a timeline', 4500, 'A timeline shows every retry attempt.');
+  if (!portrait) {
+    await scrollTo(page, 'History', zoom);
+    await say('The last 10 results for this test', 4000, 'And the last ten results for this test.');
+  }
 
   await show(page, '#/q/flaky', 'Flaky');
-  await caption(page, 'Flaky tests, scored from run history', 5000);
+  await say('Flaky tests, scored from run history', 5000, 'Flaky tests get a score from run history.');
 
-  await show(page, '#/q/regressions', 'Regressions');
-  // Regressions depend on run timing; an empty queue is skipped, not captioned
-  if (await page.locator('.pane__scroll .vlist__item').count() > 0)
-    await caption(page, 'Tests that got slower than their own average', 5000);
+  if (!portrait) {
+    await show(page, '#/q/regressions', 'Regressions');
+    // Regressions depend on run timing; an empty queue is skipped, not captioned
+    if (await page.locator('.pane__scroll .vlist__item').count() > 0)
+      await say('Tests slower than their own average', 5000, 'Tests slower than their own average are flagged.');
 
-  await show(page, '#/history/trends', 'History');
-  await caption(page, 'Trends across runs', 4500);
+    await show(page, '#/history/trends', 'History');
+    await say('Pass rate and duration across runs', 4500);
 
-  await show(page, '#/gallery', 'Gallery');
-  await caption(page, 'Screenshots, videos and traces in one gallery', 4500);
+    await show(page, '#/gallery', 'Gallery');
+    await say('Screenshots, videos and traces in one gallery', 4500);
+  }
 
-  await show(page, '#/insights', 'Insights');
-  await caption(page, 'npm i -D\nplaywright-smart-reporter', 5000);
+  await show(page, '#/q/failures', 'Failures');
+  await say(`${causes} causes to fix, not ${failed} failures to read`, 5000, `${causes} causes to fix, not ${failed} failures to read.`);
+
+  if (!portrait) {
+    await show(page, '#/insights', 'Insights');
+    await say('npm i -D\nplaywright-smart-reporter', 5000, 'Install it from npm: playwright smart reporter.');
+  }
 
   const video = page.video()!;
   await context.close();
   fs.mkdirSync(outDir, { recursive: true });
   await video.saveAs(path.join(outDir, `smart-reporter-${testInfo.project.name}.webm`));
+  fs.writeFileSync(path.join(outDir, `narration-${testInfo.project.name}.tsv`), cues.join('\n') + '\n');
 });
