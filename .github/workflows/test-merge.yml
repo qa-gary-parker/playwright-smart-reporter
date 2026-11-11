@@ -10,7 +10,7 @@ on:
 jobs:
   test-machine-1:
     name: Machine 1 - Run Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -51,7 +51,7 @@ jobs:
   # Simulates Machine 2
   test-machine-2:
     name: Machine 2 - Run Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
