@@ -21,6 +21,27 @@ function runCounts() {
   return { failed, causes };
 }
 
+// The right half stays empty for YouTube's end-screen elements; zoom undoes the page zoom
+async function endCard(page: Page, zoom: number, rows: [string, string][], summary: string) {
+  await page.evaluate(([z, rows, summary]) => {
+    const add = (parent: HTMLElement, css: string, text = '') => {
+      const el = parent.appendChild(document.createElement('div'));
+      el.style.cssText = css;
+      el.textContent = text;
+      return el;
+    };
+    const card = add(document.body, `position:fixed;inset:0;z-index:100000;zoom:${1 / (z as number)};box-sizing:border-box;padding:112px 128px;background:#0B0D0C;color:#E6E8E3;font:36px/1.3 ui-monospace,Menlo,monospace`);
+    const brand = add(card, 'display:flex;align-items:center;gap:16px;color:#3FB950;font-size:30px', 'gary-parker');
+    brand.prepend(Object.assign(document.createElement('span'), { style: 'width:20px;height:20px;border-radius:10px;background:#3FB950' }));
+    (rows as [string, string][]).forEach(([key, value], i) => {
+      add(card, `margin-top:${i ? 52 : 124}px;color:#8A9088;font-size:24px;letter-spacing:.12em;text-transform:uppercase`, key);
+      const row = add(card, 'margin-top:16px', value.replace(/^\$ /, ''));
+      if (value.startsWith('$ ')) row.prepend(Object.assign(document.createElement('span'), { textContent: '$ ', style: 'color:#3FB950' }));
+    });
+    add(card, 'position:absolute;left:128px;bottom:96px;color:#8A9088;font-size:26px', summary as string);
+  }, [zoom, rows, summary] as const);
+}
+
 async function show(page: Page, hash: string, heading: string) {
   await page.evaluate(h => { location.hash = h; }, hash);
   await expect(page.locator('main').getByRole('heading', { name: heading }).first()).toBeVisible();
@@ -116,8 +137,12 @@ test('record the report tour', async ({ browser }, testInfo) => {
   await say(`${causes} causes to fix, not ${failed} failures to read`, 5000, `${causes} causes to fix, not ${failed} failures to read.`);
 
   if (!portrait) {
-    await show(page, '#/insights', 'Insights');
-    await say('npm i -D\nplaywright-smart-reporter', 5000, 'Install it from npm: playwright smart reporter.');
+    await endCard(page, zoom, [
+      ['install', '$ npm i -D playwright-smart-reporter'],
+      ['source', 'github.com/qa-gary-parker/playwright-smart-reporter'],
+      ['more tools + write-ups', 'garyparker.dev'],
+    ], `✓ ${failed} failures   ✓ ${causes} causes to fix`);
+    await say('', 10000, 'Install it from npm: playwright smart reporter. The links are in the description.');
   }
 
   const video = page.video()!;
