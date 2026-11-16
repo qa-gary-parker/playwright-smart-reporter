@@ -7,7 +7,7 @@ import v8ToIstanbul from 'v8-to-istanbul';
 import {
   COVERAGE_ATTACHMENT_NAME,
   isIstanbulFileCoverage,
-  isSourceMap,
+  normalizeSourceMap,
   type CoveragePayload,
   type IstanbulFileCoverage,
   type Location,
@@ -88,7 +88,7 @@ function inlineSourceMap(source: string): RawSourceMap | undefined {
   try {
     const json = last[1] ? Buffer.from(last[2], 'base64').toString('utf8') : decodeURIComponent(last[2]);
     const map: unknown = JSON.parse(json);
-    return isSourceMap(map) ? map : undefined;
+    return normalizeSourceMap(map);
   } catch {
     return undefined;
   }
@@ -108,7 +108,7 @@ export async function convertV8Script(entry: V8ScriptCoverage, rootDir: string):
 
   // Blanking keeps offsets but stops v8-to-istanbul from reading map files relative to a fake path.
   const source = entry.source.replace(MAP_COMMENT, (comment) => ' '.repeat(comment.length));
-  const map = entry.sourceMap ?? inlineSourceMap(entry.source);
+  const map = normalizeSourceMap(entry.sourceMap) ?? inlineSourceMap(entry.source);
   let converter: ReturnType<typeof v8ToIstanbul>;
   if (map && map.sources.length > 0) {
     const base = entry.sourceMap ? entry.sourceMapUrl ?? entry.url : entry.url;

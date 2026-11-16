@@ -34,11 +34,11 @@ function testInfo(): TestInfo {
   } as unknown as TestInfo;
 }
 
-function fakePage(opts: { entries?: unknown[]; istanbul?: unknown; stopError?: Error; mapStatus?: number } = {}) {
+function fakePage(opts: { entries?: unknown[]; istanbul?: unknown; stopError?: Error; mapStatus?: number; map?: unknown } = {}) {
   const get = vi.fn(async () => ({
     ok: () => (opts.mapStatus ?? 200) === 200,
     status: () => opts.mapStatus ?? 200,
-    text: async () => JSON.stringify(MAP),
+    text: async () => JSON.stringify(opts.map ?? MAP),
   }));
   const page = {
     coverage: {
@@ -112,6 +112,34 @@ describe('pageWithCoverage', () => {
     expect(attached.map((a) => a.payload.v8?.[0].sourceMap)).toEqual([undefined, undefined]);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0][0])).toContain('http://localhost:3000/a.js.map not loaded (HTTP 404)');
+  });
+
+  it('flattens an external index source map into one map with every section source', async () => {
+    const second = { version: 3, sources: ['../src/b.ts'], sourcesContent: ['export const b = 2;\n'], mappings: 'AAAA', names: [] };
+    const indexMap = { version: 3, file: 'a.js', sections: [{ offset: { line: 0, column: 0 }, map: MAP }, { offset: { line: 4, column: 0 }, map: second }] };
+    const { page } = fakePage({ entries: [script('http://localhost:3000/a.js')], map: indexMap });
+    await run(page, 'chromium');
+
+    expect(warn).not.toHaveBeenCalled();
+    const sourceMap = attached[0].payload.v8?.[0].sourceMap;
+    expect(sourceMap?.sources).toEqual(['../src/a.ts', '../src/b.ts']);
+    expect(sourceMap?.sourcesContent).toEqual(['export const a = 1;\n', 'export const b = 2;\n']);
+    expect(sourceMap).not.toHaveProperty('sections');
+    expect(sourceMap?.mappings).toBe('AAAA;;;;ACAA');
+  });
+
+  it('names the invalid sections when an index source map is malformed', async () => {
+    const { page } = fakePage({ entries: [script('http://localhost:3000/a.js')], map: { version: 3, sections: [{ offset: { line: 0, column: 0 } }] } });
+    await run(page, 'chromium');
+
+    expect(attached[0].payload.v8?.[0].sourceMap).toBeUndefined();
+    expect(String(warn.mock.calls[0][0])).toContain('not loaded (invalid index source map sections)');
+  });
+
+  it('still reports a map that is neither flat nor an index map as not a version 3 source map', async () => {
+    const { page } = fakePage({ entries: [script('http://localhost:3000/a.js')], map: { version: 2, sources: [], mappings: '' } });
+    await run(page, 'chromium');
+    expect(String(warn.mock.calls[0][0])).toContain('not loaded (not a version 3 source map)');
   });
 
   it('skips V8 on other browsers with one warning, never fails, and still sends Istanbul counters', async () => {
