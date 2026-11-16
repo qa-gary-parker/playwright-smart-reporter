@@ -6,7 +6,8 @@ import {
   COVERAGE_ATTACHMENT_NAME,
   COVERAGE_CONTENT_TYPE,
   isIstanbulFileCoverage,
-  isSourceMap,
+  isIndexSourceMap,
+  normalizeSourceMap,
   type CoveragePayload,
   type IstanbulFileCoverage,
   type RawSourceMap,
@@ -39,8 +40,9 @@ async function fetchSourceMap(page: Page, mapUrl: string, scriptUrl: string): Pr
     return undefined;
   }
   const map: unknown = JSON.parse(text);
-  if (!isSourceMap(map)) throw new Error('not a version 3 source map');
-  return map;
+  const flat = normalizeSourceMap(map);
+  if (!flat) throw new Error(isIndexSourceMap(map) ? 'invalid index source map sections' : 'not a version 3 source map');
+  return flat;
 }
 
 // The reporter may run later on another machine (merge-reports), so external maps travel in the attachment.

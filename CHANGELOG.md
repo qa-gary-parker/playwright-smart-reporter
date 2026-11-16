@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Index source maps in coverage** (#89). Source maps with top-level `sections` (Turbopack production builds) are flattened to one map, so coverage maps back to the original files instead of the generated chunks. A malformed index map now warns "invalid index source map sections" instead of "not a version 3 source map".
+
 ## [4.0.0] - 2026-10-21
 
 ### Breaking changes

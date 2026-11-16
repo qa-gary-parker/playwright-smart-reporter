@@ -185,6 +185,54 @@ describe('convertV8Script', () => {
   });
 });
 
+describe('convertV8Script with an index source map', () => {
+  const MATH = bundle({ '/virtual/src/math.ts': MATH_TS });
+  const FORMAT = bundle({ '/virtual/src/format.ts': FORMAT_TS });
+  const strip = (code: string) => code.replace(/\/\/# sourceMappingURL=.*$/m, '').replace(/\n+$/, '\n');
+  const code = `${strip(MATH.code)}${strip(FORMAT.code)}`;
+  const formatLine = strip(MATH.code).split('\n').length - 1;
+  const indexMap = {
+    version: 3,
+    file: 'bundle.js',
+    sections: [
+      { offset: { line: 0, column: 0 }, map: MATH.map },
+      { offset: { line: formatLine, column: 0 }, map: FORMAT.map },
+    ],
+  };
+  const calls = "add(2, 3); formatResult('sum', 5);";
+
+  it('maps every section back to its original source', async () => {
+    const entry = { ...captureV8(code, BUNDLE_URL, calls), sourceMap: indexMap as unknown as RawSourceMap, sourceMapUrl: MAP_URL };
+    const files = await convertV8Script(entry, '/project');
+    expect(files.map((f) => f.path).sort()).toEqual(['src/format.ts', 'src/math.ts']);
+    expect(hitsOf(files, 'src/math.ts')).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(hitsOf(files, 'src/format.ts')).toEqual([1, 1, 1, 0, 0, 0]);
+    expect(files.find((f) => f.path === 'src/format.ts')?.source).toBe(FORMAT_TS);
+  });
+
+  it('decodes an inline base64 index source map from the script itself', async () => {
+    const comment = ['//#', 'sourceMappingURL=data:application/json;charset=utf-8;base64,'].join(' ');
+    const inline = `${code}${comment}${Buffer.from(JSON.stringify(indexMap)).toString('base64')}\n`;
+    const files = await convertV8Script(captureV8(inline, BUNDLE_URL, calls), '/project');
+    expect(files.map((f) => f.path).sort()).toEqual(['src/format.ts', 'src/math.ts']);
+    expect(hitsOf(files, 'src/format.ts')).toEqual([1, 1, 1, 0, 0, 0]);
+  });
+
+  it('applies the sourceRoot of a section to its sources', async () => {
+    const rooted = { ...indexMap, sections: indexMap.sections.map((s) => ({ ...s, map: { ...s.map, sourceRoot: 'webpack://app/pkg/sub' } })) };
+    const entry = { ...captureV8(code, BUNDLE_URL, calls), sourceMap: rooted as unknown as RawSourceMap, sourceMapUrl: MAP_URL };
+    const files = await convertV8Script(entry, '/project');
+    expect(files.map((f) => f.path).sort()).toEqual(['pkg/src/format.ts', 'pkg/src/math.ts']);
+  });
+
+  it('reports against the generated script when an index source map has invalid sections', async () => {
+    const broken = { version: 3, sections: [{ offset: { line: 0, column: 0 } }] };
+    const entry = { ...captureV8(code, BUNDLE_URL, calls), sourceMap: broken as unknown as RawSourceMap, sourceMapUrl: MAP_URL };
+    const files = await convertV8Script(entry, '/project');
+    expect(files.map((f) => f.path)).toEqual(['assets/bundle.js']);
+  });
+});
+
 describe('CoverageCollector', () => {
   const shardA = (): CoveragePayload => ({ version: 1, v8: [appCoverage('add(2, 3); sign(5);')] });
   const shardB = (): CoveragePayload => ({ version: 1, v8: [appCoverage("formatResult('sum', 5); sign(-1);")] });

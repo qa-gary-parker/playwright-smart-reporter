@@ -122,6 +122,7 @@
   },
   "dependencies": {
     "@bcoe/v8-coverage": "^1.0.2",
+    "@jridgewell/trace-mapping": "0.3.31",
     "@modelcontextprotocol/sdk": "1.32.0",
     "adm-zip": "^0.6.1",
     "pdfkit": "^0.16.0",
