@@ -7,7 +7,7 @@ A Playwright HTML reporter with a run dashboard and a failures inbox. It groups 
 ![Failures inbox](https://raw.githubusercontent.com/qa-gary-parker/playwright-smart-reporter/master/images/v3-failures-dark.png)
 *Failures inbox: failures grouped by cluster, with the selected test's error, expected/received diff, and source frame*
 
-Overview and FAQ: [garyparker.dev/projects/playwright-smart-reporter](https://garyparker.dev/projects/playwright-smart-reporter)
+Overview and FAQ: [garyparker.dev/projects/playwright-smart-reporter](https://garyparker.dev/projects/playwright-smart-reporter). Videos: [youtube.com/@garyparkerdev](https://www.youtube.com/@garyparkerdev)
 
 ## Installation
 
