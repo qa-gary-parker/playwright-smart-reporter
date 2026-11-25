@@ -1399,6 +1399,8 @@ test('payment flow', async ({ page }) => {
 
 History must persist between runs for flakiness detection and trends to work. Caching `test-history.json` is enough for one job. The `test-history.runs/` folder matters only when you [combine shards from separate machines](#sharded-runs).
 
+The reporter resolves `outputFile`, `historyFile` and the quarantine file against Playwright's `rootDir` (your `testDir`), so with the default `npm init playwright` scaffold (`testDir: './tests'`) they land in `tests/`. The snippets below cache `test-history.json` at the project root, which matches a root-level `testDir` or `relativeToCwd: true`. With a `testDir` such as `tests/`, either set `relativeToCwd: true` to write the files at the project root, or change every cached path below to match, e.g. `tests/test-history.json` and `tests/test-history.runs/`. The same applies to the GitHub Action's `data` input (e.g. `tests/smart-report-data.json`, see [GitHub Pull Requests](#github-pull-requests)).
+
 #### GitHub Actions
 
 ```yaml
@@ -1568,7 +1570,7 @@ jobs:
 
 | Input | Default | Description |
 |---|---|---|
-| `data` | `smart-report-data.json` | Path to the JSON export |
+| `data` | `smart-report-data.json` | Path to the JSON export, resolved from the project root. When the reporter writes under `testDir` (the `rootDir` default), point it there, e.g. `tests/smart-report-data.json`, or set `relativeToCwd: true` |
 | `report-url` | workflow run page | Link to the uploaded report |
 | `github-token` | `github.token` | Token for the pull request comment |
 | `issues` | `false` | Open one issue per new failure cluster. See [GitHub Issues](#github-issues) |

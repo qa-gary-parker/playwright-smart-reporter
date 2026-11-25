@@ -36,6 +36,26 @@ function serve(dir: string, args: string[], { report = path.join(dir, 'smart-rep
   });
 }
 
+describe('serve report auto-detection', () => {
+  it('finds smart-report.html one directory down, as with testDir: ./tests', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'serve-probe-'));
+    fs.mkdirSync(path.join(dir, 'tests'));
+    fs.writeFileSync(path.join(dir, 'tests', 'smart-report.html'), V3_REPORT);
+    const base = await new Promise<string>((resolve, reject) => {
+      child = spawn(process.execPath, [bundle, '--no-open', '--port', '0'], { cwd: dir });
+      let out = '';
+      child.stdout?.on('data', (d) => {
+        out += d;
+        const m = out.match(/http:\/\/localhost:(\d+)/);
+        if (m) resolve(`http://127.0.0.1:${m[1]}`);
+      });
+      child.on('exit', (code) => reject(new Error(`serve exited ${code}: ${out}`)));
+    });
+    const res = await fetch(base + '/');
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('serve placeholder injection for v3 reports', () => {
   it('points the v3 report at /sse and enables Run when --live and --run-command are given', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'serve-v3-'));
