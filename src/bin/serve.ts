@@ -35,7 +35,8 @@ Serves the smart report locally so the embedded trace viewer can load trace file
 
 Arguments:
   report-path           Path to smart-report.html or the directory containing it
-                        (default: ./smart-report.html or ./example/smart-report.html)
+                        (default: ./smart-report.html, ./example/smart-report.html,
+                        or smart-report.html one directory down, e.g. ./tests/)
 
 Options:
   --port <port>         Port to serve on (default: 0 = auto-assign)
@@ -147,6 +148,24 @@ function resolveReport(reportPath: string): { dir: string; file: string } {
 
   for (const candidate of candidates) {
     const resolved = path.resolve(process.cwd(), candidate);
+    if (fs.existsSync(resolved)) {
+      return { dir: path.dirname(resolved), file: path.basename(resolved) };
+    }
+  }
+
+  // The reporter writes smart-report.html under Playwright's rootDir (the
+  // testDir), so probe one level of subdirectories too (skipping
+  // node_modules, .git and dist) for the default scaffold (testDir: './tests').
+  const skipDirs = new Set(['node_modules', '.git', 'dist']);
+  let rootEntries: fs.Dirent[] = [];
+  try {
+    rootEntries = fs.readdirSync(process.cwd(), { withFileTypes: true });
+  } catch { /* fall through to the error below */ }
+  const subDirs = rootEntries
+    .filter(e => e.isDirectory() && !skipDirs.has(e.name) && !e.name.startsWith('.'))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  for (const sub of subDirs) {
+    const resolved = path.resolve(process.cwd(), sub.name, 'smart-report.html');
     if (fs.existsSync(resolved)) {
       return { dir: path.dirname(resolved), file: path.basename(resolved) };
     }
