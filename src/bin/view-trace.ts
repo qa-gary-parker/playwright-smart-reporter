@@ -58,10 +58,21 @@ function parseArgs(argv: string[]): ViewTraceOptions {
   return options;
 }
 
+// Node >= 20.12 (CVE-2024-27980) refuses to spawn a .cmd/.bat shim such as
+// npx.cmd without a shell and throws `spawn EINVAL`. With `shell: true` Node
+// concatenates the args, so quote any argument that contains shell-special
+// characters (a trace path with spaces) to keep it a single argument.
+function quoteForCmd(arg: string): string {
+  if (!/[\s"&|<>^()%!]/.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
 function runPlaywrightShowTrace(traceFsPath: string): Promise<void> {
-  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const isWin = process.platform === 'win32';
+  const npxCmd = isWin ? 'npx.cmd' : 'npx';
+  const args = ['playwright', 'show-trace', traceFsPath].map((a) => (isWin ? quoteForCmd(a) : a));
   return new Promise((resolve, reject) => {
-    const child = spawn(npxCmd, ['playwright', 'show-trace', traceFsPath], { stdio: 'inherit' });
+    const child = spawn(npxCmd, args, { stdio: 'inherit', shell: isWin });
     child.on('exit', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`playwright show-trace exited with code ${code ?? 'unknown'}`));
