@@ -165,6 +165,20 @@ const secs = (ms: number) => `${+(ms / 1000).toFixed(1)}s`;
  * An unreachable or slow provider skips the remaining analysis with one warning; it never fails the run.
  * Every prompt is redacted (secret env values, credential pairs, tokens) before it is sent.
  */
+/**
+ * Value passed after `--tools` when spawning the Claude CLI.
+ *
+ * On Windows the CLI is a .cmd shim, so spawn runs through a shell
+ * (`shell: true`), which concatenates the args without quoting and drops an
+ * empty-string argument entirely. That left `--tools` with no value and the
+ * CLI exited with "option '--tools <tools...>' argument missing". The quoted
+ * empty string survives the concatenation; other platforms spawn without a
+ * shell and keep the plain empty string.
+ */
+export function claudeCliToolsValue(platform: NodeJS.Platform): string {
+  return platform === 'win32' ? '\"\"' : '';
+}
+
 export class AIAnalyzer {
   private provider?: ResolvedAIProvider;
   private configProblem = false;
@@ -435,7 +449,7 @@ export class AIAnalyzer {
     return new Promise((resolve, reject) => {
       // --restricted --tools "" makes the CLI text-in/text-out like the HTTP providers:
       // failure text can contain untrusted page content, so no tools may run.
-      const child = spawn('claude', ['-p', '--output-format', 'text', '--model', p.model, '--restricted', '--tools', ''], {
+      const child = spawn('claude', ['-p', '--output-format', 'text', '--model', p.model, '--restricted', '--tools', claudeCliToolsValue(process.platform)], {
         stdio: ['pipe', 'pipe', 'pipe'],
         // npm installs the CLI as a .cmd shim on Windows, which spawn only resolves via a shell
         shell: process.platform === 'win32',
