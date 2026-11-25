@@ -816,7 +816,7 @@ To pass the rules as flags instead of a file, call the standalone script: `node 
 
 ### Flaky Test Quarantine
 
-Automatically detect and quarantine chronically flaky tests. Quarantined tests are tracked in a JSON file and can be excluded from gate failures:
+Automatically detect and quarantine chronically flaky tests. Quarantined tests are tracked in a JSON file, and the `noExpiredQuarantine` gate fails the run when an entry stays past its `expiresAt` (the other gates count quarantined tests like any other):
 
 ```typescript
 reporter: [
@@ -878,6 +878,22 @@ Quarantine changes:
 quarantined: "pays by card" in checkout.spec.ts, PAY-12, @acme/payments
 released: "logs in" in login.spec.ts
 ```
+
+#### Applying quarantine
+
+Quarantining a test records it; keeping it out of the run is a separate step. The `playwright-smart-reporter/quarantine` export builds the exclusion pattern from the quarantine file:
+
+```typescript
+import { defineConfig } from '@playwright/test';
+import { getQuarantinedPattern } from 'playwright-smart-reporter/quarantine';
+
+export default defineConfig({
+  grepInvert: getQuarantinedPattern('tests/.smart-quarantine.json'),
+  // ...
+});
+```
+
+The reporter writes the file under Playwright's `rootDir` (your `testDir`), so pass that path, as above with the default `testDir: './tests'` scaffold. Without an argument the helper looks for `.smart-quarantine.json` at the project root (the current directory). Entries past their `expiresAt` are ignored, so a test runs again once its quarantine lapses, and the pattern matches each quarantined test in its own file only. To run a quarantined test on purpose, use `grep`/`grepInvert` on the command line for that run.
 
 Quarantined tests appear in the Quarantined queue and in the Quarantine panel in Insights.
 
