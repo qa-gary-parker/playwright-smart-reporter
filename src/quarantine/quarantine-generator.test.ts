@@ -562,7 +562,7 @@ describe('getQuarantinedPattern', () => {
   it('uses default file path when none provided', () => {
     quarantineFileAt('.smart-quarantine.json', ['Login test']);
 
-    expect(getQuarantinedPattern()).toEqual(/Login test/);
+    expect(getQuarantinedPattern()!.source).toBe(String.raw`a\.spec\.ts.*(?:^|\s)Login test(?:\s+@[\w-]+)*$`);
   });
 
   it('returns undefined when file has no entries', () => {
@@ -593,8 +593,9 @@ describe('getQuarantinedPattern', () => {
     const result = getQuarantinedPattern();
 
     expect(result).toBeInstanceOf(RegExp);
-    expect(result!.test('Login test')).toBe(true);
-    expect(result!.test('Other test')).toBe(false);
+    expect(result!.test('a.spec.ts:1:1 › Login test')).toBe(true);
+    expect(result!.test('a.spec.ts:1:1 › Other test')).toBe(false);
+    expect(result!.test('b.spec.ts:1:1 › Login test')).toBe(false);
   });
 
   it('escapes regex special characters in titles', () => {
@@ -611,8 +612,8 @@ describe('getQuarantinedPattern', () => {
     const result = getQuarantinedPattern();
 
     expect(result).toBeInstanceOf(RegExp);
-    expect(result!.test('Test (with) [brackets] and .dots')).toBe(true);
-    expect(result!.test('Test with brackets and xdots')).toBe(false);
+    expect(result!.test('a.spec.ts:1:1 › Test (with) [brackets] and .dots')).toBe(true);
+    expect(result!.test('a.spec.ts:1:1 › Test with brackets and xdots')).toBe(false);
   });
 
   it('handles multiple entries with OR pattern', () => {
@@ -631,16 +632,17 @@ describe('getQuarantinedPattern', () => {
     const result = getQuarantinedPattern();
 
     expect(result).toBeInstanceOf(RegExp);
-    expect(result!.test('Login test')).toBe(true);
-    expect(result!.test('Checkout flow')).toBe(true);
-    expect(result!.test('Search feature')).toBe(true);
-    expect(result!.test('Unknown test')).toBe(false);
+    expect(result!.test('a.spec.ts:1:1 › Login test')).toBe(true);
+    expect(result!.test('b.spec.ts:1:1 › Checkout flow')).toBe(true);
+    expect(result!.test('c.spec.ts:1:1 › Search feature')).toBe(true);
+    expect(result!.test('c.spec.ts:1:1 › Unknown test')).toBe(false);
+    expect(result!.test('a.spec.ts:1:1 › Checkout flow')).toBe(false);
   });
 
   it('uses custom file path when provided', () => {
     quarantineFileAt('/custom/quarantine.json', ['Login test']);
 
-    expect(getQuarantinedPattern('/custom/quarantine.json')).toEqual(/Login test/);
+    expect(getQuarantinedPattern('/custom/quarantine.json')!.source).toBe(String.raw`a\.spec\.ts.*(?:^|\s)Login test(?:\s+@[\w-]+)*$`);
   });
 
   it('handles titles with pipe characters correctly', () => {
@@ -648,8 +650,8 @@ describe('getQuarantinedPattern', () => {
 
     const result = getQuarantinedPattern();
 
-    expect(result).toEqual(/Test \| with pipe/);
-    expect(result!.test('Test | with pipe')).toBe(true);
-    expect(result!.test('Test passes')).toBe(false);
+    expect(result!.source).toBe(String.raw`a\.spec\.ts.*(?:^|\s)Test \| with pipe(?:\s+@[\w-]+)*$`);
+    expect(result!.test('a.spec.ts:1:1 › Test | with pipe')).toBe(true);
+    expect(result!.test('a.spec.ts:1:1 › Test passes')).toBe(false);
   });
 });
