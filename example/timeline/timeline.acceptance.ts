@@ -117,8 +117,9 @@ describe('causal timeline on real failures', () => {
         expect(context.clock).toBeDefined();
         for (const snapshot of context.resources) {
           const fromMonotonic = resourceStartTime(snapshot, context.clock)!;
-          // startedDateTime is an ISO string with ms precision.
-          expect(Math.abs(fromMonotonic - Date.parse(snapshot.startedDateTime))).toBeLessThanOrEqual(1);
+          // Playwright reads the wall clock and the monotonic clock in separate calls, so the two differ by scheduler jitter.
+          // A wrong anchor, unit or epoch is off by seconds or more.
+          expect(Math.abs(fromMonotonic - Date.parse(snapshot.startedDateTime))).toBeLessThanOrEqual(50);
           checked++;
         }
       }
